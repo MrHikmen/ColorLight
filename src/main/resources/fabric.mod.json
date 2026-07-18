@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "colorlight",
+  "version": "${version}",
+  "name": "ColorLight",
+  "description": "ColorLight adds logical color lighting to blocks",
+  "authors": [],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/colorlight/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "me.mrhikmen.colorlight.ColorLightClient"
+    ]
+  },
+  "mixins" : [
+    "colorlighting.mixins.json"
+    ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

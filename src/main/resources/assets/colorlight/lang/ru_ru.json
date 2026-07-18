@@ -1,0 +1,12 @@
+{
+  "modmenu.descriptionTranslation.colorlight": "Добавляет цветное освещение светящимся блокам на основе их текстур.",
+
+  "me.colorlight.name": "ColorLighting",
+
+  "me.colorlight.general": "Основное",
+  "me.colorlight.colors": "Свечение блоков",
+
+  "me.colorlight.general.enable": "Включить ColorLighting",
+  "me.colorlight.general.white_limit": "Отсечение белого",
+  "me.colorlight.general.built_in_config": "Рекомендованное свечение"
+}
