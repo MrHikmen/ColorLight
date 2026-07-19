@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.core;
 
+import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 
 import net.minecraft.resources.ResourceLocation;

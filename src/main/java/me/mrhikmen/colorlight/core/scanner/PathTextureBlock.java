@@ -10,13 +10,18 @@ import net.minecraft.server.packs.resources.Resource;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-public class TextureBlock {
+import static me.mrhikmen.colorlight.core.scanner.ScanTextureBlock.*;
+
+public class PathTextureBlock {
     public void ConverterBlock() {
         for (int i = 0; i < ColorLightConfig.i; i++) {
             String modid = ColorLightConfig.blocklist.get(i).substring(0, ColorLightConfig.blocklist.get(i).indexOf(':'));
@@ -32,9 +37,8 @@ public class TextureBlock {
             ResourceLocation textureId = ResourceLocation.parse(modid + ":block/" + blockid);
             boolean exists = Minecraft.getInstance().getResourceManager().getResource(ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png")).isPresent();
             if(exists){
-                ResourceLocation fileId = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
-                ColorLightClient.LOGGER.info(blockid + " текстура " + "textures/" + textureId.getPath() + ".png");
-                //типо оправление его на сканер текстуры
+                PixelData best = SearchBestPixel.search(textureId);
+                ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
             }
             else{
                 ResourceLocation modelId = ResourceLocation.parse(modid + ":block/" + blockid);
@@ -49,14 +53,21 @@ public class TextureBlock {
 
                             JsonObject textures = json.getAsJsonObject("textures");
 
+                            List<PixelData> bestPixels = new ArrayList<>();
+                            PixelData best = null;
+
                             for (Map.Entry<String, JsonElement> entry : textures.entrySet()) {
                                 ResourceLocation texture = ResourceLocation.parse(entry.getValue().getAsString());
-                                ResourceLocation file = ResourceLocation.fromNamespaceAndPath(texture.getNamespace(), "textures/" + texture.getPath() + ".png");
+                                bestPixels.add(SearchBestPixel.search(texture));
+                                for (PixelData pixel : bestPixels) {
 
-                                ColorLightClient.LOGGER.info(blockid + " текстура " + "textures/" + texture.getPath() + ".png");
+                                    if (best == null || pixel.score > best.score)
+                                        best = pixel;
+
+                                }
                             }
+                            ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
                         }
-
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }

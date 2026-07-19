@@ -10,10 +10,19 @@ public class LightBlock {
     public LightBlock() {
         int i = 0;
         for (Block block : BuiltInRegistries.BLOCK) {
-            BlockState state = block.defaultBlockState();
-            if (state.getLightEmission() > 0) {
-                new Save(BuiltInRegistries.BLOCK.getKey(block), state.getLightEmission(), i);
-                i++;
+
+            int maxLight = 0;
+
+            for (BlockState state : block.getStateDefinition().getPossibleStates()) {
+                maxLight = Math.max(maxLight, state.getLightEmission());
+            }
+
+            if (maxLight > 0) {
+                new Save(
+                        BuiltInRegistries.BLOCK.getKey(block),
+                        maxLight,
+                        i++
+                );
             }
         }
     }
