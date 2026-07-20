@@ -113,7 +113,6 @@ public class VariantParser {
 
             value = textures.get(key).getAsString();
         }
-
         return value;
     }
 }
