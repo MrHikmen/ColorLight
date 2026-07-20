@@ -44,7 +44,6 @@ public class VariantParser {
                 }
             }
         }
-
         List<PixelData> bestPixels = new ArrayList<>();
 
         ModelResolver(models, bestPixels);
