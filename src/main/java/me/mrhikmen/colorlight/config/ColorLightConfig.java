@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.config;
 
+import net.minecraft.world.level.block.state.BlockState;
+
 import java.util.LinkedList;
 
 public class ColorLightConfig {
@@ -9,6 +11,7 @@ public class ColorLightConfig {
     public static LinkedList<String> block_id = new LinkedList<>();
     public static LinkedList<Integer> rgb = new LinkedList<>();
 
+    public static LinkedList<BlockState> State = new LinkedList<>();
     public static LinkedList<String> blocklist = new LinkedList<>();
     public static LinkedList<Integer> light = new LinkedList<>();
     public static int i;
