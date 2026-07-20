@@ -1,6 +1,5 @@
 package me.mrhikmen.colorlight.core.scanner;
 
-import me.mrhikmen.colorlight.ColorLightClient;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
@@ -32,7 +31,7 @@ public class SearchBestPixel {
 
         for (PixelData pixel : pixels) {
             if (pixel.a == 0) continue;
-            pixel.score = brightness(pixel) * 0.35 + saturation(pixel) * 0.35 + anomaly(pixel, avgR, avgG, avgB) * 0.30;
+            pixel.score = brightness(pixel) * 0.35 + saturation(pixel) * 0.35 + anomaly(pixel, avgR, avgG, avgB) * 0.15;
         }
 
         PixelData best = null;

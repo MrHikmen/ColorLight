@@ -9,12 +9,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.Property;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
-import java.util.Map;
 import java.util.Optional;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -41,7 +39,7 @@ public class PathTextureBlock {
                 JsonObject json = JsonParser.parseString(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
 
                 if (json.has("variants")) {
-                    new VariantParser(state, json);
+                    new VariantParser(json);
                 } else if (json.has("multipart")) {
                     new MultipartParser();
                 } else {
@@ -56,29 +54,5 @@ public class PathTextureBlock {
             PixelData best = SearchBestPixel.search(texture);
             ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
         }
-    }
-    private static String propertyValue(Property<?> property, Comparable<?> value) {
-        return ((Property) property).getName(value);
-    }
-    public static String stateToVariant(BlockState state) {
-
-        StringBuilder builder = new StringBuilder();
-
-        boolean first = true;
-
-        for (Map.Entry<Property<?>, Comparable<?>> entry : state.getValues().entrySet()) {
-
-            if (!first) {
-                builder.append(",");
-            }
-
-            first = false;
-
-            builder.append(entry.getKey().getName());
-            builder.append("=");
-            builder.append(propertyValue(entry.getKey(), entry.getValue()));
-        }
-
-        return builder.toString();
     }
 }
