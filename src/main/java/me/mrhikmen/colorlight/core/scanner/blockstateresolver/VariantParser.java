@@ -102,17 +102,4 @@ public class VariantParser {
             ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
         }
     }
-    private static String resolveTexture(JsonObject textures, String value) {
-
-        while (value.startsWith("#")) {
-
-            String key = value.substring(1);
-
-            if (!textures.has(key))
-                return null;
-
-            value = textures.get(key).getAsString();
-        }
-        return value;
-    }
 }
