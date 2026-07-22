@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight.core;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.scanner.LightBlock;
-import me.mrhikmen.colorlight.core.scanner.PathTextureBlock;
+import me.mrhikmen.colorlight.core.scanner.model.PathTextureBlock;
 
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.minecraft.resources.ResourceLocation;
@@ -21,7 +21,7 @@ public class ReloadListener implements SimpleSynchronousResourceReloadListener {
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
         new LightBlock();
-        new PathTextureBlock().ConverterBlock();
+        new PathTextureBlock();
         ColorLightClient.LOGGER.info("ColorLight RP is loaded");
     }
 }

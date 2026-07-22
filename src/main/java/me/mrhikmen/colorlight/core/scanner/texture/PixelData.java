@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.scanner;
+package me.mrhikmen.colorlight.core.scanner.texture;
 
 public class PixelData {
 
