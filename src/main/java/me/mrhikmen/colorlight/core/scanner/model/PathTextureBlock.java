@@ -18,13 +18,20 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 public class PathTextureBlock {
-    public PathTextureBlock() {
 
-        for (int i = 0; i < ColorLightConfig.i; ) {
+    private final ColorLightConfig config;
 
-            ColorLightClient.LOGGER.info("Mod: " + ColorLightConfig.blocklist.get(i).getNamespace() + " Block: " + ColorLightConfig.blocklist.get(i).getPath() + " Счет: " + i);
+    public PathTextureBlock(ColorLightConfig config) {
 
-            ResourceLocation modelId = ResourceLocation.fromNamespaceAndPath(ColorLightConfig.blocklist.get(i).getNamespace(), "blockstates/" + ColorLightConfig.blocklist.get(i).getPath() + ".json");
+        this.config = config;
+
+        for (int i = 0; i < config.blocklist.size();) {
+
+            ResourceLocation block = config.blocklist.get(i);
+
+            ColorLightClient.LOGGER.info("Mod: " + block.getNamespace()  + " Block: " + block.getPath() + " Счет: " + i);
+
+            ResourceLocation modelId = ResourceLocation.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
             Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
 
             if (resource.isPresent()) {
@@ -46,7 +53,7 @@ public class PathTextureBlock {
                 }
             } else {
 
-                ResourceLocation textureId = ResourceLocation.parse(ColorLightConfig.blocklist.get(i).getNamespace() + ":block/" + ColorLightConfig.blocklist.get(i).getPath());
+                ResourceLocation textureId = ResourceLocation.parse(block.getNamespace() + ":block/" + block.getPath());
                 ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
 
                 PixelData best = SearchBestPixel.search(texture);
@@ -55,7 +62,6 @@ public class PathTextureBlock {
             }
 
             i++;
-
         }
     }
 }

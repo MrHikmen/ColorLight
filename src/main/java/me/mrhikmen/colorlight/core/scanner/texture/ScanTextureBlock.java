@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import me.mrhikmen.colorlight.ColorLightClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;

@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.core;
 
 import me.mrhikmen.colorlight.ColorLightClient;
+import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.scanner.LightBlock;
 import me.mrhikmen.colorlight.core.scanner.model.PathTextureBlock;
 
@@ -20,8 +21,11 @@ public class ReloadListener implements SimpleSynchronousResourceReloadListener {
 
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
-        new LightBlock();
-        new PathTextureBlock();
+        ColorLightConfig config = new ColorLightConfig();
+
+        config.load();
+        new LightBlock(config);
+        new PathTextureBlock(config);
         ColorLightClient.LOGGER.info("ColorLight RP is loaded");
     }
 }
