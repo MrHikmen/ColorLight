@@ -6,6 +6,7 @@
   "mixins": [
   ],
   "client": [
+    "LevelMixin"
   ],
   "injectors": {
     "defaultRequire": 1

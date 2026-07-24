@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.core.scanner;
 
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.core.Save;
+import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
@@ -9,7 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class LightBlock {
     public LightBlock(ColorLightConfig config) {
-        int i = 0;
+
         for (Block block : BuiltInRegistries.BLOCK) {
 
             int maxLight = 0;
@@ -23,7 +23,7 @@ public class LightBlock {
             }
             if (maxLight > 0) {
 
-                new Save(config, BuiltInRegistries.BLOCK.getKey(block), maxLight);
+                config.blocks.add(new ColorLightSaveBlock(BuiltInRegistries.BLOCK.getKey(block), maxLight));
 
             }
         }

@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner.model.blockstate;
 
+import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.scanner.model.ModelTextureResolver;
 
 import net.minecraft.resources.ResourceLocation;
@@ -10,7 +11,7 @@ import com.google.gson.JsonObject;
 
 public class VariantParser {
 
-    public VariantParser(JsonObject json) {
+    public VariantParser(JsonObject json, int i, ColorLightConfig config) {
 
         JsonObject variants = json.getAsJsonObject("variants");
         List<ResourceLocation> models = new ArrayList<>();
@@ -35,7 +36,7 @@ public class VariantParser {
             }
         }
 
-        ModelTextureResolver.resolve(models);
+        ModelTextureResolver.resolve(models, i, config);
 
     }
 }

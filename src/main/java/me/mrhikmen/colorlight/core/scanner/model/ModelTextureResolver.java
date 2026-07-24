@@ -1,6 +1,8 @@
 package me.mrhikmen.colorlight.core.scanner.model;
 
 import me.mrhikmen.colorlight.ColorLightClient;
+import me.mrhikmen.colorlight.config.ColorLightConfig;
+import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;
 
@@ -18,7 +20,7 @@ import com.google.gson.JsonParser;
 
 public class ModelTextureResolver {
 
-    public static void resolve(List<ResourceLocation> models) {
+    public static void resolve(List<ResourceLocation> models, int i, ColorLightConfig config) {
 
         List<PixelData> bestPixels = new ArrayList<>();
 
@@ -62,6 +64,12 @@ public class ModelTextureResolver {
         }
 
         if (best != null) {
+            ColorLightSaveBlock data = config.blocks.get(i);
+
+            data.r = best.r;
+            data.g = best.g;
+            data.b = best.b;
+
             ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
         }
     }
