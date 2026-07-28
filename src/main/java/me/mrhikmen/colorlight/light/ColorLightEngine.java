@@ -8,37 +8,31 @@ import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Независимый от рендера движок распространения цветного света.
- * Хранит данные ОТДЕЛЬНО от ванильного skylight/blocklight — их трогать не нужно.
- *
- * Каждый канал (R,G,B) распространяется собственным BFS, по той же механике,
- * что и ванильный blocklight, только параллельно по трём каналам.
- *
- * ВАЖНО про потоки: чтение (getColor/hasSource) происходит из фоновых потоков
- * построения мешей чанков (Sodium строит их асинхронно), а запись (addSource/
- * removeSource/onBlockChanged) — с основного клиентского потока (mixin/команды).
- * Поэтому обе карты — ConcurrentHashMap, а не обычные HashMap/fastutil-карты:
- * без этого чтение во время записи может упасть с ArrayIndexOutOfBoundsException
- * прямо посреди ресайза карты.
- */
 public class ColorLightEngine {
-
-    public static final int MAX_RANGE_BLOCKS = 15;
 
     private static final int VANILLA_MAX_OPACITY = 15;
 
-    private static final float DECAY_PER_OPACITY_UNIT = ColorLightUtil.MAX / (float) MAX_RANGE_BLOCKS;
+    private final int maxRangeBlocks;
+
+    private final float decayPerOpacityUnit;
 
     private final ConcurrentHashMap<Long, Integer> data = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Integer> sources = new ConcurrentHashMap<>();
 
     private final LevelAccessor level;
 
-    public ColorLightEngine(LevelAccessor level) {
+    public ColorLightEngine(LevelAccessor level, int maxRangeBlocks) {
         this.level = level;
+        this.maxRangeBlocks = Math.max(1, maxRangeBlocks); // защита от 0/отрицательных значений из конфига
+        this.decayPerOpacityUnit = ColorLightUtil.MAX / (float) this.maxRangeBlocks;
+    }
+
+    public int getMaxRangeBlocks() {
+        return maxRangeBlocks;
     }
 
     public int getColor(BlockPos pos) {
@@ -47,6 +41,18 @@ public class ColorLightEngine {
 
     public boolean hasSource(BlockPos pos) {
         return sources.containsKey(pos.asLong());
+    }
+
+    public boolean isOpaque(BlockPos pos) {
+        return getOpacity(pos) >= VANILLA_MAX_OPACITY;
+    }
+
+    public List<BlockPos> getSourcePositions() {
+        List<BlockPos> result = new ArrayList<>();
+        for (Long key : sources.keySet()) {
+            result.add(BlockPos.of(key));
+        }
+        return result;
     }
 
     public void clearAll() {
@@ -60,7 +66,17 @@ public class ColorLightEngine {
     }
 
     public void addSource(BlockPos pos, int r, int g, int b) {
-        int packed = ColorLightUtil.pack(r, g, b);
+        addSource(pos, r, g, b, 15);
+    }
+
+    public void addSource(BlockPos pos, int r, int g, int b, int strength) {
+        int s = Math.max(1, Math.min(15, strength));
+
+        int scaledR = Math.round(r * s / 15f);
+        int scaledG = Math.round(g * s / 15f);
+        int scaledB = Math.round(b * s / 15f);
+
+        int packed = ColorLightUtil.pack(scaledR, scaledG, scaledB);
         long key = pos.asLong();
 
         sources.put(key, packed);
@@ -93,7 +109,7 @@ public class ColorLightEngine {
                 if (opacity >= VANILLA_MAX_OPACITY)
                     continue;
 
-                int decay = Math.round((1 + opacity) * DECAY_PER_OPACITY_UNIT);
+                int decay = Math.round((1 + opacity) * decayPerOpacityUnit);
 
                 int nr = Math.max(0, r - decay);
                 int ng = Math.max(0, g - decay);
@@ -126,7 +142,7 @@ public class ColorLightEngine {
         long key = pos.asLong();
         Integer sourceColor = sources.remove(key);
         if (sourceColor == null)
-            return; // тут не было зарегистрированного источника
+            return;
 
         int old = getRaw(key);
         data.put(key, ColorLightUtil.EMPTY);
@@ -222,11 +238,43 @@ public class ColorLightEngine {
             return 0f;
 
         float skyExposure = realLevel.getBrightness(LightLayer.SKY, pos) / 15f;
-
-        float timeOfDayFactor = 1f - (realLevel.getSkyDarken() / 11f);
+        float timeOfDayFactor = computeTimeOfDayFactor(realLevel);
 
         return ColorLightUtil.clamp01(skyExposure * timeOfDayFactor);
     }
+
+    private static float computeTimeOfDayFactor(Level level) {
+        long dayTime = level.getDayTime() % 24000L;
+        if (dayTime < 0)
+            dayTime += 24000L;
+
+        if (dayTime < 11000) return 1f;                              // день
+        if (dayTime < 13000) return 1f - (dayTime - 11000) / 2000f;   // закат
+        if (dayTime < 21000) return 0f;                               // ночь
+        if (dayTime < 23000) return (dayTime - 21000) / 2000f;        // рассвет
+        return 1f;
+    }
+
+    /** Для отладки: показывает промежуточные значения расчёта дневного подавления. */
+    public String debugDaylight(BlockPos pos) {
+        if (!(level instanceof Level realLevel))
+            return "level is not a real Level (" + level.getClass() + ")";
+
+        long dayTimeRaw = realLevel.getDayTime();
+        long dayTime = dayTimeRaw % 24000L;
+        if (dayTime < 0) dayTime += 24000L;
+
+        int rawSky = realLevel.getBrightness(LightLayer.SKY, pos);
+        float skyExposure = rawSky / 15f;
+        float timeFactor = computeTimeOfDayFactor(realLevel);
+        float finalFactor = getDaylightFactor(pos);
+
+        return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime
+                + " rawSky=" + rawSky + " skyExposure=" + skyExposure
+                + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor;
+    }
+
+    // ==================== Служебное ====================
 
     private int getOpacity(BlockPos pos) {
         BlockState state = level.getBlockState(pos);

@@ -2,6 +2,7 @@ package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.ReloadListener;
+import me.mrhikmen.colorlight.light.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.light.ColorLightTestCommand;
 import me.mrhikmen.colorlight.render.ColorLightTestModelPlugin;
@@ -23,6 +24,12 @@ public class ColorLightClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+
+        ColorLightConfig config = new ColorLightConfig();
+        config.load();
+        ColorLightEngineHolder.configure(config.lightRangeBlocks);
+
+        ColorLightDaylightRefresher.register();
         ModelLoadingPlugin.register(new ColorLightTestModelPlugin());
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
                 ColorLightEngineHolder.set(client.level));

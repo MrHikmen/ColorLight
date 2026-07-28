@@ -6,7 +6,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
-import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedList;
@@ -14,6 +13,8 @@ import java.util.LinkedList;
 public class ColorLightConfig {
 
     public boolean ENABLE = true;
+
+    public int lightRangeBlocks = 15;
 
     public LinkedList<ColorLightSaveBlock> blocks = new LinkedList<>();
 
@@ -28,6 +29,7 @@ public class ColorLightConfig {
 
                 this.ENABLE = loaded.ENABLE;
                 this.blocks = loaded.blocks;
+                this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
 
             } catch (IOException e) {
                 e.printStackTrace();

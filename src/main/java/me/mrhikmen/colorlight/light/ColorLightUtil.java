@@ -47,7 +47,7 @@ public final class ColorLightUtil {
 
         int maxLevel = Math.max(r, Math.max(g, b));
         if (maxLevel == 0) {
-            return 0xFFFFFFFF; // белый — эффекта нет вообще
+            return 0xFFFFFFFF;
         }
 
         float strength = (maxLevel / (float) MAX) * INTENSITY_SCALE;

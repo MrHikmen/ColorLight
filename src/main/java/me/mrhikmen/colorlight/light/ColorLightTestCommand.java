@@ -18,18 +18,46 @@ public final class ColorLightTestCommand {
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
 
-            dispatcher.register(ClientCommandManager.literal("colorlighttest")
-                    .then(ClientCommandManager.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                            .then(ClientCommandManager.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                    .then(ClientCommandManager.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                            .executes(ColorLightTestCommand::addAtTarget)))));
+            dispatcher.register(ClientCommandManager.literal("colorlight")
+                    .then(ClientCommandManager.literal("inspect")
+                            .executes(ColorLightTestCommand::debugDaylight))
 
-            dispatcher.register(ClientCommandManager.literal("colorlighttestremove")
-                    .executes(ColorLightTestCommand::removeAtTarget));
+                    .then(ClientCommandManager.literal("target")
 
-            dispatcher.register(ClientCommandManager.literal("colorlighttestclear")
-                    .executes(ColorLightTestCommand::clearAll));
+                            .then(ClientCommandManager.literal("set")
+                                    .then(ClientCommandManager.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
+                                            .then(ClientCommandManager.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
+                                                    .then(ClientCommandManager.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
+                                                            .then(ClientCommandManager.argument("strength", IntegerArgumentType.integer(1, 15))
+                                                                    .executes(ColorLightTestCommand::addAtTarget))))))
+
+                            .then(ClientCommandManager.literal("reset")
+                                    .executes(ColorLightTestCommand::removeAtTarget))
+                    )
+
+                    .then(ClientCommandManager.literal("clear")
+                            .executes(ColorLightTestCommand::clearAll))
+            );
         });
+    }
+
+    private static int debugDaylight(CommandContext<FabricClientCommandSource> ctx) {
+
+        BlockPos pos = targetPos();
+        if (pos == null) {
+            var player = Minecraft.getInstance().player;
+            if (player == null) return 0;
+            pos = player.blockPosition();
+        }
+
+        ColorLightEngine engine = ColorLightEngineHolder.get();
+        if (engine == null) {
+            ctx.getSource().sendError(Component.literal("Движок ещё не инициализирован"));
+            return 0;
+        }
+
+        ctx.getSource().sendFeedback(Component.literal(engine.debugDaylight(pos)));
+        return 1;
     }
 
     private static int clearAll(CommandContext<FabricClientCommandSource> ctx) {
@@ -51,7 +79,7 @@ public final class ColorLightTestCommand {
             );
         }
 
-        ctx.getSource().sendFeedback(Component.literal("All sources have been cleared"));
+        ctx.getSource().sendFeedback(Component.literal("Все источники очищены"));
         return 1;
     }
 
@@ -59,13 +87,13 @@ public final class ColorLightTestCommand {
 
         BlockPos pos = targetPos();
         if (pos == null) {
-            ctx.getSource().sendError(Component.literal("Look at the block"));
+            ctx.getSource().sendError(Component.literal("Смотрите на блок"));
             return 0;
         }
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null) {
-            ctx.getSource().sendError(Component.literal("The engine has not yet been initialized."));
+            ctx.getSource().sendError(Component.literal("Движок ещё не инициализирован"));
             return 0;
         }
 
@@ -77,7 +105,7 @@ public final class ColorLightTestCommand {
         markDirtyAround(pos);
 
         ctx.getSource().sendFeedback(Component.literal(
-                "Source added to " + pos.toShortString() + " color = " + r + ", " + g + ", " + b));
+                "Источник добавлен в " + pos.toShortString() + " цвет=" + r + "," + g + "," + b));
         return 1;
     }
 
@@ -85,7 +113,7 @@ public final class ColorLightTestCommand {
 
         BlockPos pos = targetPos();
         if (pos == null) {
-            ctx.getSource().sendError(Component.literal("Look at the block"));
+            ctx.getSource().sendError(Component.literal("Смотрите на блок"));
             return 0;
         }
 
@@ -96,7 +124,7 @@ public final class ColorLightTestCommand {
         engine.removeSource(pos);
         markDirtyAround(pos);
 
-        ctx.getSource().sendFeedback(Component.literal("Source removed from " + pos.toShortString()));
+        ctx.getSource().sendFeedback(Component.literal("Источник убран из " + pos.toShortString()));
         return 1;
     }
 
@@ -109,8 +137,8 @@ public final class ColorLightTestCommand {
     }
 
     private static void markDirtyAround(BlockPos pos) {
-
-        int radius = ColorLightEngine.MAX_RANGE_BLOCKS + 1;
+        ColorLightEngine engine = ColorLightEngineHolder.get();
+        int radius = (engine != null ? engine.getMaxRangeBlocks() : 15) + 1;
 
         Minecraft.getInstance().levelRenderer.setBlocksDirty(
                 pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,

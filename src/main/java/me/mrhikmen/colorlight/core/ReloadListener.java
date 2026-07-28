@@ -13,16 +13,13 @@ public class ReloadListener implements SimpleSynchronousResourceReloadListener {
 
     @Override
     public ResourceLocation getFabricId() {
-        return ResourceLocation.fromNamespaceAndPath(
-                "colorlight",
-                "texture_scanner"
-        );
+        return ResourceLocation.fromNamespaceAndPath("colorlight", "texture_scanner");
     }
 
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
         ColorLightConfig config = new ColorLightConfig();
-        //config.load();
+//        config.load();
         new LightBlock(config);
         new PathTextureBlock(config);
         config.save();

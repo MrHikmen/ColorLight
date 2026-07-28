@@ -32,18 +32,26 @@ final class SmoothLightSampler {
         int[] offsetsB = (coordB < 0.5f) ? new int[]{-1, 0} : new int[]{0, 1};
 
         int sumR = 0, sumG = 0, sumB = 0;
+        int validSamples = 0;
 
         for (int oa : offsetsA) {
             for (int ob : offsetsB) {
                 BlockPos samplePos = offsetAxis(offsetAxis(facePos, axisA, oa), axisB, ob);
+
+                if (engine.isOpaque(samplePos))
+                    continue;
+
                 int color = engine.getColor(samplePos);
                 sumR += ColorLightUtil.r(color);
                 sumG += ColorLightUtil.g(color);
                 sumB += ColorLightUtil.b(color);
+                validSamples++;
             }
         }
 
-        int avg = ColorLightUtil.pack(Math.round(sumR / 4f), Math.round(sumG / 4f), Math.round(sumB / 4f));
+        int avg = (validSamples > 0)
+                ? ColorLightUtil.pack(Math.round(sumR / (float) validSamples), Math.round(sumG / (float) validSamples), Math.round(sumB / (float) validSamples))
+                : ColorLightUtil.EMPTY;
 
         return ColorLightUtil.max(avg, engine.getColor(pos));
     }

@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.mixin.minecraft;
 
-import me.mrhikmen.colorlight.ColorLightClient;
+import me.mrhikmen.colorlight.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.light.ColorLightEngine;
 import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
 
@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,9 +23,8 @@ public abstract class LevelMixin {
             method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z",
             at = @At("RETURN")
     )
-    private void colorlight$onSetBlock(BlockPos pos, BlockState state, int flags, int recursionLeft, CallbackInfoReturnable<Boolean> cir) {
-
-        ColorLightClient.LOGGER.info("[ColorLight DEBUG] setBlock fired at " + pos.toShortString() + " result=" + cir.getReturnValueZ());
+    private void colorlight$onSetBlock(BlockPos pos, BlockState state, int flags, int recursionLeft,
+                                       CallbackInfoReturnable<Boolean> cir) {
 
         if (!cir.getReturnValueZ())
             return;
@@ -36,9 +36,18 @@ public abstract class LevelMixin {
         if (engine == null)
             return;
 
-        engine.onBlockChanged(pos);
+        Block newBlock = state.getBlock();
+        int[] colorData = ColorLightBlockRegistry.get(newBlock);
 
-        int radius = ColorLightEngine.MAX_RANGE_BLOCKS + 1;
+        if (colorData != null) {
+            engine.addSource(pos, colorData[0], colorData[1], colorData[2], colorData[3]);
+        } else if (engine.hasSource(pos)) {
+            engine.removeSource(pos);
+        } else {
+            engine.onBlockChanged(pos);
+        }
+
+        int radius = engine.getMaxRangeBlocks() + 1;
         Minecraft.getInstance().levelRenderer.setBlocksDirty(
                 pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
                 pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
