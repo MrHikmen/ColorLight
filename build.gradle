@@ -33,8 +33,6 @@ dependencies {
 
     modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
 
-//    modImplementation "me.shedaniel.cloth:cloth-config-fabric:21.11.153"
-
     modImplementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 }
 

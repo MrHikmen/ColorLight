@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.mixin.minecraft;
 
+import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
 import me.mrhikmen.colorlight.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.light.ColorLightEngine;
 import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
@@ -37,10 +38,10 @@ public abstract class LevelMixin {
             return;
 
         Block newBlock = state.getBlock();
-        int[] colorData = ColorLightBlockRegistry.get(newBlock);
+        ColorLightSaveBlock entry = ColorLightBlockRegistry.get(newBlock);
 
-        if (colorData != null) {
-            engine.addSource(pos, colorData[0], colorData[1], colorData[2], colorData[3]);
+        if (entry != null) {
+            engine.addSource(pos, entry.r, entry.g, entry.b, entry.light);
         } else if (engine.hasSource(pos)) {
             engine.removeSource(pos);
         } else {

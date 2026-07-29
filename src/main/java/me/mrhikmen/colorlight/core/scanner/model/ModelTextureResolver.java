@@ -71,6 +71,8 @@ public class ModelTextureResolver {
             data.b = best.b;
 
             ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
+        } else {
+            ColorLightClient.LOGGER.info("Не удалось определить цвет для текстуры");
         }
     }
 

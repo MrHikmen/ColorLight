@@ -70,13 +70,9 @@ public class ColorLightEngine {
     }
 
     public void addSource(BlockPos pos, int r, int g, int b, int strength) {
-        int s = Math.max(1, Math.min(15, strength));
+        float scale = ColorLightUtil.clamp01(strength / 15f);
+        int packed = ColorLightUtil.pack(Math.round(r * scale), Math.round(g * scale), Math.round(b * scale));
 
-        int scaledR = Math.round(r * s / 15f);
-        int scaledG = Math.round(g * s / 15f);
-        int scaledB = Math.round(b * s / 15f);
-
-        int packed = ColorLightUtil.pack(scaledR, scaledG, scaledB);
         long key = pos.asLong();
 
         sources.put(key, packed);
@@ -238,6 +234,7 @@ public class ColorLightEngine {
             return 0f;
 
         float skyExposure = realLevel.getBrightness(LightLayer.SKY, pos) / 15f;
+
         float timeOfDayFactor = computeTimeOfDayFactor(realLevel);
 
         return ColorLightUtil.clamp01(skyExposure * timeOfDayFactor);
@@ -255,7 +252,6 @@ public class ColorLightEngine {
         return 1f;
     }
 
-    /** Для отладки: показывает промежуточные значения расчёта дневного подавления. */
     public String debugDaylight(BlockPos pos) {
         if (!(level instanceof Level realLevel))
             return "level is not a real Level (" + level.getClass() + ")";
@@ -273,8 +269,6 @@ public class ColorLightEngine {
                 + " rawSky=" + rawSky + " skyExposure=" + skyExposure
                 + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor;
     }
-
-    // ==================== Служебное ====================
 
     private int getOpacity(BlockPos pos) {
         BlockState state = level.getBlockState(pos);

@@ -54,13 +54,15 @@ public class PathTextureBlock {
 
                 PixelData best = SearchBestPixel.search(texture);
 
-                ColorLightSaveBlock data = config.blocks.get(i);
 
-                data.r = best.r;
-                data.g = best.g;
-                data.b = best.b;
-
-                ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
+                if (best != null) {
+                    ColorLightSaveBlock data = config.blocks.get(i);
+                    data.r = best.r;
+                    data.g = best.g;
+                    data.b = best.b;
+                } else {
+                    ColorLightClient.LOGGER.info("Не удалось определить цвет для текстуры");
+                }
             }
 
             i++;

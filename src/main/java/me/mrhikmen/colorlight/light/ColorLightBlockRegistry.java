@@ -5,45 +5,41 @@ import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public final class ColorLightBlockRegistry {
 
-    private static final Map<Block, int[]> COLORS = new HashMap<>();
+    private static Map<Block, ColorLightSaveBlock> byBlock = new HashMap<>();
 
     public static void load(ColorLightConfig config) {
-        COLORS.clear();
+        Map<Block, ColorLightSaveBlock> map = new HashMap<>();
 
-        if (config.blocks == null)
-            return;
+        for (ColorLightSaveBlock entry : config.blocks) {
 
-        for (ColorLightSaveBlock saved : config.blocks) {
-            if (saved == null || saved.block == null)
+            if (entry.light <= 0)
                 continue;
 
-            Block block;
+            if (entry.r == 0 && entry.g == 0 && entry.b == 0)
+                continue;
+
             try {
-                block = BuiltInRegistries.BLOCK.get(saved.getBlock());
+                Block block = BuiltInRegistries.BLOCK.get(entry.getBlock());
+                map.put(block, entry);
             } catch (Exception e) {
-                continue;
             }
-
-            if (block == null || block == Blocks.AIR)
-                continue;
-
-            COLORS.put(block, new int[]{saved.r, saved.g, saved.b, Math.max(1, saved.light)});
         }
+
+        byBlock = map;
     }
 
-    public static int[] get(Block block) {
-        return COLORS.get(block);
+    public static ColorLightSaveBlock get(Block block) {
+        return byBlock.get(block);
     }
 
-    public static int size() {
-        return COLORS.size();
+    public static boolean isEmpty() {
+        return byBlock.isEmpty();
     }
 
     private ColorLightBlockRegistry() {

@@ -71,7 +71,7 @@ public final class ColorLightTestCommand {
         var player = Minecraft.getInstance().player;
         if (player != null) {
             BlockPos pos = player.blockPosition();
-            int radius = 64;
+            int radius = 64; // с запасом, но если красили дальше — поможет только перезаход в мир
 
             Minecraft.getInstance().levelRenderer.setBlocksDirty(
                     pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
@@ -100,12 +100,13 @@ public final class ColorLightTestCommand {
         int r = IntegerArgumentType.getInteger(ctx, "r");
         int g = IntegerArgumentType.getInteger(ctx, "g");
         int b = IntegerArgumentType.getInteger(ctx, "b");
+        int strength = IntegerArgumentType.getInteger(ctx, "strength");
 
-        engine.addSource(pos, r, g, b);
+        engine.addSource(pos, r, g, b, strength);
         markDirtyAround(pos);
 
         ctx.getSource().sendFeedback(Component.literal(
-                "Источник добавлен в " + pos.toShortString() + " цвет=" + r + "," + g + "," + b));
+                "Источник добавлен в " + pos.toShortString() + " цвет=" + r + "," + g + "," + b + " strength=" + strength));
         return 1;
     }
 
