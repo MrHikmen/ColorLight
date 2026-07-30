@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight.core.scanner.model;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
+import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.scanner.model.blockstate.*;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;
@@ -24,8 +24,6 @@ public class PathTextureBlock {
         for (int i = 0; i < config.blocks.size();) {
 
             ResourceLocation block = config.blocks.get(i).getBlock();;
-
-            ColorLightClient.LOGGER.info("Mod: " + block.getNamespace()  + " Block: " + block.getPath() + " Счет: " + i);
 
             ResourceLocation modelId = ResourceLocation.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
             Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
@@ -52,16 +50,14 @@ public class PathTextureBlock {
                 ResourceLocation textureId = ResourceLocation.parse(block.getNamespace() + ":block/" + block.getPath());
                 ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
 
-                PixelData best = SearchBestPixel.search(texture);
+                PixelData best = SearchBestPixel.search(texture, config);
 
 
                 if (best != null) {
-                    ColorLightSaveBlock data = config.blocks.get(i);
+                    BlockSettings data = config.blocks.get(i);
                     data.r = best.r;
                     data.g = best.g;
                     data.b = best.b;
-                } else {
-                    ColorLightClient.LOGGER.info("Не удалось определить цвет для текстуры");
                 }
             }
 

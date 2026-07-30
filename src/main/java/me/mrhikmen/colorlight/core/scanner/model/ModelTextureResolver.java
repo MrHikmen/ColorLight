@@ -1,8 +1,7 @@
 package me.mrhikmen.colorlight.core.scanner.model;
 
-import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
+import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;
 
@@ -48,7 +47,7 @@ public class ModelTextureResolver {
                     continue;
 
                 ResourceLocation texture = ResourceLocation.parse(textureName);
-                PixelData result = SearchBestPixel.search(texture);
+                PixelData result = SearchBestPixel.search(texture, config);
 
                 if (result != null)
                     bestPixels.add(result);
@@ -64,15 +63,11 @@ public class ModelTextureResolver {
         }
 
         if (best != null) {
-            ColorLightSaveBlock data = config.blocks.get(i);
+            BlockSettings data = config.blocks.get(i);
 
             data.r = best.r;
             data.g = best.g;
             data.b = best.b;
-
-            ColorLightClient.LOGGER.info(best.r + " " + best.g + " " + best.b + " score = " + best.score);
-        } else {
-            ColorLightClient.LOGGER.info("Не удалось определить цвет для текстуры");
         }
     }
 

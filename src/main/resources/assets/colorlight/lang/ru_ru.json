@@ -1,12 +1,18 @@
 {
-  "modmenu.descriptionTranslation.colorlight": "Добавляет цветное освещение светящимся блокам на основе их текстур.",
+  "modmenu.descriptionTranslation.colorlight": "ColorLight — мод, который заменяет стандартное освещение блоков на освещение, соответствующее цветам их текстур.",
 
   "me.colorlight.name": "ColorLighting",
 
-  "me.colorlight.general": "Основное",
-  "me.colorlight.colors": "Свечение блоков",
+  "me.colorlight.general": "Основные",
+  "me.colorlight.block": "Блоки",
+  "me.colorlight.fun": "Веселье",
 
-  "me.colorlight.general.enable": "Включить ColorLighting",
-  "me.colorlight.general.white_limit": "Отсечение белого",
-  "me.colorlight.general.built_in_config": "Рекомендованное свечение"
+  "me.colorlight.general.enable": "Включить мод",
+  "me.colorlight.general.enable.tooltip": "Полностью включает/выключает автоматическое цветное освещение блоков",
+
+  "me.colorlight.general.light_range": "Дальность света",
+  "me.colorlight.general.light_range.tooltip": "Максимальная дальность распространения цветного света",
+  "me.colorlight.general.light_range.value.1": "%s блок",
+  "me.colorlight.general.light_range.value.1-5": "%s блокa",
+  "me.colorlight.general.light_range.value": "%s блоков"
 }

@@ -16,7 +16,16 @@ public class ColorLightConfig {
 
     public int lightRangeBlocks = 15;
 
-    public LinkedList<ColorLightSaveBlock> blocks = new LinkedList<>();
+    public int BRIGHTNESS_WEIGHT     = 30;
+    public int LOCAL_WEIGHT          = 20;
+    public int REGION_WEIGHT         = 8;
+    public int ALPHA_WEIGHT          = 5;
+    public int ANOMALY_WEIGHT        = 12;
+    public int SATURATION_WEIGHT     = 5;
+    public int GLOWCOLORSCORE_WEIGHT = 15;
+    public int WHITEPENALTY_WEIGHT   = 10;
+
+    public LinkedList<BlockSettings> blocks = new LinkedList<>();
 
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("colorlight.json");
 
@@ -30,6 +39,15 @@ public class ColorLightConfig {
                 this.ENABLE = loaded.ENABLE;
                 this.blocks = loaded.blocks;
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
+
+                this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
+                this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;
+                this.REGION_WEIGHT = loaded.REGION_WEIGHT > -1 ? loaded.REGION_WEIGHT : this.REGION_WEIGHT;
+                this.ALPHA_WEIGHT = loaded.ALPHA_WEIGHT > -1 ? loaded.ALPHA_WEIGHT : this.ALPHA_WEIGHT;
+                this.ANOMALY_WEIGHT = loaded.ANOMALY_WEIGHT > -1 ? loaded.ANOMALY_WEIGHT : this.ANOMALY_WEIGHT;
+                this.SATURATION_WEIGHT = loaded.SATURATION_WEIGHT > -1 ? loaded.SATURATION_WEIGHT : this.SATURATION_WEIGHT;
+                this.GLOWCOLORSCORE_WEIGHT = loaded.GLOWCOLORSCORE_WEIGHT > -1 ? loaded.GLOWCOLORSCORE_WEIGHT : this.GLOWCOLORSCORE_WEIGHT;
+                this.WHITEPENALTY_WEIGHT = loaded.WHITEPENALTY_WEIGHT > -1 ? loaded.WHITEPENALTY_WEIGHT : this.WHITEPENALTY_WEIGHT;
 
             } catch (IOException e) {
                 e.printStackTrace();

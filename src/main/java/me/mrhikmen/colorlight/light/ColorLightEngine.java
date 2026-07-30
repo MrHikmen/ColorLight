@@ -206,7 +206,6 @@ public class ColorLightEngine {
                 }
             }
         }
-
         return relightSeeds;
     }
 
@@ -245,10 +244,26 @@ public class ColorLightEngine {
         if (dayTime < 0)
             dayTime += 24000L;
 
-        if (dayTime < 11000) return 1f;                              // день
-        if (dayTime < 13000) return 1f - (dayTime - 11000) / 2000f;   // закат
-        if (dayTime < 21000) return 0f;                               // ночь
-        if (dayTime < 23000) return (dayTime - 21000) / 2000f;        // рассвет
+        if (dayTime < 12000) return 1f;
+        if (dayTime < 12100) return 0.9f;
+        if (dayTime < 12200) return 0.8f;
+        if (dayTime < 12300) return 0.7f;
+        if (dayTime < 12400) return 0.6f;
+        if (dayTime < 12500) return 0.5f;
+        if (dayTime < 12600) return 0.4f;
+        if (dayTime < 12700) return 0.3f;
+        if (dayTime < 12800) return 0.2f;
+        if (dayTime < 12900) return 0.1f;
+        if (dayTime < 23000) return 0f;
+        if (dayTime < 23100) return 0.1f;
+        if (dayTime < 23200) return 0.2f;
+        if (dayTime < 23300) return 0.3f;
+        if (dayTime < 23400) return 0.4f;
+        if (dayTime < 23500) return 0.5f;
+        if (dayTime < 23600) return 0.6f;
+        if (dayTime < 23700) return 0.7f;
+        if (dayTime < 23800) return 0.8f;
+        if (dayTime < 23900) return 0.9f;
         return 1f;
     }
 
@@ -265,9 +280,7 @@ public class ColorLightEngine {
         float timeFactor = computeTimeOfDayFactor(realLevel);
         float finalFactor = getDaylightFactor(pos);
 
-        return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime
-                + " rawSky=" + rawSky + " skyExposure=" + skyExposure
-                + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor;
+        return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime + " rawSky=" + rawSky + " skyExposure=" + skyExposure + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor;
     }
 
     private int getOpacity(BlockPos pos) {

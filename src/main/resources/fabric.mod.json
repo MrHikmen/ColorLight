@@ -3,7 +3,7 @@
   "id": "colorlight",
   "version": "${version}",
   "name": "ColorLight",
-  "description": "ColorLight adds logical color lighting to blocks",
+  "description": "The ColorLight mod replaces vanilla block lighting with lighting that matches each block's texture.",
   "authors": [],
   "contact": {},
   "license": "MIT",
@@ -12,6 +12,9 @@
   "entrypoints": {
     "client": [
       "me.mrhikmen.colorlight.ColorLightClient"
+    ],
+    "sodium:config_api_user": [
+      "me.mrhikmen.colorlight.config.sodium.ColorLightSodiumConfig"
     ]
   },
   "mixins" : [
@@ -19,7 +22,7 @@
     ],
   "depends": {
     "fabricloader": ">=${loader_version}",
-    "fabric-api": "*",
+    "fabric-api": ">=${fabric_version}",
     "minecraft": "${minecraft_version}"
   }
 }

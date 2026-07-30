@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.core.ReloadListener;
 import me.mrhikmen.colorlight.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.light.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.light.ColorLightDaylightRefresher;
@@ -24,28 +23,34 @@ public class ColorLightClient implements ClientModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(ModID);
 
+    public static ColorLightConfig config = new ColorLightConfig();
+
     @Override
     public void onInitializeClient() {
 
-        ColorLightConfig config = new ColorLightConfig();
+        // ВАЖНО: без этого вызова config стартует с чистыми дефолтами (ENABLE=true,
+        // blocks=пусто) и грузится с диска только позже, когда сработает ReloadListener —
+        // а до этого момента ColorLightBlockRegistry/ColorLightEngineHolder успевают
+        // настроиться на пустые/дефолтные данные.
         config.load();
+
         ColorLightEngineHolder.configure(config.lightRangeBlocks);
         ColorLightBlockRegistry.load(config);
-
         ColorLightDaylightRefresher.register();
+
         ModelLoadingPlugin.register(new ColorLightTestModelPlugin());
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
                 ColorLightEngineHolder.set(client.level));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 ColorLightEngineHolder.set(null));
 
-        if (config.ENABLE) {
-            ColorLightChunkScanner.register();
-        }
-
+        // Регистрируем ВСЕГДА — саму проверку ENABLE теперь делает ColorLightChunkScanner
+        // на каждый вызов, чтобы переключение в настройках работало без перезапуска игры.
+        ColorLightChunkScanner.register();
         ColorLightTestCommand.register();
 
         ColorLightClient.LOGGER.info("Mod is loading");
+
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ReloadListener());
     }
 }

@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.mixin.minecraft;
 
-import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
+import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.light.ColorLightEngine;
 import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
@@ -24,8 +24,7 @@ public abstract class LevelMixin {
             method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z",
             at = @At("RETURN")
     )
-    private void colorlight$onSetBlock(BlockPos pos, BlockState state, int flags, int recursionLeft,
-                                       CallbackInfoReturnable<Boolean> cir) {
+    private void colorlight$onSetBlock(BlockPos pos, BlockState state, int flags, int recursionLeft, CallbackInfoReturnable<Boolean> cir) {
 
         if (!cir.getReturnValueZ())
             return;
@@ -38,7 +37,7 @@ public abstract class LevelMixin {
             return;
 
         Block newBlock = state.getBlock();
-        ColorLightSaveBlock entry = ColorLightBlockRegistry.get(newBlock);
+        BlockSettings entry = ColorLightBlockRegistry.get(newBlock);
 
         if (entry != null) {
             engine.addSource(pos, entry.r, entry.g, entry.b, entry.light);

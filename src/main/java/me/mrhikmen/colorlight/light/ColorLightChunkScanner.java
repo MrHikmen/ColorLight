@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.light;
 
-import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
+import me.mrhikmen.colorlight.ColorLightClient;
+import me.mrhikmen.colorlight.config.BlockSettings;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 
@@ -17,6 +18,9 @@ public final class ColorLightChunkScanner {
     }
 
     private static void onChunkLoad(ClientLevel level, LevelChunk chunk) {
+
+        if (!ColorLightClient.config.ENABLE)
+            return;
 
         if (ColorLightBlockRegistry.isEmpty())
             return;
@@ -45,7 +49,7 @@ public final class ColorLightChunkScanner {
 
                         BlockState state = section.getBlockState(x, y, z);
 
-                        ColorLightSaveBlock entry = ColorLightBlockRegistry.get(state.getBlock());
+                        BlockSettings entry = ColorLightBlockRegistry.get(state.getBlock());
                         if (entry == null)
                             continue;
 
@@ -59,7 +63,6 @@ public final class ColorLightChunkScanner {
             }
         }
     }
-
     private ColorLightChunkScanner() {
     }
 }

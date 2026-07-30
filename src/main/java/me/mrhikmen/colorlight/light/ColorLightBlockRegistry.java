@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.light;
 
+import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.config.ColorLightSaveBlock;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
@@ -11,12 +11,12 @@ import java.util.Map;
 
 public final class ColorLightBlockRegistry {
 
-    private static Map<Block, ColorLightSaveBlock> byBlock = new HashMap<>();
+    private static Map<Block, BlockSettings> byBlock = new HashMap<>();
 
     public static void load(ColorLightConfig config) {
-        Map<Block, ColorLightSaveBlock> map = new HashMap<>();
+        Map<Block, BlockSettings> map = new HashMap<>();
 
-        for (ColorLightSaveBlock entry : config.blocks) {
+        for (BlockSettings entry : config.blocks) {
 
             if (entry.light <= 0)
                 continue;
@@ -34,7 +34,7 @@ public final class ColorLightBlockRegistry {
         byBlock = map;
     }
 
-    public static ColorLightSaveBlock get(Block block) {
+    public static BlockSettings get(Block block) {
         return byBlock.get(block);
     }
 

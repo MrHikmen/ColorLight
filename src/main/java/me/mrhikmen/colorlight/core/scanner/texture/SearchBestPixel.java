@@ -1,50 +1,94 @@
 package me.mrhikmen.colorlight.core.scanner.texture;
 
+import me.mrhikmen.colorlight.config.ColorLightConfig;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.HashMap;
 import java.util.List;
-
-import static me.mrhikmen.colorlight.core.scanner.texture.ScanTextureBlock.*;
+import java.util.Map;
 
 public class SearchBestPixel {
-    public static PixelData search(ResourceLocation textureId){
+
+    public static PixelData search(ResourceLocation textureId, ColorLightConfig config) {
+
         ResourceLocation fileId = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
-        List<PixelData> pixels = ScanTextureBlock.scan(fileId);
 
-
-        if (pixels == null || pixels.isEmpty())
-            return null;
+        ScanTextureBlock.TextureData texture = ScanTextureBlock.scan(fileId);
 
         long avgR = 0;
         long avgG = 0;
         long avgB = 0;
-
         int count = 0;
 
-        for (PixelData p : pixels) {
-            if (p.a == 0) continue;
+        for(PixelData p : texture.pixels){
+            if(!p.isVisible())
+                continue;
+
             avgR += p.r;
             avgG += p.g;
             avgB += p.b;
+
             count++;
         }
 
-        if (count == 0)
-            return null; // все пиксели прозрачные, валидного цвета нет
+        if(count == 0)
+            return null;
 
         avgR /= count;
         avgG /= count;
         avgB /= count;
 
-        for (PixelData pixel : pixels) {
-            if (pixel.a == 0) continue;
-            pixel.score = brightness(pixel) * 0.35 + saturation(pixel) * 0.35 + anomaly(pixel, (int) avgR, (int) avgG, (int) avgB) * 0.15;
+        if (texture == null || texture.pixels.isEmpty())
+            return null;
+
+        List<ScanTextureBlock.Component> components = ScanTextureBlock.findComponents(texture);
+
+        if (components.isEmpty())
+            return null;
+
+        int maxRegion = ScanTextureBlock.largestComponent(components);
+
+        Map<PixelData, Integer> regionSize = new HashMap<>();
+
+        for (ScanTextureBlock.Component component : components) {
+            int size = component.size();
+
+            for (PixelData pixel : component.pixels) {
+                regionSize.put(pixel, size);
+            }
         }
 
         PixelData best = null;
 
-        for (PixelData pixel : pixels) {
-            if (pixel.a == 0) continue;
+        for (PixelData pixel : texture.pixels) {
+
+            if (!pixel.isVisible())
+                continue;
+
+            double brightness = ScanTextureBlock.brightness(pixel);
+
+            double localBrightness = ScanTextureBlock.localBrightness(texture.image, pixel, texture.width, texture.height);
+
+            double regionScore = regionSize.getOrDefault(pixel, 1) / (double) maxRegion;
+
+            double anomaly = ScanTextureBlock.anomaly(pixel, (int)avgR, (int)avgG, (int)avgB);
+
+            double alphaScore = pixel.a / 255.0;
+
+            double saturation = ScanTextureBlock.saturation(pixel);
+            double whitePenalty = ScanTextureBlock.whitePenalty(pixel);
+            double glowColorScore = ScanTextureBlock.glowColorScore(pixel);
+
+            pixel.score =
+                            brightness * (config.BRIGHTNESS_WEIGHT / 100) +
+                            localBrightness * (config.LOCAL_WEIGHT / 100) +
+                            regionScore * (config.REGION_WEIGHT / 100) +
+                            alphaScore * (config.ALPHA_WEIGHT / 100) +
+                            anomaly * (config.ANOMALY_WEIGHT / 100) +
+                            saturation * (config.SATURATION_WEIGHT / 100) +
+                            glowColorScore * (config.GLOWCOLORSCORE_WEIGHT / 100) +
+                            whitePenalty * (config.WHITEPENALTY_WEIGHT / 100);
+
             if (best == null || pixel.score > best.score) {
                 best = pixel;
             }

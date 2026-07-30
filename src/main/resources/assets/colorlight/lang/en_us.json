@@ -1,3 +1,16 @@
 {
-  "modmenu.descriptionTranslation.colorlighting": "Adds texture-based colored lighting to emissive blocks."
+  "me.colorlight.name": "ColorLighting",
+
+  "me.colorlight.general": "General",
+  "me.colorlight.block": "Block",
+  "me.colorlight.fun": "Fun",
+
+  "me.colorlight.general.enable": "Enable mod",
+  "me.colorlight.general.enable.tooltip": "Fully enables/disables automatic colored block lighting.",
+
+  "me.colorlight.general.light_range": "Light range",
+  "me.colorlight.general.light_range.tooltip": "Maximum propagation range of colored light",
+  "me.colorlight.general.light_range.value.1": "%s block",
+  "me.colorlight.general.light_range.value.1-5": "%s block",
+  "me.colorlight.general.light_range.value": "%s blocks"
 }

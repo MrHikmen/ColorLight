@@ -2,17 +2,17 @@ package me.mrhikmen.colorlight.config;
 
 import net.minecraft.resources.ResourceLocation;
 
-public class ColorLightSaveBlock {
+public class BlockSettings {
     public String block;
     public int r;
     public int g;
     public int b;
     public int light;
 
-    public ColorLightSaveBlock() {
+    public BlockSettings() {
     }
 
-    public ColorLightSaveBlock(ResourceLocation block, int light) {
+    public BlockSettings(ResourceLocation block, int light) {
         this.block = String.valueOf(block);
         this.light = light;
     }

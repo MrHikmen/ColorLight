@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.light;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 
