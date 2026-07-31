@@ -12,5 +12,18 @@
   "me.colorlight.general.light_range.tooltip": "Maximum propagation range of colored light",
   "me.colorlight.general.light_range.value.1": "%s block",
   "me.colorlight.general.light_range.value.1-5": "%s block",
-  "me.colorlight.general.light_range.value": "%s blocks"
+  "me.colorlight.general.light_range.value": "%s blocks",
+
+  "me.colorlight.fun.weight": "Scanner parameter adjustment",
+  "me.colorlight.fun.brightness_weight": "Brightness strength",
+  "me.colorlight.fun.local_weight": "Terrain's influence strength",
+  "me.colorlight.fun.region_weight": "Region's influence strength",
+  "me.colorlight.fun.alpha_weight": "Alpha pixel cutout strength",
+  "me.colorlight.fun.anomaly_weight": "Anomaly strength",
+  "me.colorlight.fun.saturation_weight": "Saturation strength",
+  "me.colorlight.fun.glowcolorscore_weight": "Luminous strength",
+  "me.colorlight.fun.whitepenalty_weight": "White clipping strength",
+  "me.colorlight.fun.weight.tooltip": "Configures the texture scanner settings.",
+  "me.colorlight.fun.weight.value.0": "Off",
+  "me.colorlight.fun.weight.value": "Strength %s%%"
 }

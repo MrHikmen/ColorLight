@@ -76,7 +76,9 @@ public class SearchBestPixel {
             double alphaScore = pixel.a / 255.0;
 
             double saturation = ScanTextureBlock.saturation(pixel);
+
             double whitePenalty = ScanTextureBlock.whitePenalty(pixel);
+
             double glowColorScore = ScanTextureBlock.glowColorScore(pixel);
 
             pixel.score =

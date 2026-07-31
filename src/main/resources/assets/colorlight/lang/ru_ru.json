@@ -8,11 +8,24 @@
   "me.colorlight.fun": "Веселье",
 
   "me.colorlight.general.enable": "Включить мод",
-  "me.colorlight.general.enable.tooltip": "Полностью включает/выключает автоматическое цветное освещение блоков",
+  "me.colorlight.general.enable.tooltip": "Полностью включает/выключает автоматическое цветное освещение блоков.",
 
   "me.colorlight.general.light_range": "Дальность света",
-  "me.colorlight.general.light_range.tooltip": "Максимальная дальность распространения цветного света",
+  "me.colorlight.general.light_range.tooltip": "Максимальная дальность распространения цветного света.",
   "me.colorlight.general.light_range.value.1": "%s блок",
   "me.colorlight.general.light_range.value.1-5": "%s блокa",
-  "me.colorlight.general.light_range.value": "%s блоков"
+  "me.colorlight.general.light_range.value": "%s блоков",
+
+  "me.colorlight.fun.weight": "Регулировка параметров сканера",
+  "me.colorlight.fun.brightness_weight": "Сила яркости",
+  "me.colorlight.fun.local_weight": "Сила влияния местности",
+  "me.colorlight.fun.region_weight": "Сила влияния области",
+  "me.colorlight.fun.alpha_weight": "Сила отсечения альфа пикселей",
+  "me.colorlight.fun.anomaly_weight": "Сила аномалий",
+  "me.colorlight.fun.saturation_weight": "Сила насыщенности",
+  "me.colorlight.fun.glowcolorscore_weight": "Сила свечения",
+  "me.colorlight.fun.whitepenalty_weight": "Сила отсечение белого",
+  "me.colorlight.fun.weight.tooltip": "Регулирует параметры сканера текстур.",
+  "me.colorlight.fun.weight.value.0": "Выкл",
+  "me.colorlight.fun.weight.value": "Сила %s%%"
 }
