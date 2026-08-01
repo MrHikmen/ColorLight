@@ -1,7 +1,11 @@
 {
   "modmenu.descriptionTranslation.colorlight": "ColorLight — мод, который заменяет стандартное освещение блоков на освещение, соответствующее цветам их текстур.",
 
-  "me.colorlight.name": "ColorLighting",
+  "me.colorlight.command.clean_all": "Все источники очищены",
+  "me.colorlight.command.engine_off": "Движок ещё не инициализирован",
+  "me.colorlight.command.look_at_block": "Смотрите на блок",
+  "me.colorlight.command.light_add": "Источник добавлен",
+  "me.colorlight.command.light_del": "Источник убран",
 
   "me.colorlight.general": "Основные",
   "me.colorlight.block": "Блоки",

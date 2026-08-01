@@ -1,5 +1,9 @@
 {
-  "me.colorlight.name": "ColorLighting",
+  "me.colorlight.command.clean_all": "All sources have been cleared",
+  "me.colorlight.command.engine_off": "The engine has not yet been initialized",
+  "me.colorlight.command.look_at_block": "Look at the block",
+  "me.colorlight.command.light_add": "Source added",
+  "me.colorlight.command.light_del": "Source removed",
 
   "me.colorlight.general": "General",
   "me.colorlight.block": "Block",

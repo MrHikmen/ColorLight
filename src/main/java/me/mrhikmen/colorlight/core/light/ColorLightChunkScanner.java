@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.light;
+package me.mrhikmen.colorlight.core.light;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;

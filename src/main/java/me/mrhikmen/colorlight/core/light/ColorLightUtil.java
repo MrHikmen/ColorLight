@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.light;
+package me.mrhikmen.colorlight.core.light;
 
 public final class ColorLightUtil {
 

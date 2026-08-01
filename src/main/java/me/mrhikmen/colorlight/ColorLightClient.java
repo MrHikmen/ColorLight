@@ -1,12 +1,12 @@
 package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.light.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.light.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.light.ColorLightDaylightRefresher;
-import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.light.ColorLightTestCommand;
-import me.mrhikmen.colorlight.render.ColorLightTestModelPlugin;
+import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
+import me.mrhikmen.colorlight.core.light.ColorLightDaylightRefresher;
+import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.ColorLightCommand;
+import me.mrhikmen.colorlight.core.render.ColorLightTestModelPlugin;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
@@ -27,11 +27,6 @@ public class ColorLightClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-
-        // ВАЖНО: без этого вызова config стартует с чистыми дефолтами (ENABLE=true,
-        // blocks=пусто) и грузится с диска только позже, когда сработает ReloadListener —
-        // а до этого момента ColorLightBlockRegistry/ColorLightEngineHolder успевают
-        // настроиться на пустые/дефолтные данные.
         config.load();
 
         ColorLightEngineHolder.configure(config.lightRangeBlocks);
@@ -44,10 +39,8 @@ public class ColorLightClient implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 ColorLightEngineHolder.set(null));
 
-        // Регистрируем ВСЕГДА — саму проверку ENABLE теперь делает ColorLightChunkScanner
-        // на каждый вызов, чтобы переключение в настройках работало без перезапуска игры.
         ColorLightChunkScanner.register();
-        ColorLightTestCommand.register();
+        ColorLightCommand.register();
 
         ColorLightClient.LOGGER.info("Mod is loading");
 

@@ -3,6 +3,12 @@ package me.mrhikmen.colorlight.config;
 import net.minecraft.network.chat.Component;
 
 public class Translatable {
+    public static Component CLEAN_ALL = Component.translatable("me.colorlight.command.clean_all");
+    public static Component ENGINE_OFF = Component.translatable("me.colorlight.command.engine_off");
+    public static Component LOOK_AT_BLOCK = Component.translatable("me.colorlight.command.look_at_block");
+    public static Component LIGHT_ADD = Component.translatable("me.colorlight.command.light_add");
+    public static Component LIGHT_DEL = Component.translatable("me.colorlight.command.light_del");
+
     public static Component GENERAL = Component.translatable("me.colorlight.general");
     public static Component BLOCK = Component.translatable("me.colorlight.block");
     public static Component FUN = Component.translatable("me.colorlight.fun");

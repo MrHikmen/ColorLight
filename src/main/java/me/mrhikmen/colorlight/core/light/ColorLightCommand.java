@@ -1,8 +1,9 @@
-package me.mrhikmen.colorlight.light;
+package me.mrhikmen.colorlight.core.light;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
+import me.mrhikmen.colorlight.config.Translatable;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
@@ -13,14 +14,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
-public final class ColorLightTestCommand {
+public final class ColorLightCommand {
 
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
 
             dispatcher.register(ClientCommandManager.literal("colorlight")
                     .then(ClientCommandManager.literal("inspect")
-                            .executes(ColorLightTestCommand::debugDaylight))
+                            .executes(ColorLightCommand::debugDaylight))
 
                     .then(ClientCommandManager.literal("target")
 
@@ -29,14 +30,14 @@ public final class ColorLightTestCommand {
                                             .then(ClientCommandManager.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                     .then(ClientCommandManager.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                             .then(ClientCommandManager.argument("strength", IntegerArgumentType.integer(1, 15))
-                                                                    .executes(ColorLightTestCommand::addAtTarget))))))
+                                                                    .executes(ColorLightCommand::addAtTarget))))))
 
                             .then(ClientCommandManager.literal("reset")
-                                    .executes(ColorLightTestCommand::removeAtTarget))
+                                    .executes(ColorLightCommand::removeAtTarget))
                     )
 
                     .then(ClientCommandManager.literal("clear")
-                            .executes(ColorLightTestCommand::clearAll))
+                            .executes(ColorLightCommand::clearAll))
             );
         });
     }
@@ -52,7 +53,7 @@ public final class ColorLightTestCommand {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null) {
-            ctx.getSource().sendError(Component.literal("Движок ещё не инициализирован"));
+            ctx.getSource().sendError(Translatable.ENGINE_OFF);
             return 0;
         }
 
@@ -71,7 +72,7 @@ public final class ColorLightTestCommand {
         var player = Minecraft.getInstance().player;
         if (player != null) {
             BlockPos pos = player.blockPosition();
-            int radius = 64; // с запасом, но если красили дальше — поможет только перезаход в мир
+            int radius = 64;
 
             Minecraft.getInstance().levelRenderer.setBlocksDirty(
                     pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
@@ -79,7 +80,7 @@ public final class ColorLightTestCommand {
             );
         }
 
-        ctx.getSource().sendFeedback(Component.literal("Все источники очищены"));
+        ctx.getSource().sendFeedback(Translatable.CLEAN_ALL);
         return 1;
     }
 
@@ -87,13 +88,13 @@ public final class ColorLightTestCommand {
 
         BlockPos pos = targetPos();
         if (pos == null) {
-            ctx.getSource().sendError(Component.literal("Смотрите на блок"));
+            ctx.getSource().sendError(Translatable.LOOK_AT_BLOCK);
             return 0;
         }
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null) {
-            ctx.getSource().sendError(Component.literal("Движок ещё не инициализирован"));
+            ctx.getSource().sendError(Translatable.ENGINE_OFF);
             return 0;
         }
 
@@ -105,8 +106,7 @@ public final class ColorLightTestCommand {
         engine.addSource(pos, r, g, b, strength);
         markDirtyAround(pos);
 
-        ctx.getSource().sendFeedback(Component.literal(
-                "Источник добавлен в " + pos.toShortString() + " цвет=" + r + "," + g + "," + b + " strength=" + strength));
+        ctx.getSource().sendFeedback(Translatable.LIGHT_ADD);
         return 1;
     }
 
@@ -114,7 +114,7 @@ public final class ColorLightTestCommand {
 
         BlockPos pos = targetPos();
         if (pos == null) {
-            ctx.getSource().sendError(Component.literal("Смотрите на блок"));
+            ctx.getSource().sendError(Translatable.LOOK_AT_BLOCK);
             return 0;
         }
 
@@ -125,7 +125,7 @@ public final class ColorLightTestCommand {
         engine.removeSource(pos);
         markDirtyAround(pos);
 
-        ctx.getSource().sendFeedback(Component.literal("Источник убран из " + pos.toShortString()));
+        ctx.getSource().sendFeedback(Translatable.LIGHT_DEL);
         return 1;
     }
 
@@ -147,6 +147,6 @@ public final class ColorLightTestCommand {
         );
     }
 
-    private ColorLightTestCommand() {
+    private ColorLightCommand() {
     }
 }

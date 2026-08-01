@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.core.scanner.LightBlock;
 import me.mrhikmen.colorlight.core.scanner.model.PathTextureBlock;
-import me.mrhikmen.colorlight.light.*;
+import me.mrhikmen.colorlight.core.light.*;
 
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 

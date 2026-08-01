@@ -1,9 +1,9 @@
 package me.mrhikmen.colorlight.config;
 
 import me.mrhikmen.colorlight.ColorLightClient;
-import me.mrhikmen.colorlight.light.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.light.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
+import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
@@ -298,6 +298,34 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                 );
     }
 
+    private void save() {
+        config.save();
+        ColorLightEngineHolder.configure(config.lightRangeBlocks);
+        ColorLightBlockRegistry.load(config);
+
+        var client = net.minecraft.client.Minecraft.getInstance();
+        if (client.level != null) {
+            ColorLightEngineHolder.set(client.level);
+            if (config.ENABLE) {
+                ColorLightChunkScanner.rescanAll(client.level);
+            } else {
+                markWholeRenderDistanceDirty(client);
+            }
+        }
+    }
+    private static void markWholeRenderDistanceDirty(net.minecraft.client.Minecraft client) {
+        var player = client.player;
+        if (player == null) return;
+
+        int renderDistanceBlocks = client.options.renderDistance().get() << 4;
+        var pos = player.blockPosition();
+
+        client.levelRenderer.setBlocksDirty(
+                pos.getX() - renderDistanceBlocks, client.level.getMinBuildHeight(), pos.getZ() - renderDistanceBlocks,
+                pos.getX() + renderDistanceBlocks, client.level.getMaxBuildHeight(), pos.getZ() + renderDistanceBlocks
+        );
+    }
+
     private void setEnable(boolean value) {
         config.ENABLE = value;
     }
@@ -366,33 +394,5 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     }
     private int getWhitepenaltyWeight() {
         return config.WHITEPENALTY_WEIGHT;
-    }
-
-    private void save() {
-        config.save();
-        ColorLightEngineHolder.configure(config.lightRangeBlocks);
-        ColorLightBlockRegistry.load(config);
-
-        var client = net.minecraft.client.Minecraft.getInstance();
-        if (client.level != null) {
-            ColorLightEngineHolder.set(client.level);
-            if (config.ENABLE) {
-                ColorLightChunkScanner.rescanAll(client.level);
-            } else {
-                markWholeRenderDistanceDirty(client);
-            }
-        }
-    }
-    private static void markWholeRenderDistanceDirty(net.minecraft.client.Minecraft client) {
-        var player = client.player;
-        if (player == null) return;
-
-        int renderDistanceBlocks = client.options.renderDistance().get() << 4;
-        var pos = player.blockPosition();
-
-        client.levelRenderer.setBlocksDirty(
-                pos.getX() - renderDistanceBlocks, client.level.getMinBuildHeight(), pos.getZ() - renderDistanceBlocks,
-                pos.getX() + renderDistanceBlocks, client.level.getMaxBuildHeight(), pos.getZ() + renderDistanceBlocks
-        );
     }
 }

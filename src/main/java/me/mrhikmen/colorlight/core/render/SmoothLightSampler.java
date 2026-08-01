@@ -1,7 +1,7 @@
-package me.mrhikmen.colorlight.render;
+package me.mrhikmen.colorlight.core.render;
 
-import me.mrhikmen.colorlight.light.ColorLightEngine;
-import me.mrhikmen.colorlight.light.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.ColorLightUtil;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.light;
+package me.mrhikmen.colorlight.core.light;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
