@@ -27,5 +27,5 @@
   "me.colorlight.fun.whitepenalty_weight": "Сила отсечение белого",
   "me.colorlight.fun.weight.tooltip": "Регулирует параметры сканера текстур.",
   "me.colorlight.fun.weight.value.0": "Выкл",
-  "me.colorlight.fun.weight.value": "Сила %s%%"
+  "me.colorlight.fun.weight.value": "%s%%"
 }

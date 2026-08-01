@@ -45,9 +45,6 @@
     "minecraft": "${minecraft_version}"
   },
   "suggests": {
-    "sodium": "${sodium_version}"
-  },
-  "breaks": {
-    "iris" : "*"
+    "sodium": "*"
   }
 }

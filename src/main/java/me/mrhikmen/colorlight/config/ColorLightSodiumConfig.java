@@ -6,12 +6,14 @@ import me.mrhikmen.colorlight.light.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.light.ColorLightEngineHolder;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
+import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
 import net.caffeinemc.mods.sodium.api.config.option.OptionFlag;
 import net.caffeinemc.mods.sodium.api.config.option.SteppedValidator;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 
 import net.minecraft.resources.ResourceLocation;
 
+@ConfigEntryPointForge("colorlight")
 public class ColorLightSodiumConfig implements ConfigEntryPoint {
 
     private final ColorLightConfig config = ColorLightClient.config;
@@ -101,7 +103,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setBrightnessWeight, this::getBrightnessWeight)
-                                        .setDefaultValue(30)
+                                        .setDefaultValue(100)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:local_weight"))
                                         .setName(Translatable.LOCAL_WEIGHT)
@@ -128,7 +130,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setLocalWeight, this::getLocalWeight)
-                                        .setDefaultValue(20)
+                                        .setDefaultValue(100)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:region_weight"))
                                         .setName(Translatable.REGION_WEIGHT)
@@ -155,7 +157,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setRegionWeight, this::getRegionWeight)
-                                        .setDefaultValue(8)
+                                        .setDefaultValue(0)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:alpha_weight"))
                                         .setName(Translatable.ALPHA_WEIGHT)
@@ -182,7 +184,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setAlphaWeight, this::getAlphaWeight)
-                                        .setDefaultValue(5)
+                                        .setDefaultValue(0)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:anomaly_weight"))
                                         .setName(Translatable.ANOMALY_WEIGHT)
@@ -209,7 +211,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setAnomalyWeight, this::getAnomalyWeight)
-                                        .setDefaultValue(12)
+                                        .setDefaultValue(100)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:saturation_weight"))
                                         .setName(Translatable.SATURATION_WEIGHT)
@@ -236,7 +238,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setSaturationWeight, this::getSaturationWeight)
-                                        .setDefaultValue(5)
+                                        .setDefaultValue(100)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:glowcolorscore_weight"))
                                         .setName(Translatable.GLOWCOLORSCORE_WEIGHT)
@@ -263,7 +265,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setGlowcolorscoreWeight, this::getGlowcolorscoreWeight)
-                                        .setDefaultValue(15)
+                                        .setDefaultValue(100)
                                 )
                                 .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:whitepenalty_weight"))
                                         .setName(Translatable.WHITEPENALTY_WEIGHT)
@@ -290,7 +292,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                                         .setBinding(this::setWhitepenaltyWeight, this::getWhitepenaltyWeight)
-                                        .setDefaultValue(10)
+                                        .setDefaultValue(100)
                                 )
                         )
                 );

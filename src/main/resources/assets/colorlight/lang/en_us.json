@@ -25,5 +25,5 @@
   "me.colorlight.fun.whitepenalty_weight": "White clipping strength",
   "me.colorlight.fun.weight.tooltip": "Configures the texture scanner settings.",
   "me.colorlight.fun.weight.value.0": "Off",
-  "me.colorlight.fun.weight.value": "Strength %s%%"
+  "me.colorlight.fun.weight.value": "%s%%"
 }
