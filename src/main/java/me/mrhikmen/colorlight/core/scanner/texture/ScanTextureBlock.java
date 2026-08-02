@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight.core.scanner.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.io.IOException;
@@ -29,7 +29,7 @@ public class ScanTextureBlock {
         }
     }
 
-    public static TextureData scan(ResourceLocation texture) {
+    public static TextureData scan(Identifier texture) {
 
         Resource resource = Minecraft.getInstance().getResourceManager().getResource(texture).orElseThrow();
 
@@ -45,7 +45,7 @@ public class ScanTextureBlock {
 
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    int rgba = image.getPixelRGBA(x, y);
+                    int rgba = image.getPixel(x, y);
 
                     int a = (rgba >>> 24) & 255;
                     int b = (rgba >>> 16) & 255;

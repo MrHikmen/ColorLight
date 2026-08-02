@@ -3,7 +3,7 @@ package me.mrhikmen.colorlight.core.scanner.model.blockstate;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.scanner.model.ModelTextureResolver;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.*;
 import com.google.gson.JsonArray;
@@ -16,7 +16,7 @@ public class MultipartParser {
 
         JsonArray multipart = json.getAsJsonArray("multipart");
 
-        List<ResourceLocation> models = new ArrayList<>();
+        List<Identifier> models = new ArrayList<>();
 
         for (JsonElement partElement : multipart) {
 
@@ -43,11 +43,11 @@ public class MultipartParser {
 
     }
 
-    private static void addModel(JsonObject apply, List<ResourceLocation> models) {
+    private static void addModel(JsonObject apply, List<Identifier> models) {
 
         if (!apply.has("model"))
             return;
 
-        models.add(ResourceLocation.parse(apply.get("model").getAsString()));
+        models.add(Identifier.parse(apply.get("model").getAsString()));
     }
 }

@@ -6,10 +6,10 @@ import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 public class ColorLightTestModelPlugin implements ModelLoadingPlugin {
 
     @Override
-    public void onInitializeModelLoader(Context pluginContext) {
+    public void initialize(Context pluginContext) {
 
         ColorLightClient.LOGGER.info("[ColorLight] ModelLoadingPlugin initialized, wrapping models");
 
-        pluginContext.modifyModelAfterBake().register((model, context) -> new TintedBakedModel(model));
+        pluginContext.modifyBlockModelAfterBake().register((model, context) -> new TintedBakedModel(model));
     }
 }

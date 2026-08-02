@@ -25,8 +25,10 @@ public final class ColorLightBlockRegistry {
                 continue;
 
             try {
-                Block block = BuiltInRegistries.BLOCK.get(entry.getBlock());
-                map.put(block, entry);
+                Block block = BuiltInRegistries.BLOCK.getValue(entry.getBlock());
+                if (block != null) {
+                    map.put(block, entry);
+                }
             } catch (Exception e) {
             }
         }

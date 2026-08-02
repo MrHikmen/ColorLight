@@ -4,42 +4,52 @@ import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.ColorLightUtil;
 
-import net.fabricmc.fabric.api.renderer.v1.model.ForwardingBakedModel;
-import net.fabricmc.fabric.api.renderer.v1.render.RenderContext;
+import net.fabricmc.fabric.api.renderer.v1.mesh.MutableQuadView;
+import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
+import net.fabricmc.fabric.api.renderer.v1.model.FabricBlockStateModel;
 
-import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.renderer.block.model.BlockModelPart;
+import net.minecraft.client.renderer.block.model.BlockStateModel;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.function.Supplier;
+import java.util.List;
+import java.util.function.Predicate;
 
-public class TintedBakedModel extends ForwardingBakedModel {
+public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel {
 
-    public TintedBakedModel(BakedModel original) {
+    private final BlockStateModel wrapped;
+
+    public TintedBakedModel(BlockStateModel original) {
         this.wrapped = original;
     }
 
     @Override
-    public boolean isVanillaAdapter() {
-        return false;
+    public void collectParts(RandomSource random, List<BlockModelPart> parts) {
+        wrapped.collectParts(random, parts);
     }
 
     @Override
-    public void emitBlockQuads(BlockAndTintGetter blockView, BlockState state, BlockPos pos,
-                               Supplier<RandomSource> randomSupplier, RenderContext context) {
+    public TextureAtlasSprite particleIcon() {
+        return wrapped.particleIcon();
+    }
+
+    @Override
+    public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state,
+                          RandomSource random, Predicate<Direction> cullTest) {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
         if (engine == null || engine.hasSource(pos)) {
-            super.emitBlockQuads(blockView, state, pos, randomSupplier, context);
+            emitWrapped(emitter, blockView, pos, state, random, cullTest);
             return;
         }
 
-        context.pushTransform(quad -> {
-
+        emitter.pushTransform(quad -> {
             Direction face = quad.lightFace();
             BlockPos daylightPos = (face != null) ? pos.relative(face) : pos;
             float daylight = engine.getDaylightFactor(daylightPos);
@@ -52,8 +62,19 @@ public class TintedBakedModel extends ForwardingBakedModel {
             return true;
         });
 
-        super.emitBlockQuads(blockView, state, pos, randomSupplier, context);
+        emitWrapped(emitter, blockView, pos, state, random, cullTest);
 
-        context.popTransform();
+        emitter.popTransform();
+    }
+
+    private void emitWrapped(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state,
+                             RandomSource random, Predicate<Direction> cullTest) {
+        if (wrapped instanceof FabricBlockStateModel fabricModel) {
+            fabricModel.emitQuads(emitter, blockView, pos, state, random, cullTest);
+        } else {
+            for (BlockModelPart part : wrapped.collectParts(random)) {
+                part.emitQuads(emitter, cullTest);
+            }
+        }
     }
 }

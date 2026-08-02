@@ -70,7 +70,7 @@ public final class ColorLightChunkScanner {
             return;
 
         LevelChunkSection[] sections = chunk.getSections();
-        int minSectionY = level.getMinSection();
+        int minSectionY = level.getMinSectionY();
 
         int chunkBlockX = chunk.getPos().x << 4;
         int chunkBlockZ = chunk.getPos().z << 4;
@@ -95,10 +95,16 @@ public final class ColorLightChunkScanner {
                         if (entry == null)
                             continue;
 
+                        int emission = state.getLightEmission();
+                        if (emission <= 0)
+                            continue;
+
                         BlockPos pos = new BlockPos(chunkBlockX + x, sectionBlockY + y, chunkBlockZ + z);
 
+                        int strength = Math.min(entry.light, emission);
+
                         if (!engine.hasSource(pos)) {
-                            engine.addSource(pos, entry.r, entry.g, entry.b, entry.light);
+                            engine.addSource(pos, entry.r, entry.g, entry.b, strength);
                             foundAny = true;
                         }
                     }
@@ -119,8 +125,8 @@ public final class ColorLightChunkScanner {
             int chunkBlockZ = chunk.getPos().z << 4;
 
             Minecraft.getInstance().levelRenderer.setBlocksDirty(
-                    chunkBlockX - radius, level.getMinBuildHeight(), chunkBlockZ - radius,
-                    chunkBlockX + 16 + radius, level.getMaxBuildHeight(), chunkBlockZ + 16 + radius
+                    chunkBlockX - radius, level.getMinY(), chunkBlockZ - radius,
+                    chunkBlockX + 16 + radius, level.getMaxY(), chunkBlockZ + 16 + radius
             );
         });
     }

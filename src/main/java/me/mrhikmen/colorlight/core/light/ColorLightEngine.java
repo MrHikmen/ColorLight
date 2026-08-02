@@ -285,6 +285,6 @@ public class ColorLightEngine {
 
     private int getOpacity(BlockPos pos) {
         BlockState state = level.getBlockState(pos);
-        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightBlock(level, pos)));
+        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightBlock()));
     }
 }

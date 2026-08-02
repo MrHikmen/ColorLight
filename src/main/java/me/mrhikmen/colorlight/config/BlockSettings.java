@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.config;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class BlockSettings {
     public String block;
@@ -12,12 +12,12 @@ public class BlockSettings {
     public BlockSettings() {
     }
 
-    public BlockSettings(ResourceLocation block, int light) {
+    public BlockSettings(Identifier block, int light) {
         this.block = String.valueOf(block);
         this.light = light;
     }
 
-    public ResourceLocation getBlock() {
-        return ResourceLocation.parse(block);
+    public Identifier getBlock() {
+        return Identifier.parse(block);
     }
 }

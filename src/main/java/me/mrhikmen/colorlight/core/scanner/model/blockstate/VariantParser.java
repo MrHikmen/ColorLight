@@ -3,7 +3,7 @@ package me.mrhikmen.colorlight.core.scanner.model.blockstate;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.scanner.model.ModelTextureResolver;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.*;
 import com.google.gson.JsonElement;
@@ -14,7 +14,7 @@ public class VariantParser {
     public VariantParser(JsonObject json, int i, ColorLightConfig config) {
 
         JsonObject variants = json.getAsJsonObject("variants");
-        List<ResourceLocation> models = new ArrayList<>();
+        List<Identifier> models = new ArrayList<>();
 
         for (Map.Entry<String, JsonElement> entry : variants.entrySet()) {
 
@@ -23,14 +23,14 @@ public class VariantParser {
             if (variant.isJsonObject()) {
 
                 JsonObject model = variant.getAsJsonObject();
-                models.add(ResourceLocation.parse(model.get("model").getAsString()));
+                models.add(Identifier.parse(model.get("model").getAsString()));
 
             } else if (variant.isJsonArray()) {
 
                 for (JsonElement element : variant.getAsJsonArray()) {
 
                     JsonObject model = element.getAsJsonObject();
-                    models.add(ResourceLocation.parse(model.get("model").getAsString()));
+                    models.add(Identifier.parse(model.get("model").getAsString()));
 
                 }
             }

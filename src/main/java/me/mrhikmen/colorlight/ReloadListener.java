@@ -6,14 +6,14 @@ import me.mrhikmen.colorlight.core.light.*;
 
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 
 public class ReloadListener implements SimpleSynchronousResourceReloadListener {
 
     @Override
-    public ResourceLocation getFabricId() {
-        return ResourceLocation.fromNamespaceAndPath("colorlight", "texture_scanner");
+    public Identifier getFabricId() {
+        return Identifier.fromNamespaceAndPath("colorlight", "texture_scanner");
     }
 
     @Override

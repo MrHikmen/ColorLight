@@ -6,7 +6,7 @@ import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.io.IOException;
@@ -19,11 +19,11 @@ import com.google.gson.JsonParser;
 
 public class ModelTextureResolver {
 
-    public static void resolve(List<ResourceLocation> models, int i, ColorLightConfig config) {
+    public static void resolve(List<Identifier> models, int i, ColorLightConfig config) {
 
         List<PixelData> bestPixels = new ArrayList<>();
 
-        for (ResourceLocation modelId : models) {
+        for (Identifier modelId : models) {
 
             Map<String, String> textures = resolveTextures(modelId, new HashSet<>());
 
@@ -46,7 +46,7 @@ public class ModelTextureResolver {
                 if (textureName.startsWith("#"))
                     continue;
 
-                ResourceLocation texture = ResourceLocation.parse(textureName);
+                Identifier texture = Identifier.parse(textureName);
                 PixelData result = SearchBestPixel.search(texture, config);
 
                 if (result != null)
@@ -71,14 +71,14 @@ public class ModelTextureResolver {
         }
     }
 
-    private static Map<String, String> resolveTextures(ResourceLocation modelId, Set<ResourceLocation> visited) {
+    private static Map<String, String> resolveTextures(Identifier modelId, Set<Identifier> visited) {
 
         Map<String, String> textures = new HashMap<>();
 
         if (modelId == null || !visited.add(modelId))
             return textures;
 
-        ResourceLocation modelFile = ResourceLocation.fromNamespaceAndPath(modelId.getNamespace(), "models/" + modelId.getPath() + ".json");
+        Identifier modelFile = Identifier.fromNamespaceAndPath(modelId.getNamespace(), "models/" + modelId.getPath() + ".json");
         Optional<Resource> modelResource = Minecraft.getInstance().getResourceManager().getResource(modelFile);
 
         if (modelResource.isEmpty())
@@ -95,7 +95,7 @@ public class ModelTextureResolver {
         }
         if (modelJson.has("parent")) {
 
-            ResourceLocation parentId = ResourceLocation.parse(modelJson.get("parent").getAsString());
+            Identifier parentId = Identifier.parse(modelJson.get("parent").getAsString());
             textures.putAll(resolveTextures(parentId, visited));
 
         }

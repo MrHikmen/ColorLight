@@ -8,7 +8,7 @@ import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.io.*;
@@ -23,9 +23,9 @@ public class PathTextureBlock {
 
         for (int i = 0; i < config.blocks.size();) {
 
-            ResourceLocation block = config.blocks.get(i).getBlock();;
+            Identifier block = config.blocks.get(i).getBlock();;
 
-            ResourceLocation modelId = ResourceLocation.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
+            Identifier modelId = Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
             Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
 
             if (resource.isPresent()) {
@@ -47,8 +47,8 @@ public class PathTextureBlock {
                 }
             } else {
 
-                ResourceLocation textureId = ResourceLocation.parse(block.getNamespace() + ":block/" + block.getPath());
-                ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
+                Identifier textureId = Identifier.parse(block.getNamespace() + ":block/" + block.getPath());
+                Identifier texture = Identifier.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
 
                 PixelData best = SearchBestPixel.search(texture, config);
 

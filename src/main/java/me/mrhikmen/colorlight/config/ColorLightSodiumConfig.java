@@ -11,7 +11,7 @@ import net.caffeinemc.mods.sodium.api.config.option.OptionFlag;
 import net.caffeinemc.mods.sodium.api.config.option.SteppedValidator;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 @ConfigEntryPointForge("colorlight")
 public class ColorLightSodiumConfig implements ConfigEntryPoint {
@@ -24,12 +24,12 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         config.load();
 
         builder.registerOwnModOptions()
-                .setNonTintedIcon(ResourceLocation.parse("colorlight:icon.png"))
+                .setNonTintedIcon(Identifier.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff))
                 .addPage(builder.createOptionPage()
                         .setName(Translatable.GENERAL)
                         .addOptionGroup(builder.createOptionGroup()
-                                .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:enable"))
+                                .addOption(builder.createBooleanOption(Identifier.parse("colorlight:enable"))
                                         .setName(Translatable.ENABLE)
                                         .setTooltip(Translatable.ENABLE_Tooltip)
 
@@ -38,7 +38,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setEnable, this::getEnable)
                                         .setDefaultValue(true)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:light_range"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:light_range"))
                                         .setName(Translatable.LIGHT_RANGE)
                                         .setTooltip(Translatable.LIGHT_RANGE_Tooltip)
 
@@ -78,7 +78,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         .setName(Translatable.FUN)
                         .addOptionGroup(builder.createOptionGroup()
                                 .setName(Translatable.WEIGHT)
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:brightness_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:brightness_weight"))
                                         .setName(Translatable.BRIGHTNESS_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -105,7 +105,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setBrightnessWeight, this::getBrightnessWeight)
                                         .setDefaultValue(100)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:local_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:local_weight"))
                                         .setName(Translatable.LOCAL_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -132,7 +132,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setLocalWeight, this::getLocalWeight)
                                         .setDefaultValue(100)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:region_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:region_weight"))
                                         .setName(Translatable.REGION_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -159,7 +159,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setRegionWeight, this::getRegionWeight)
                                         .setDefaultValue(0)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:alpha_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:alpha_weight"))
                                         .setName(Translatable.ALPHA_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -186,7 +186,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setAlphaWeight, this::getAlphaWeight)
                                         .setDefaultValue(0)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:anomaly_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:anomaly_weight"))
                                         .setName(Translatable.ANOMALY_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -213,7 +213,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setAnomalyWeight, this::getAnomalyWeight)
                                         .setDefaultValue(100)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:saturation_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:saturation_weight"))
                                         .setName(Translatable.SATURATION_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -240,7 +240,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setSaturationWeight, this::getSaturationWeight)
                                         .setDefaultValue(100)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:glowcolorscore_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:glowcolorscore_weight"))
                                         .setName(Translatable.GLOWCOLORSCORE_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -267,7 +267,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(this::setGlowcolorscoreWeight, this::getGlowcolorscoreWeight)
                                         .setDefaultValue(100)
                                 )
-                                .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:whitepenalty_weight"))
+                                .addOption(builder.createIntegerOption(Identifier.parse("colorlight:whitepenalty_weight"))
                                         .setName(Translatable.WHITEPENALTY_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
 
@@ -321,8 +321,8 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         var pos = player.blockPosition();
 
         client.levelRenderer.setBlocksDirty(
-                pos.getX() - renderDistanceBlocks, client.level.getMinBuildHeight(), pos.getZ() - renderDistanceBlocks,
-                pos.getX() + renderDistanceBlocks, client.level.getMaxBuildHeight(), pos.getZ() + renderDistanceBlocks
+                pos.getX() - renderDistanceBlocks, client.level.getMinY(), pos.getZ() - renderDistanceBlocks,
+                pos.getX() + renderDistanceBlocks, client.level.getMaxY(), pos.getZ() + renderDistanceBlocks
         );
     }
 

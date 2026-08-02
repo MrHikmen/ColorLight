@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.core.scanner.texture;
 
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;
 import java.util.List;
@@ -9,9 +9,9 @@ import java.util.Map;
 
 public class SearchBestPixel {
 
-    public static PixelData search(ResourceLocation textureId, ColorLightConfig config) {
+    public static PixelData search(Identifier textureId, ColorLightConfig config) {
 
-        ResourceLocation fileId = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
+        Identifier fileId = Identifier.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
 
         ScanTextureBlock.TextureData texture = ScanTextureBlock.scan(fileId);
 
