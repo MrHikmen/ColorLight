@@ -95,10 +95,16 @@ public final class ColorLightChunkScanner {
                         if (entry == null)
                             continue;
 
+                        int emission = state.getLightEmission();
+                        if (emission <= 0)
+                            continue;
+
                         BlockPos pos = new BlockPos(chunkBlockX + x, sectionBlockY + y, chunkBlockZ + z);
 
+                        int strength = Math.min(entry.light, emission);
+
                         if (!engine.hasSource(pos)) {
-                            engine.addSource(pos, entry.r, entry.g, entry.b, entry.light);
+                            engine.addSource(pos, entry.r, entry.g, entry.b, strength);
                             foundAny = true;
                         }
                     }
