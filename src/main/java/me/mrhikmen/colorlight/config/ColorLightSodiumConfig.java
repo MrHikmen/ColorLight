@@ -4,6 +4,7 @@ import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
@@ -313,14 +314,16 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
             }
         }
     }
+
     private static void markWholeRenderDistanceDirty(net.minecraft.client.Minecraft client) {
         var player = client.player;
-        if (player == null) return;
+        if (player == null || client.level == null) return;
 
         int renderDistanceBlocks = client.options.renderDistance().get() << 4;
         var pos = player.blockPosition();
 
-        client.levelRenderer.setBlocksDirty(
+        // Было: client.levelRenderer.setBlocksDirty(...)
+        ColorLightRenderUtil.setBlocksDirty(client.level,
                 pos.getX() - renderDistanceBlocks, client.level.getMinY(), pos.getZ() - renderDistanceBlocks,
                 pos.getX() + renderDistanceBlocks, client.level.getMaxY(), pos.getZ() + renderDistanceBlocks
         );

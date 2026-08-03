@@ -2,6 +2,7 @@ package me.mrhikmen.colorlight.core.light;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;
+import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 
@@ -124,7 +125,7 @@ public final class ColorLightChunkScanner {
             int chunkBlockX = chunk.getPos().x() << 4;
             int chunkBlockZ = chunk.getPos().z() << 4;
 
-            Minecraft.getInstance().levelRenderer.setBlocksDirty(
+            ColorLightRenderUtil.setBlocksDirty(level,
                     chunkBlockX - radius, level.getMinY(), chunkBlockZ - radius,
                     chunkBlockX + 16 + radius, level.getMaxY(), chunkBlockZ + 16 + radius
             );

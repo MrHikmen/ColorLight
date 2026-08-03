@@ -5,9 +5,9 @@ import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -29,7 +29,7 @@ public abstract class LevelMixin {
         if (!cir.getReturnValueZ())
             return;
 
-        if (!((Object) this instanceof ClientLevel))
+        if (!((Object) this instanceof ClientLevel clientLevel))
             return;
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
@@ -48,9 +48,14 @@ public abstract class LevelMixin {
         }
 
         int radius = engine.getMaxRangeBlocks() + 1;
-        Minecraft.getInstance().levelRenderer.setBlocksDirty(
-                pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-        );
+
+        int sMinX = SectionPos.blockToSectionCoord(pos.getX() - radius);
+        int sMinY = SectionPos.blockToSectionCoord(pos.getY() - radius);
+        int sMinZ = SectionPos.blockToSectionCoord(pos.getZ() - radius);
+        int sMaxX = SectionPos.blockToSectionCoord(pos.getX() + radius);
+        int sMaxY = SectionPos.blockToSectionCoord(pos.getY() + radius);
+        int sMaxZ = SectionPos.blockToSectionCoord(pos.getZ() + radius);
+
+        clientLevel.setSectionRangeDirty(sMinX, sMinY, sMinZ, sMaxX, sMaxY, sMaxZ);
     }
 }
