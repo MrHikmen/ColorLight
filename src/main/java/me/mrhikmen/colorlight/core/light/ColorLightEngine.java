@@ -240,7 +240,7 @@ public class ColorLightEngine {
     }
 
     private static float computeTimeOfDayFactor(Level level) {
-        long dayTime = level.getDayTime() % 24000L;
+        long dayTime = level.getDefaultClockTime() % 24000L;
         if (dayTime < 0)
             dayTime += 24000L;
 
@@ -271,7 +271,7 @@ public class ColorLightEngine {
         if (!(level instanceof Level realLevel))
             return "level is not a real Level (" + level.getClass() + ")";
 
-        long dayTimeRaw = realLevel.getDayTime();
+        long dayTimeRaw = realLevel.getDefaultClockTime();
         long dayTime = dayTimeRaw % 24000L;
         if (dayTime < 0) dayTime += 24000L;
 
@@ -285,6 +285,6 @@ public class ColorLightEngine {
 
     private int getOpacity(BlockPos pos) {
         BlockState state = level.getBlockState(pos);
-        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightBlock()));
+        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightEmission()));
     }
 }

@@ -49,8 +49,8 @@ public final class ColorLightChunkScanner {
         for (int dx = -renderDistance; dx <= renderDistance; dx++) {
             for (int dz = -renderDistance; dz <= renderDistance; dz++) {
 
-                int x = center.x + dx;
-                int z = center.z + dz;
+                int x = center.x() + dx;
+                int z = center.z() + dz;
 
                 if (level.hasChunk(x, z)) {
                     LevelChunk chunk = level.getChunk(x, z);
@@ -72,8 +72,8 @@ public final class ColorLightChunkScanner {
         LevelChunkSection[] sections = chunk.getSections();
         int minSectionY = level.getMinSectionY();
 
-        int chunkBlockX = chunk.getPos().x << 4;
-        int chunkBlockZ = chunk.getPos().z << 4;
+        int chunkBlockX = chunk.getPos().x() << 4;
+        int chunkBlockZ = chunk.getPos().z() << 4;
 
         boolean foundAny = false;
 
@@ -121,8 +121,8 @@ public final class ColorLightChunkScanner {
         Minecraft.getInstance().execute(() -> {
 
             int radius = rangeBlocks + 1;
-            int chunkBlockX = chunk.getPos().x << 4;
-            int chunkBlockZ = chunk.getPos().z << 4;
+            int chunkBlockX = chunk.getPos().x() << 4;
+            int chunkBlockZ = chunk.getPos().z() << 4;
 
             Minecraft.getInstance().levelRenderer.setBlocksDirty(
                     chunkBlockX - radius, level.getMinY(), chunkBlockZ - radius,

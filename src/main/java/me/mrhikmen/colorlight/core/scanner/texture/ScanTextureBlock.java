@@ -52,7 +52,7 @@ public class ScanTextureBlock {
                     int g = (rgba >>> 8) & 255;
                     int r = rgba & 255;
 
-                    PixelData pixel = new PixelData(x, y, r, g, b, a);
+                    PixelData pixel = new PixelData(x, y, b, g, r, a);
 
                     pixels.add(pixel);
                     map[x][y] = pixel;

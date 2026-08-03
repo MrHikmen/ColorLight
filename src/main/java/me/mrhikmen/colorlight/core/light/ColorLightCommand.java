@@ -4,7 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
 import me.mrhikmen.colorlight.config.Translatable;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 
@@ -19,24 +19,24 @@ public final class ColorLightCommand {
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
 
-            dispatcher.register(ClientCommandManager.literal("colorlight")
-                    .then(ClientCommandManager.literal("inspect")
+            dispatcher.register(ClientCommands.literal("colorlight")
+                    .then(ClientCommands.literal("inspect")
                             .executes(ColorLightCommand::debugDaylight))
 
-                    .then(ClientCommandManager.literal("target")
+                    .then(ClientCommands.literal("target")
 
-                            .then(ClientCommandManager.literal("set")
-                                    .then(ClientCommandManager.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                            .then(ClientCommandManager.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                                    .then(ClientCommandManager.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                                            .then(ClientCommandManager.argument("strength", IntegerArgumentType.integer(1, 15))
+                            .then(ClientCommands.literal("set")
+                                    .then(ClientCommands.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
+                                            .then(ClientCommands.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
+                                                    .then(ClientCommands.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
+                                                            .then(ClientCommands.argument("strength", IntegerArgumentType.integer(1, 15))
                                                                     .executes(ColorLightCommand::addAtTarget))))))
 
-                            .then(ClientCommandManager.literal("reset")
+                            .then(ClientCommands.literal("reset")
                                     .executes(ColorLightCommand::removeAtTarget))
                     )
 
-                    .then(ClientCommandManager.literal("clear")
+                    .then(ClientCommands.literal("clear")
                             .executes(ColorLightCommand::clearAll))
             );
         });

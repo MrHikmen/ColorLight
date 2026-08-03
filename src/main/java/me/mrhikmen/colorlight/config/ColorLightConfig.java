@@ -16,14 +16,14 @@ public class ColorLightConfig {
 
     public int lightRangeBlocks = 15;
 
-    public int BRIGHTNESS_WEIGHT     = 30;
-    public int LOCAL_WEIGHT          = 20;
-    public int REGION_WEIGHT         = 8;
-    public int ALPHA_WEIGHT          = 5;
-    public int ANOMALY_WEIGHT        = 12;
-    public int SATURATION_WEIGHT     = 5;
-    public int GLOWCOLORSCORE_WEIGHT = 15;
-    public int WHITEPENALTY_WEIGHT   = 10;
+    public int BRIGHTNESS_WEIGHT     = 100;
+    public int LOCAL_WEIGHT          = 100;
+    public int REGION_WEIGHT         = 0;
+    public int ALPHA_WEIGHT          = 0;
+    public int ANOMALY_WEIGHT        = 100;
+    public int SATURATION_WEIGHT     = 100;
+    public int GLOWCOLORSCORE_WEIGHT = 100;
+    public int WHITEPENALTY_WEIGHT   = 100;
 
     public LinkedList<BlockSettings> blocks = new LinkedList<>();
 

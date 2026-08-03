@@ -1,26 +1,26 @@
 package me.mrhikmen.colorlight.core.render;
 
+import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.ColorLightUtil;
 
-import net.fabricmc.fabric.api.renderer.v1.mesh.MutableQuadView;
-import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
-import net.fabricmc.fabric.api.renderer.v1.model.FabricBlockStateModel;
+import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
 
-import net.minecraft.client.renderer.block.model.BlockModelPart;
-import net.minecraft.client.renderer.block.model.BlockStateModel;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.renderer.block.BlockAndTintGetter;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
+import net.minecraft.client.resources.model.geometry.BakedQuad.MaterialFlags;
+import net.minecraft.client.resources.model.sprite.Material;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.List;
 import java.util.function.Predicate;
 
-public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel {
+public class TintedBakedModel implements BlockStateModel {
 
     private final BlockStateModel wrapped;
 
@@ -29,13 +29,18 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
     }
 
     @Override
-    public void collectParts(RandomSource random, List<BlockModelPart> parts) {
-        wrapped.collectParts(random, parts);
+    public void collectParts(RandomSource random, List<BlockStateModelPart> output) {
+        wrapped.collectParts(random, output);
     }
 
     @Override
-    public TextureAtlasSprite particleIcon() {
-        return wrapped.particleIcon();
+    public Material.Baked particleMaterial() {
+        return wrapped.particleMaterial();
+    }
+
+    @Override
+    public @MaterialFlags int materialFlags() {
+        return wrapped.materialFlags();
     }
 
     @Override
@@ -45,7 +50,7 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
         if (engine == null || engine.hasSource(pos)) {
-            emitWrapped(emitter, blockView, pos, state, random, cullTest);
+            wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
             return;
         }
 
@@ -62,19 +67,8 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
             return true;
         });
 
-        emitWrapped(emitter, blockView, pos, state, random, cullTest);
+        wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
 
         emitter.popTransform();
-    }
-
-    private void emitWrapped(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state,
-                             RandomSource random, Predicate<Direction> cullTest) {
-        if (wrapped instanceof FabricBlockStateModel fabricModel) {
-            fabricModel.emitQuads(emitter, blockView, pos, state, random, cullTest);
-        } else {
-            for (BlockModelPart part : wrapped.collectParts(random)) {
-                part.emitQuads(emitter, cullTest);
-            }
-        }
     }
 }
