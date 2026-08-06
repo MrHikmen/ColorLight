@@ -34,9 +34,6 @@
     ],
     "modmenu": [
       "me.mrhikmen.colorlight.config.ColorLightModMenu"
-    ],
-    "fabric-client-model-loading-plugins": [
-      "me.mrhikmen.colorlight.core.render.ColorLightTestModelPlugin"
     ]
   },
   "mixins" : [

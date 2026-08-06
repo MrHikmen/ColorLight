@@ -12,7 +12,7 @@ import com.google.gson.JsonObject;
 
 public class MultipartParser {
 
-    public MultipartParser(JsonObject json, int i, ColorLightConfig config) {
+    public MultipartParser(JsonObject json, int i) {
 
         JsonArray multipart = json.getAsJsonArray("multipart");
 
@@ -39,7 +39,7 @@ public class MultipartParser {
             }
         }
 
-        ModelTextureResolver.resolve(models, i, config);
+        ModelTextureResolver.resolve(models, i);
 
     }
 

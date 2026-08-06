@@ -11,7 +11,7 @@ import com.google.gson.JsonObject;
 
 public class VariantParser {
 
-    public VariantParser(JsonObject json, int i, ColorLightConfig config) {
+    public VariantParser(JsonObject json, int i) {
 
         JsonObject variants = json.getAsJsonObject("variants");
         List<Identifier> models = new ArrayList<>();
@@ -36,7 +36,7 @@ public class VariantParser {
             }
         }
 
-        ModelTextureResolver.resolve(models, i, config);
+        ModelTextureResolver.resolve(models, i);
 
     }
 }

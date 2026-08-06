@@ -65,10 +65,6 @@ public class ColorLightEngine {
         return v != null ? v : ColorLightUtil.EMPTY;
     }
 
-    public void addSource(BlockPos pos, int r, int g, int b) {
-        addSource(pos, r, g, b, 15);
-    }
-
     public void addSource(BlockPos pos, int r, int g, int b, int strength) {
         float scale = ColorLightUtil.clamp01(strength / 15f);
         int packed = ColorLightUtil.pack(Math.round(r * scale), Math.round(g * scale), Math.round(b * scale));
@@ -285,6 +281,6 @@ public class ColorLightEngine {
 
     private int getOpacity(BlockPos pos) {
         BlockState state = level.getBlockState(pos);
-        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightEmission()));
+        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightDampening()));
     }
 }
