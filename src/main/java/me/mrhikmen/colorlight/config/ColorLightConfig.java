@@ -2,7 +2,6 @@ package me.mrhikmen.colorlight.config;
 
 import com.google.gson.*;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.resources.Identifier;
 
 import java.io.IOException;
 import java.io.Reader;
