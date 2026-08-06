@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner.model;
 
+import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
@@ -19,7 +20,7 @@ import com.google.gson.JsonParser;
 
 public class ModelTextureResolver {
 
-    public static void resolve(List<ResourceLocation> models, int i, ColorLightConfig config) {
+    public static void resolve(List<ResourceLocation> models, int i) {
 
         List<PixelData> bestPixels = new ArrayList<>();
 
@@ -47,7 +48,7 @@ public class ModelTextureResolver {
                     continue;
 
                 ResourceLocation texture = ResourceLocation.parse(textureName);
-                PixelData result = SearchBestPixel.search(texture, config);
+                PixelData result = SearchBestPixel.search(texture);
 
                 if (result != null)
                     bestPixels.add(result);
@@ -63,7 +64,7 @@ public class ModelTextureResolver {
         }
 
         if (best != null) {
-            BlockSettings data = config.blocks.get(i);
+            BlockSettings data = ColorLightClient.config.blocks.get(i);
 
             data.r = best.r;
             data.g = best.g;

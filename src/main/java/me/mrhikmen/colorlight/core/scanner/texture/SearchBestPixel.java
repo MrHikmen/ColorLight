@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner.texture;
 
+import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import net.minecraft.resources.ResourceLocation;
 
@@ -9,7 +10,7 @@ import java.util.Map;
 
 public class SearchBestPixel {
 
-    public static PixelData search(ResourceLocation textureId, ColorLightConfig config) {
+    public static PixelData search(ResourceLocation textureId) {
 
         ResourceLocation fileId = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
 
@@ -82,14 +83,14 @@ public class SearchBestPixel {
             double glowColorScore = ScanTextureBlock.glowColorScore(pixel);
 
             pixel.score =
-                            brightness * (config.BRIGHTNESS_WEIGHT / 100) +
-                            localBrightness * (config.LOCAL_WEIGHT / 100) +
-                            regionScore * (config.REGION_WEIGHT / 100) +
-                            alphaScore * (config.ALPHA_WEIGHT / 100) +
-                            anomaly * (config.ANOMALY_WEIGHT / 100) +
-                            saturation * (config.SATURATION_WEIGHT / 100) +
-                            glowColorScore * (config.GLOWCOLORSCORE_WEIGHT / 100) +
-                            whitePenalty * (config.WHITEPENALTY_WEIGHT / 100);
+                    brightness * (ColorLightClient.config.BRIGHTNESS_WEIGHT / 100) +
+                            localBrightness * (ColorLightClient.config.LOCAL_WEIGHT / 100) +
+                            regionScore * (ColorLightClient.config.REGION_WEIGHT / 100) +
+                            alphaScore * (ColorLightClient.config.ALPHA_WEIGHT / 100) +
+                            anomaly * (ColorLightClient.config.ANOMALY_WEIGHT / 100) +
+                            saturation * (ColorLightClient.config.SATURATION_WEIGHT / 100) +
+                            glowColorScore * (ColorLightClient.config.GLOWCOLORSCORE_WEIGHT / 100) +
+                            whitePenalty * (ColorLightClient.config.WHITEPENALTY_WEIGHT / 100);
 
             if (best == null || pixel.score > best.score) {
                 best = pixel;

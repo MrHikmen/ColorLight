@@ -19,11 +19,11 @@ import com.google.gson.JsonParser;
 
 public class PathTextureBlock {
 
-    public PathTextureBlock(ColorLightConfig config) {
+    public PathTextureBlock() {
 
-        for (int i = 0; i < config.blocks.size();) {
+        for (int i = 0; i < ColorLightClient.config.blocks.size();) {
 
-            ResourceLocation block = config.blocks.get(i).getBlock();;
+            ResourceLocation block = ColorLightClient.config.blocks.get(i).getBlock();;
 
             ResourceLocation modelId = ResourceLocation.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
             Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
@@ -35,9 +35,9 @@ public class PathTextureBlock {
                     JsonObject json = JsonParser.parseString(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
 
                     if (json.has("variants")) {
-                        new VariantParser(json, i, config);
+                        new VariantParser(json, i);
                     } else if (json.has("multipart")) {
-                        new MultipartParser(json, i, config);
+                        new MultipartParser(json, i);
                     } else {
                         ColorLightClient.LOGGER.info("Model not found");
                     }
@@ -50,11 +50,11 @@ public class PathTextureBlock {
                 ResourceLocation textureId = ResourceLocation.parse(block.getNamespace() + ":block/" + block.getPath());
                 ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(textureId.getNamespace(), "textures/" + textureId.getPath() + ".png");
 
-                PixelData best = SearchBestPixel.search(texture, config);
+                PixelData best = SearchBestPixel.search(texture);
 
 
                 if (best != null) {
-                    BlockSettings data = config.blocks.get(i);
+                    BlockSettings data = ColorLightClient.config.blocks.get(i);
                     data.r = best.r;
                     data.g = best.g;
                     data.b = best.b;
