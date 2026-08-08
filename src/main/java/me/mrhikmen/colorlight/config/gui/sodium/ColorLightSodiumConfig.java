@@ -1,6 +1,10 @@
-package me.mrhikmen.colorlight.config;
+package me.mrhikmen.colorlight.config.gui.sodium;
 
 import me.mrhikmen.colorlight.ColorLightClient;
+import me.mrhikmen.colorlight.config.BlockSettings;
+import me.mrhikmen.colorlight.config.ColorLightConfig;
+import me.mrhikmen.colorlight.config.Translatable;
+import me.mrhikmen.colorlight.config.gui.screen.ColorLightBlockConfigScreen;
 import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
@@ -13,6 +17,7 @@ import net.caffeinemc.mods.sodium.api.config.option.SteppedValidator;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 
 import net.caffeinemc.mods.sodium.api.config.structure.OptionPageBuilder;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -258,110 +263,16 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
             Identifier block = entry.getBlock();
             page.addOptionGroup(
                     builder.createOptionGroup()
-                            .addOption(builder.createBooleanOption(Identifier.parse("colorlight:block_enable_" + block.getPath()))
-                                    .setName(Component.empty().append(Component.translatable("block." + block.toLanguageKey())).append(Translatable.BLOCK_ENABLE))
-                                    .setTooltip(Translatable.BLOCK_ENABLE_Tooltip)
-                                    .setStorageHandler(this::save)
-                                    .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                                    .setBinding(value -> entry.enable = value, () -> entry.enable)
-                                    .setDefaultValue(entry.enable)
-                            )
-                            .addOption(builder.createIntegerOption(Identifier.parse("colorlight:block_light_range_" + block.getPath()))
-                                    .setName(Component.empty().append(Component.translatable("block." + block.toLanguageKey())).append(Translatable.BLOCK_LIGHT_RANGE))
-                                    .setTooltip(Translatable.BLOCK_LIGHT_RANGE_Tooltip)
-                                    .setValidator(new SteppedValidator() {
-                                        @Override
-                                        public int min() {
-                                            return 1;
-                                        }
-                                        @Override
-                                        public int max() {
-                                            return 30;
-                                        }
-                                        @Override
-                                        public int step() {
-                                            return 1;
-                                        }
-                                    })
-                                    .setValueFormatter(value -> Translatable.LIGHT_RANGE_Value(value))
-                                    .setStorageHandler(this::save)
-                                    .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                                    .setBinding(value -> entry.light = value, () -> entry.light)
-                                    .setDefaultValue(entry.light)
-                            )
-                            .addOption(builder.createIntegerOption(Identifier.parse("colorlight:block_red_" + block.getPath()))
-                                    .setName(Component.empty().append(Component.translatable("block." + block.toLanguageKey())).append(Translatable.BLOCK_RED))
-                                    .setTooltip(Translatable.BLOCK_RED_Tooltip)
-                                    .setValidator(new SteppedValidator() {
-                                        @Override
-                                        public int min() {
-                                            return 0;
-                                        }
-                                        @Override
-                                        public int max() {
-                                            return 255;
-                                        }
-                                        @Override
-                                        public int step() {
-                                            return 1;
-                                        }
-                                    })
-                                    .setValueFormatter(value -> Component.literal("" + value))
-                                    .setStorageHandler(this::save)
-                                    .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                                    .setBinding(value -> entry.r = value, () -> entry.r)
-                                    .setDefaultValue(entry.r)
-                            )
-                            .addOption(builder.createIntegerOption(Identifier.parse("colorlight:block_green_" + block.getPath()))
-                                    .setName(Component.empty().append(Component.translatable("block." + block.toLanguageKey())).append(Translatable.BLOCK_GREEN))
-                                    .setTooltip(Translatable.BLOCK_GREEN_Tooltip)
-                                    .setValidator(new SteppedValidator() {
-                                        @Override
-                                        public int min() {
-                                            return 0;
-                                        }
-                                        @Override
-                                        public int max() {
-                                            return 255;
-                                        }
-                                        @Override
-                                        public int step() {
-                                            return 1;
-                                        }
-                                    })
-                                    .setValueFormatter(value -> Component.literal("" + value))
-                                    .setStorageHandler(this::save)
-                                    .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                                    .setBinding(value -> entry.g = value, () -> entry.g)
-                                    .setDefaultValue(entry.g)
-                            )
-                            .addOption(builder.createIntegerOption(Identifier.parse("colorlight:block_blue_" + block.getPath()))
-                                    .setName(Component.empty().append(Component.translatable("block." + block.toLanguageKey())).append(Translatable.BLOCK_BLUE))
-                                    .setTooltip(Translatable.BLOCK_BLUE_Tooltip)
-                                    .setValidator(new SteppedValidator() {
-                                        @Override
-                                        public int min() {
-                                            return 0;
-                                        }
-                                        @Override
-                                        public int max() {
-                                            return 255;
-                                        }
-                                        @Override
-                                        public int step() {
-                                            return 1;
-                                        }
-                                    })
-                                    .setValueFormatter(value -> Component.literal("" + value))
-                                    .setStorageHandler(this::save)
-                                    .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                                    .setBinding(value -> entry.b = value, () -> entry.b)
-                                    .setDefaultValue(entry.b)
+                            .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + block.getPath()))
+                                    .setName(Component.translatable("block." + block.toLanguageKey()))
+                                    .setTooltip(Translatable.BLOCK_Tooltip)
+                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, entry, this::save)))
                             )
             );
         }
         return page;
     }
+
     private void save() {
         config.save();
         ColorLightEngineHolder.configure(config.lightRangeBlocks);

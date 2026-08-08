@@ -1,0 +1,31 @@
+package me.mrhikmen.colorlight.config.gui.screen;
+
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.network.chat.Component;
+
+public class DividerWidget extends AbstractWidget {
+
+    private final int color;
+
+    public DividerWidget(int x, int y, int width, int height, int color) {
+        super(x, y, width, height, Component.empty());
+        this.color = color;
+    }
+
+    @Override
+    public void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+        graphics.fillGradient(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(),
+                this.color, this.color);
+    }
+
+    @Override
+    public boolean isMouseOver(double mouseX, double mouseY) {
+        return false;
+    }
+
+    @Override
+    public void updateWidgetNarration(NarrationElementOutput output) {
+    }
+}
