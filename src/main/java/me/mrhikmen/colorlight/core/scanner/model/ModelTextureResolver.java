@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner.model;
 
 import me.mrhikmen.colorlight.ColorLightClient;
-import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;

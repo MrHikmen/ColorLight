@@ -1,6 +1,5 @@
 package me.mrhikmen.colorlight.core.scanner.model.blockstate;
 
-import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.scanner.model.ModelTextureResolver;
 
 import net.minecraft.resources.ResourceLocation;

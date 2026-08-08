@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner.model;
 
 import me.mrhikmen.colorlight.ColorLightClient;
-import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.scanner.model.blockstate.*;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
@@ -39,7 +38,7 @@ public class PathTextureBlock {
                     } else if (json.has("multipart")) {
                         new MultipartParser(json, i);
                     } else {
-                        ColorLightClient.LOGGER.info("Model not found");
+                        ColorLightClient.LOGGER.info("[ColorLight] Model not found");
                     }
 
                 } catch (IOException e) {

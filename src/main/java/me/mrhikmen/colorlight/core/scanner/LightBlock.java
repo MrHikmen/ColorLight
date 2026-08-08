@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.core.scanner;
 
 import me.mrhikmen.colorlight.ColorLightClient;
-import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.config.BlockSettings;
 
 import net.minecraft.core.registries.BuiltInRegistries;

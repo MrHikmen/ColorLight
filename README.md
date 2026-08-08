@@ -36,6 +36,20 @@ The **Blocks** tab allows you to:
 * Set a custom light radius for each block.
 * Customize the light color for each block.
 
+### Сompatible
+
+ColorLight is fully compatible with all mods that add glowing blocks. It is also compatible with many optimization mods and all shaders, since the mod uses its own separate lighting engine that Minecraft itself knows nothing about.
+
+However, not all mods that add certain features work out of the box, so separate compatibility code has to be written for them. Here are those mods and the current compatibility development progress:
+
+| Mod               | Support |  Development Progress |
+| :---------------- | :-----: | :-------------------: |
+| LambDynamicLights |    ✅    |       Completed       |
+| Sable (NeoForge)  |    ✅    |     In development    |
+| Voxy              |    ✅    |     In development    |
+| Distant Horizons  |    ❌    | Will not be supported |
+| VulkanMod         |    ❌    | Will not be supported |
+
 ### Supported Versions
 
 | Version | Supported | Porting Status |
@@ -93,23 +107,33 @@ ColorLight может использоваться для строительст
 * Регулировка радиуса освещение отдельная для блока
 * Регулировки цвета свечения отдельные для блока
 
-### Команды
+### Совместимость
 
+ColorLight полностью совместим со всеми модами, которые добавляют светящиеся блоки, так же есть совместимость со многими модами на оптимизацию и со всеми шейдерами, так как мод строит свой отдельный движок освещения, о котором майнкрафт ничего не знает.
 
+Но не все моды, добавлющие какие-то аспекты работаю изначально, поэтому для них пишется отдельный код совместимости. Вот такие моды и их прогресс совместимости:
+
+| Мод                 | Поддержка | Прогресс Разработки |
+|:--------------------|:---------:|:-------------------:|
+| - LambDynamicLights |     ✅     |      Завершен       |
+| - Sable (neoforge)  |     ✅     |    В разработке     |
+| - Voxy              |     ✅     |    В разработке     |
+| - Distant Horizons  |     ❌     |      Не будет       |
+| - VulkanMod         |     ❌     |      Не будет       |
 
 ### Поддерживаемые Версии
 
-| Версия | Поддержка | Перенос |
-| :--- | :---: | :---: |
-| - 1.20.1 | ✅ | В разработке |
-| - 1.21.1 | ✅ | Завершен |
-| - 1.21.2-3 | ❌ | Не будет |
-| - 1.21.4 | ❌ | Не будет |
-| - 1.21.5 | ❌ | Не будет |
-| - 1.21.6-8 | ❌ | Не будет |
-| - 1.21.9-10 | ❌ | Не будет |
-| - 1.21.11 | ✅ | Завершен |
-| - 26.1.x | ✅ | Завершен |
-| - 26.2 | ✅ | Завершен |
+| Версия      | Поддержка |   Перенос    |
+|:------------|:---------:|:------------:|
+| - 1.20.1    |     ✅     | В разработке |
+| - 1.21.1    |     ✅     |   Завершен   |
+| - 1.21.2-3  |     ❌     |   Не будет   |
+| - 1.21.4    |     ❌     |   Не будет   |
+| - 1.21.5    |     ❌     |   Не будет   |
+| - 1.21.6-8  |     ❌     |   Не будет   |
+| - 1.21.9-10 |     ❌     |   Не будет   |
+| - 1.21.11   |     ✅     |   Завершен   |
+| - 26.1.x    |     ✅     |   Завершен   |
+| - 26.2      |     ✅     |   Завершен   |
 
 </details>
