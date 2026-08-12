@@ -66,6 +66,22 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         .setBinding(value -> config.lightRangeBlocks = value, () -> config.lightRangeBlocks)
                                         .setDefaultValue(config.lightRangeBlocks)
                                 )
+                                .addOption(builder.createBooleanOption(Identifier.parse("colorlight:use_gpu_lighting"))
+                                        .setName(Translatable.USE_GPU_LIGHTING)
+                                        .setTooltip(Translatable.USE_GPU_LIGHTING_Tooltip)
+                                        .setStorageHandler(this::save)
+                                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                                        .setBinding(value -> config.USE_GPU_LIGHTING = value, () -> config.USE_GPU_LIGHTING)
+                                        .setDefaultValue(config.USE_GPU_LIGHTING)
+                                )
+                                .addOption(builder.createBooleanOption(Identifier.parse("colorlight:smooth_lighting"))
+                                        .setName(Translatable.SMOOTH_LIGHTING)
+                                        .setTooltip(Translatable.SMOOTH_LIGHTING_Tooltip)
+                                        .setStorageHandler(this::save)
+                                        .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
+                                        .setBinding(value -> config.SMOOTH_LIGHTING = value, () -> config.SMOOTH_LIGHTING)
+                                        .setDefaultValue(config.SMOOTH_LIGHTING)
+                                )
                         )
                         .addOptionGroup(builder.createOptionGroup()
                                 .setName(Translatable.WEIGHT)
@@ -275,16 +291,21 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
 
     private void save() {
         config.save();
-        ColorLightEngineHolder.configure(config.lightRangeBlocks);
+        ColorLightEngineHolder.configure(config.lightRangeBlocks, config.USE_GPU_LIGHTING);
         ColorLightBlockRegistry.load(config);
         var client = net.minecraft.client.Minecraft.getInstance();
         if (client.level != null) {
             ColorLightEngineHolder.set(client.level);
             if (config.ENABLE) {
                 ColorLightChunkScanner.rescanAll(client.level);
-            } else {
-                markWholeRenderDistanceDirty(client);
             }
+            // rescanAll() метит чанк "грязным" только когда находит НОВЫЕ источники света
+            // (см. ColorLightChunkScanner.scanChunk -> foundAny); при повторном скане в уже
+            // просканированных чанках новых источников нет, поэтому чисто визуальные опции
+            // (сглаживание, выбор GPU/CPU движка и т.п.), не меняющие список источников,
+            // никогда не доходили до уже построенных мешей. Поэтому здесь форсируем
+            // перестройку всего радиуса отрисовки безусловно, а не только при ENABLE=false.
+            markWholeRenderDistanceDirty(client);
         }
     }
     private static void markWholeRenderDistanceDirty(net.minecraft.client.Minecraft client) {

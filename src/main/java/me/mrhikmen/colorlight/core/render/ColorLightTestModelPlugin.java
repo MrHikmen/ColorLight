@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.core.render;
 
 import me.mrhikmen.colorlight.ColorLightClient;
+
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 
 public class ColorLightTestModelPlugin implements ModelLoadingPlugin {
