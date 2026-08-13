@@ -97,6 +97,12 @@ public final class ColorLightChunkScanner {
             if (section == null || section.hasOnlyAir())
                 continue;
 
+            boolean mayHaveSource = section.maybeHas(
+                    state -> state.getLightEmission() > 0 && ColorLightBlockRegistry.get(state.getBlock()) != null
+            );
+            if (!mayHaveSource)
+                continue;
+
             int sectionBlockY = (minSectionY + sectionIndex) << 4;
 
             for (int x = 0; x < 16; x++) {
@@ -153,7 +159,7 @@ public final class ColorLightChunkScanner {
             int chunkBlockX = chunk.getPos().x() << 4;
             int chunkBlockZ = chunk.getPos().z() << 4;
 
-            ColorLightRenderUtil.setBlocksDirty(level,
+            ColorLightRenderUtil.setBlocksDirtySafe(level,
                     chunkBlockX - radius, level.getMinY(), chunkBlockZ - radius,
                     chunkBlockX + 16 + radius, level.getMaxY(), chunkBlockZ + 16 + radius
             );

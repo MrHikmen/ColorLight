@@ -44,12 +44,11 @@ public class TintedBakedModel implements BlockStateModel {
     }
 
     @Override
-    public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state,
-                          RandomSource random, Predicate<Direction> cullTest) {
+    public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state, RandomSource random, Predicate<Direction> cullTest) {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
-        if (engine == null || engine.hasSource(pos)) {
+        if (engine == null) {
             wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
             return;
         }

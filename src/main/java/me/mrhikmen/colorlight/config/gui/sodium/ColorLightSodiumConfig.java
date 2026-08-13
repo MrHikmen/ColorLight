@@ -288,8 +288,23 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return page;
     }
-
+    private static final long SAVE_DEBOUNCE_MS = 150L;
+    private static final java.util.concurrent.ScheduledExecutorService SAVE_DEBOUNCER = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(
+            runnable -> {
+                Thread thread = new Thread(runnable, "ColorLight Config Save Debouncer");
+                thread.setDaemon(true);
+                return thread;
+            });
+    private java.util.concurrent.ScheduledFuture<?> pendingSave;
     private void save() {
+        if (pendingSave != null) {
+            pendingSave.cancel(false);
+        }
+        pendingSave = SAVE_DEBOUNCER.schedule(() -> Minecraft.getInstance().execute(this::applySaveNow), SAVE_DEBOUNCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS
+        );
+    }
+
+    private void applySaveNow() {
         config.save();
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.USE_GPU_LIGHTING);
         ColorLightBlockRegistry.load(config);
@@ -299,12 +314,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
             if (config.ENABLE) {
                 ColorLightChunkScanner.rescanAll(client.level);
             }
-            // rescanAll() метит чанк "грязным" только когда находит НОВЫЕ источники света
-            // (см. ColorLightChunkScanner.scanChunk -> foundAny); при повторном скане в уже
-            // просканированных чанках новых источников нет, поэтому чисто визуальные опции
-            // (сглаживание, выбор GPU/CPU движка и т.п.), не меняющие список источников,
-            // никогда не доходили до уже построенных мешей. Поэтому здесь форсируем
-            // перестройку всего радиуса отрисовки безусловно, а не только при ENABLE=false.
             markWholeRenderDistanceDirty(client);
         }
     }
@@ -313,7 +322,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         if (player == null || client.level == null) return;
         int renderDistanceBlocks = client.options.renderDistance().get() << 4;
         var pos = player.blockPosition();
-        ColorLightRenderUtil.setBlocksDirty(client.level,
+        ColorLightRenderUtil.setBlocksDirtySafe(client.level,
                 pos.getX() - renderDistanceBlocks, client.level.getMinY(), pos.getZ() - renderDistanceBlocks,
                 pos.getX() + renderDistanceBlocks, client.level.getMaxY(), pos.getZ() + renderDistanceBlocks
         );

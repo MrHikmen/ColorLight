@@ -21,10 +21,8 @@ import static org.lwjgl.opengl.GL43.*;
 
 public final class GlComputeLightBackend implements ILightComputeBackend {
 
-    private static final Identifier SHADER_LOCATION =
-            Identifier.fromNamespaceAndPath("colorlight", "shaders/light_propagate.comp");
-    private static final Identifier SMOOTH_SHADER_LOCATION =
-            Identifier.fromNamespaceAndPath("colorlight", "shaders/light_smooth.comp");
+    private static final Identifier SHADER_LOCATION = Identifier.fromNamespaceAndPath("colorlight", "shaders/light_propagate.comp");
+    private static final Identifier SMOOTH_SHADER_LOCATION = Identifier.fromNamespaceAndPath("colorlight", "shaders/light_smooth.comp");
 
     private static final int LOCAL_SIZE = 4;
 
@@ -54,10 +52,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
             GLCapabilities caps = GL.getCapabilities();
 
             if (!caps.OpenGL43) {
-                ColorLightClient.LOGGER.warn(
-                        "[ColorLight] GPU-контекст не является OpenGL 4.3 (текущий контекст: {}). "
-                                + "GPU-расчёт освещения отключён, используется CPU.",
-                        glGetString(GL_VERSION));
+                ColorLightClient.LOGGER.warn("[ColorLight] GPU context is not OpenGL 4.3 (current context: {}) " + "GPU lighting calculation is disabled, CPU is being used.", glGetString(GL_VERSION));
                 return;
             }
 
@@ -78,9 +73,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
             this.uSmoothSizeLoc = glGetUniformLocation(smoothProgram, "uSize");
 
             if (!runSelfTest()) {
-                ColorLightClient.LOGGER.warn("[ColorLight] GPU не прошёл проверочный тестовый расчёт "
-                        + "(compute shader скомпилировался, но результат некорректен или была ошибка GL) — "
-                        + "GPU-расчёт освещения отключён, используется CPU.");
+                ColorLightClient.LOGGER.warn("[ColorLight] GPU failed the verification test calculation " + "(compute shader compiled, but the result is incorrect or a GL error occurred) — " + "GPU lighting calculation is disabled, CPU is being used.");
                 glDeleteProgram(program);
                 glDeleteProgram(smoothProgram);
                 program = -1;
@@ -90,12 +83,10 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
 
             this.supported = true;
 
-            ColorLightClient.LOGGER.info("[ColorLight] GPU-расчёт освещения включён "
-                    + "(OpenGL compute shader, SSBO-бэкенд, тест пройден).");
+            ColorLightClient.LOGGER.info("[ColorLight] GPU lighting calculation enabled " + "(OpenGL compute shader, SSBO backend, test passed).");
 
         } catch (Exception e) {
-            ColorLightClient.LOGGER.error("[ColorLight] Не удалось инициализировать GPU-расчёт освещения, "
-                    + "используется CPU-фолбэк.", e);
+            ColorLightClient.LOGGER.error("[ColorLight] Failed to initialize GPU lighting calculation, " + "CPU fallback is used.", e);
         }
     }
 
@@ -107,8 +98,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
         glCompileShader(shader);
 
         if (glGetShaderi(shader, GL_COMPILE_STATUS) == GL_FALSE) {
-            ColorLightClient.LOGGER.error("[ColorLight] Ошибка компиляции {}:\n{}",
-                    debugName, glGetShaderInfoLog(shader));
+            ColorLightClient.LOGGER.error("[ColorLight] Compilation error {}:\n{}", debugName, glGetShaderInfoLog(shader));
             glDeleteShader(shader);
             return -1;
         }
@@ -119,8 +109,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
         glDeleteShader(shader);
 
         if (glGetProgrami(prog, GL_LINK_STATUS) == GL_FALSE) {
-            ColorLightClient.LOGGER.error("[ColorLight] Ошибка линковки {}:\n{}",
-                    debugName, glGetProgramInfoLog(prog));
+            ColorLightClient.LOGGER.error("[ColorLight] Linker error {}:\n{}", debugName, glGetProgramInfoLog(prog));
             glDeleteProgram(prog);
             return -1;
         }
@@ -146,10 +135,11 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
             if (result == null) return false;
             if (result.propagated() == null || result.propagated().length != 8 || result.propagated()[0] != expected)
                 return false;
+
             return result.smoothed() != null && result.smoothed().length == 8 && result.smoothed()[0] == expected;
 
         } catch (Throwable t) {
-            ColorLightClient.LOGGER.debug("[ColorLight] GPU self-test выбросил исключение", t);
+            ColorLightClient.LOGGER.debug("[ColorLight] GPU self-test threw an exception", t);
             return false;
         }
     }
@@ -157,7 +147,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
     private String loadShaderSource(Identifier location) throws IOException {
         Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(location);
         if (resource.isEmpty())
-            throw new IOException("Не найден ресурс шейдера: " + location);
+            throw new IOException("Shader resource not found: " + location);
 
         try (InputStream in = resource.get().open()) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
@@ -165,21 +155,19 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
     }
 
     @Override
-    public LightComputeResult propagateAndSmooth(int sx, int sy, int sz, byte[] opacity, int[] baseColor,
-                                                   int iterations, float decayPerOpacityUnit) {
+    public LightComputeResult propagateAndSmooth(int sx, int sy, int sz, byte[] opacity, int[] baseColor, int iterations, float decayPerOpacityUnit) {
 
         if (!isSupported())
-            throw new IllegalStateException("GPU compute backend недоступен");
+            throw new IllegalStateException("GPU compute backend is unavailable");
 
         return runPropagateAndSmooth(sx, sy, sz, opacity, baseColor, iterations, decayPerOpacityUnit);
     }
 
-    private LightComputeResult runPropagateAndSmooth(int sx, int sy, int sz, byte[] opacity, int[] baseColor,
-                                                       int iterations, float decayPerOpacityUnit) {
+    private LightComputeResult runPropagateAndSmooth(int sx, int sy, int sz, byte[] opacity, int[] baseColor, int iterations, float decayPerOpacityUnit) {
 
         int voxelCount = sx * sy * sz;
         if (opacity.length != voxelCount || baseColor.length != voxelCount)
-            throw new IllegalArgumentException("Размер массивов не совпадает с sizeX*sizeY*sizeZ");
+            throw new IllegalArgumentException("The array size does not match sizeX*sizeY*sizeZ.");
 
         int[] prevBoundBuffer = new int[]{glGetInteger(GL_SHADER_STORAGE_BUFFER_BINDING)};
 

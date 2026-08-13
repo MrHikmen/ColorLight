@@ -3,7 +3,9 @@ package me.mrhikmen.colorlight.core.light.gpu;
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightUtil;
+import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.LevelAccessor;
@@ -21,7 +23,6 @@ public class ColorLightGpuEngine extends ColorLightEngine {
     private static final int MERGE_BUDGET_PER_TICK = 6;
 
     private final ILightComputeBackend backend;
-
     private final ConcurrentLinkedQueue<long[]> pendingDirtyBoxes = new ConcurrentLinkedQueue<>();
 
     private final ConcurrentHashMap<Long, Integer> smoothData = new ConcurrentHashMap<>();
@@ -56,6 +57,9 @@ public class ColorLightGpuEngine extends ColorLightEngine {
         long key = pos.asLong();
         if (sources.remove(key) == null)
             return;
+
+        data.remove(key);
+        smoothData.remove(key);
 
         markDirty(pos);
     }
@@ -106,7 +110,7 @@ public class ColorLightGpuEngine extends ColorLightEngine {
         try {
             processRegion(region);
         } catch (Exception e) {
-            ColorLightClient.LOGGER.error("[ColorLight] Ошибка GPU-расчёта освещения региона, " + "регион будет пересчитан при следующем изменении.", e);
+            ColorLightClient.LOGGER.error("[ColorLight] GPU calculation error in region lighting, " + "region will be recalculated upon the next change.", e);
         }
     }
 
@@ -158,6 +162,7 @@ public class ColorLightGpuEngine extends ColorLightEngine {
                 }
             }
         }
+
         for (Map.Entry<Long, Integer> entry : sources.entrySet()) {
             BlockPos p = BlockPos.of(entry.getKey());
             int x = p.getX(), y = p.getY(), z = p.getZ();
@@ -194,6 +199,10 @@ public class ColorLightGpuEngine extends ColorLightEngine {
                     }
                 }
             }
+        }
+
+        if (level instanceof ClientLevel clientLevel) {
+            ColorLightRenderUtil.setBlocksDirtySafe(clientLevel, minX, minY, minZ, maxX, maxY, maxZ);
         }
     }
 
