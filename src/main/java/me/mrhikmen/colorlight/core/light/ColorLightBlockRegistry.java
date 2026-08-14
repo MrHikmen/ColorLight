@@ -11,7 +11,7 @@ import java.util.Map;
 
 public final class ColorLightBlockRegistry {
 
-    private static Map<Block, BlockSettings> byBlock = new HashMap<>();
+    private static volatile Map<Block, BlockSettings> byBlock = new HashMap<>();
 
     public static void load(ColorLightConfig config) {
         Map<Block, BlockSettings> map = new HashMap<>();
@@ -29,7 +29,9 @@ public final class ColorLightBlockRegistry {
 
             try {
                 Block block = BuiltInRegistries.BLOCK.get(entry.getBlock());
-                map.put(block, entry);
+                if (block != null) {
+                    map.put(block, entry);
+                }
             } catch (Exception e) {
             }
         }

@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.core.render;
 
+import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.ColorLightUtil;
@@ -33,19 +34,23 @@ public class TintedBakedModel extends ForwardingBakedModel {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
-        if (engine == null || engine.hasSource(pos)) {
+        if (engine == null) {
             super.emitBlockQuads(blockView, state, pos, randomSupplier, context);
             return;
         }
 
         context.pushTransform(quad -> {
-
             Direction face = quad.lightFace();
             BlockPos daylightPos = (face != null) ? pos.relative(face) : pos;
             float daylight = engine.getDaylightFactor(daylightPos);
 
+            boolean smooth = ColorLightClient.config.SMOOTH_LIGHTING;
+            int flat = smooth ? 0 : engine.sampleFlatColor(pos, face);
+
             for (int i = 0; i < 4; i++) {
-                int packed = SmoothLightSampler.sample(engine, pos, face, quad.x(i), quad.y(i), quad.z(i));
+                int packed = smooth
+                        ? engine.sampleSmoothColor(pos, face, quad.x(i), quad.y(i), quad.z(i))
+                        : flat;
                 quad.color(i, ColorLightUtil.toArgb(packed, daylight));
             }
 
@@ -53,7 +58,6 @@ public class TintedBakedModel extends ForwardingBakedModel {
         });
 
         super.emitBlockQuads(blockView, state, pos, randomSupplier, context);
-
         context.popTransform();
     }
 }

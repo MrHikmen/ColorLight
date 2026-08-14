@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.config.gui.screen;
 
 import me.mrhikmen.colorlight.config.Translatable;
-
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarratedElementType;
@@ -22,23 +21,24 @@ public class ColorSquareWidget extends AbstractWidget {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float a) {
         int x0 = this.getX();
         int y0 = this.getY();
         int w = this.getWidth();
         int h = this.getHeight();
 
         for (int dx = 0; dx < w; dx += COLUMN_STEP) {
-            float t = dx / (float) w;
+            float t = dx / (float) w; // 0 = белый край, 1 = чистый hue
 
             int hueColor = hueToRgb(this.color.hue);
             int topColor = lerpArgb(0xFFFFFFFF, hueColor, t);
-            int bottomColor = 0xFF000000;
+            int bottomColor = 0xFF000000; // низ всегда чёрный
 
             int colW = Math.min(COLUMN_STEP, w - dx);
             graphics.fillGradient(x0 + dx, y0, x0 + dx + colW, y0 + h, topColor, bottomColor);
         }
 
+        // маркер текущей выбранной точки
         int markerX = x0 + Math.round(this.color.saturation * w);
         int markerY = y0 + Math.round((1f - this.color.value) * h);
         graphics.fillGradient(markerX - 1, markerY - 1, markerX + 1, markerY + 1, 0xFFFFFFFF, 0xFFFFFFFF);
@@ -62,7 +62,7 @@ public class ColorSquareWidget extends AbstractWidget {
     }
 
     @Override
-    protected void updateWidgetNarration(NarrationElementOutput output) {
+    public void updateWidgetNarration(NarrationElementOutput output) {
         output.add(NarratedElementType.TITLE, this.getMessage());
     }
 

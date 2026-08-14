@@ -30,7 +30,7 @@ public class HueBarWidget extends AbstractWidget {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float a) {
         int x0 = this.getX();
         int y0 = this.getY();
         int w = this.getWidth();
@@ -66,7 +66,7 @@ public class HueBarWidget extends AbstractWidget {
     }
 
     @Override
-    protected void updateWidgetNarration(NarrationElementOutput output) {
+    public void updateWidgetNarration(NarrationElementOutput output) {
         output.add(NarratedElementType.TITLE, this.getMessage());
     }
 }

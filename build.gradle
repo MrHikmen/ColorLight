@@ -12,18 +12,33 @@ base {
 }
 
 repositories {
-    maven {
+    maven { // Sodium
         name = "CaffeineMC"
         url = "https://maven.caffeinemc.net/releases/"
     }
 
-    maven {
+    maven { // ModMenu
         name = "TerraformersMC"
         url = "https://maven.terraformersmc.com/releases/"
     }
-    maven {
+    maven { // LDL
         name = "Gegy"
         url = "https://maven.gegy.dev"
+    }
+    exclusiveContent {
+        // Sable + Sable Companion — используется только для compile-only совместимости.
+        // На проде реальный Sable (Fabric ИЛИ NeoForge, если мод запущен через Sinytra Connector)
+        // подтягивается из установленных модов, мы его не bundling'уем.
+        forRepository {
+            maven {
+                name = "RyanHCode"
+                url = "https://maven.ryanhcode.dev/releases"
+            }
+        }
+        filter {
+            includeGroup("dev.ryanhcode.sable")
+            includeGroup("dev.ryanhcode.sable-companion")
+        }
     }
 }
 
@@ -39,6 +54,12 @@ dependencies {
     modImplementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 
     modCompileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
+
+
+    include(modApi("dev.ryanhcode.sable-companion:sable-companion-fabric-${project.minecraft_version}:${project.sable_companion_version}"))
+    compileOnly("dev.ryanhcode.sable:sable-neoforge-${project.minecraft_version}:${project.sable_version}") {
+        transitive = false
+    }
 }
 
 processResources {

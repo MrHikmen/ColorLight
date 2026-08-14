@@ -41,7 +41,7 @@
   },
   "mixins" : [
     "colorlighting.mixins.json"
-  ],
+    ],
   "depends": {
     "fabricloader": "*",
     "fabric-api": "*",
