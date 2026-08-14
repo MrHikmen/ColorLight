@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.config.gui.screen;
 
 import me.mrhikmen.colorlight.config.Translatable;
-
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarratedElementType;
@@ -52,7 +51,7 @@ public class ColorSquareWidget extends AbstractWidget {
     }
 
     @Override
-    protected void onDrag(MouseButtonEvent event, double dragX, double dragY) {
+    protected void onDrag(MouseButtonEvent event, double dx, double dy) {
         applyFromMouse(event);
     }
 
