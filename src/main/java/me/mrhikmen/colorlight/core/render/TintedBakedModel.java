@@ -44,12 +44,11 @@ public class TintedBakedModel implements BlockStateModel {
     }
 
     @Override
-    public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state,
-                          RandomSource random, Predicate<Direction> cullTest) {
+    public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state, RandomSource random, Predicate<Direction> cullTest) {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
-        if (engine == null || engine.hasSource(pos)) {
+        if (engine == null) {
             wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
             return;
         }
@@ -59,8 +58,13 @@ public class TintedBakedModel implements BlockStateModel {
             BlockPos daylightPos = (face != null) ? pos.relative(face) : pos;
             float daylight = engine.getDaylightFactor(daylightPos);
 
+            boolean smooth = ColorLightClient.config.SMOOTH_LIGHTING;
+            int flat = smooth ? 0 : engine.sampleFlatColor(pos, face);
+
             for (int i = 0; i < 4; i++) {
-                int packed = SmoothLightSampler.sample(engine, pos, face, quad.x(i), quad.y(i), quad.z(i));
+                int packed = smooth
+                        ? engine.sampleSmoothColor(pos, face, quad.x(i), quad.y(i), quad.z(i))
+                        : flat;
                 quad.color(i, ColorLightUtil.toArgb(packed, daylight));
             }
 

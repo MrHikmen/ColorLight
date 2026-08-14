@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.core.scanner.texture;
 
 import me.mrhikmen.colorlight.ColorLightClient;
+
 import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;

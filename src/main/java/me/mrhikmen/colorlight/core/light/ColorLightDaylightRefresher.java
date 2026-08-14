@@ -30,7 +30,6 @@ public final class ColorLightDaylightRefresher {
             int radius = engine.getMaxRangeBlocks() + 1;
 
             for (BlockPos sourcePos : engine.getSourcePositions()) {
-                // Было: Minecraft.getInstance().levelRenderer.setBlocksDirty(...)
                 ColorLightRenderUtil.setBlocksDirty(client.level,
                         sourcePos.getX() - radius, sourcePos.getY() - radius, sourcePos.getZ() - radius,
                         sourcePos.getX() + radius, sourcePos.getY() + radius, sourcePos.getZ() + radius
