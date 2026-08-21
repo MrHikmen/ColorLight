@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight;
 
-import me.mrhikmen.colorlight.core.scanner.LightBlock;
-import me.mrhikmen.colorlight.core.scanner.model.PathTextureBlock;
+import me.mrhikmen.colorlight.core.scanner.BlockScanner;
 import me.mrhikmen.colorlight.core.light.*;
 
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
@@ -19,10 +18,8 @@ public class ReloadListener implements SimpleSynchronousResourceReloadListener {
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
         ColorLightClient.config.load();
-        ColorLightClient.config.blocks.clear();
 
-        new LightBlock();
-        new PathTextureBlock();
+        BlockScanner.discoverNewBlocks();
 
         ColorLightClient.config.save();
         ColorLightBlockRegistry.load(ColorLightClient.config);

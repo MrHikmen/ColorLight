@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.core.scanner.texture;
 
+import me.mrhikmen.colorlight.ColorLightClient;
+
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
@@ -10,6 +12,7 @@ import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class ScanTextureBlock {
 
@@ -31,9 +34,14 @@ public class ScanTextureBlock {
 
     public static TextureData scan(Identifier texture) {
 
-        Resource resource = Minecraft.getInstance().getResourceManager().getResource(texture).orElseThrow();
+        Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(texture);
 
-        try (InputStream stream = resource.open()) {
+        if (resource.isEmpty()) {
+            ColorLightClient.LOGGER.warn("[ColorLight] Missing texture {}, block skipped.", texture);
+            return null;
+        }
+
+        try (InputStream stream = resource.get().open()) {
 
             NativeImage image = NativeImage.read(stream);
 

@@ -4,7 +4,6 @@ import com.google.gson.*;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,9 +14,7 @@ public class ColorLightConfig {
     public boolean ENABLE = true;
 
     public int lightRangeBlocks = 15;
-
     public boolean USE_GPU_LIGHTING = true;
-
     public boolean SMOOTH_LIGHTING = true;
 
     public int BRIGHTNESS_WEIGHT     = 100;
@@ -29,6 +26,14 @@ public class ColorLightConfig {
     public int GLOWCOLORSCORE_WEIGHT = 100;
     public int WHITEPENALTY_WEIGHT   = 100;
 
+    public boolean ENTITY_TRACKING_ENABLED = true;
+    public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
+    public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
+
+    public boolean VOXY_COMPAT_ENABLED = false;
+    public boolean VOXY_FOLLOW_LOD_RENDER_DISTANCE = true;
+    public int VOXY_LIGHT_RANGE_BLOCKS = 64;
+
     public LinkedList<BlockSettings> blocks = new LinkedList<>();
 
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("colorlight.json");
@@ -37,8 +42,10 @@ public class ColorLightConfig {
         Gson gson = new Gson();
 
         if (Files.exists(PATH)) {
-            try (Reader reader = Files.newBufferedReader(PATH)) {
-                ColorLightConfig loaded = gson.fromJson(reader, ColorLightConfig.class);
+            try {
+                String json = Files.readString(PATH);
+                ColorLightConfig loaded = gson.fromJson(json, ColorLightConfig.class);
+                JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
                 this.ENABLE = loaded.ENABLE;
                 this.blocks = loaded.blocks;
@@ -54,6 +61,14 @@ public class ColorLightConfig {
                 this.SATURATION_WEIGHT = loaded.SATURATION_WEIGHT > -1 ? loaded.SATURATION_WEIGHT : this.SATURATION_WEIGHT;
                 this.GLOWCOLORSCORE_WEIGHT = loaded.GLOWCOLORSCORE_WEIGHT > -1 ? loaded.GLOWCOLORSCORE_WEIGHT : this.GLOWCOLORSCORE_WEIGHT;
                 this.WHITEPENALTY_WEIGHT = loaded.WHITEPENALTY_WEIGHT > -1 ? loaded.WHITEPENALTY_WEIGHT : this.WHITEPENALTY_WEIGHT;
+
+                this.ENTITY_TRACKING_ENABLED = root.has("ENTITY_TRACKING_ENABLED") ? loaded.ENTITY_TRACKING_ENABLED : this.ENTITY_TRACKING_ENABLED;
+                this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
+                this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
+
+                this.VOXY_COMPAT_ENABLED = root.has("VOXY_COMPAT_ENABLED") ? loaded.VOXY_COMPAT_ENABLED : this.VOXY_COMPAT_ENABLED;
+                this.VOXY_FOLLOW_LOD_RENDER_DISTANCE = root.has("VOXY_FOLLOW_LOD_RENDER_DISTANCE") ? loaded.VOXY_FOLLOW_LOD_RENDER_DISTANCE : this.VOXY_FOLLOW_LOD_RENDER_DISTANCE;
+                this.VOXY_LIGHT_RANGE_BLOCKS = loaded.VOXY_LIGHT_RANGE_BLOCKS > 0 ? loaded.VOXY_LIGHT_RANGE_BLOCKS : this.VOXY_LIGHT_RANGE_BLOCKS;
 
             } catch (IOException e) {
                 e.printStackTrace();

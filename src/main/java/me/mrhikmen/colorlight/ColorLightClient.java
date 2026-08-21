@@ -2,13 +2,14 @@ package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightLambDynLightsCompat;
+import me.mrhikmen.colorlight.compat.lod.LodColorLightCompat;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.ColorLightCommand;
-import me.mrhikmen.colorlight.core.render.ColorLightTestModelPlugin;
+import me.mrhikmen.colorlight.core.render.ModelPlugin;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -36,7 +37,7 @@ public class ColorLightClient implements ClientModInitializer {
         ColorLightBlockRegistry.load(config);
         ColorLightDaylightRefresher.register();
 
-        ModelLoadingPlugin.register(new ColorLightTestModelPlugin());
+        ModelLoadingPlugin.register(new ModelPlugin());
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
                 ColorLightEngineHolder.set(client.level));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
@@ -46,6 +47,8 @@ public class ColorLightClient implements ClientModInitializer {
 
         ColorLightChunkScanner.register();
         ColorLightCommand.register();
+
+        LodColorLightCompat.register();
 
         if (ColorLightLambDynLightsCompat.isPresent()) {
             ColorLightEntityLightTicker.register();
