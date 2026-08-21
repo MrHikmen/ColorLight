@@ -8,10 +8,7 @@ public class ColorLightLambDynLightsInitializer implements DynamicLightsInitiali
     @Override
     public void onInitializeDynamicLights(DynamicLightsContext context) {
 
-        ColorLightLambDynLightsBridge.init(
-                context.itemLightSourceManager(),
-                context.entityLightSourceManager()
-        );
+        ColorLightLambDynLightsBridge.init(context.itemLightSourceManager(), context.entityLightSourceManager());
 
         context.itemLightSourceManager().onRegisterEvent().register(registerContext -> {
             for (me.mrhikmen.colorlight.config.BlockSettings entry : me.mrhikmen.colorlight.ColorLightClient.config.blocks) {

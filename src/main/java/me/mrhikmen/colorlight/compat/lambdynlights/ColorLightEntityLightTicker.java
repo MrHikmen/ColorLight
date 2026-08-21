@@ -2,6 +2,7 @@ package me.mrhikmen.colorlight.compat.lambdynlights;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;
+import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
@@ -45,13 +46,19 @@ public final class ColorLightEntityLightTicker {
             if (engine == null)
                 return;
 
+            if (!ColorLightClient.config.ENTITY_TRACKING_ENABLED) {
+                clearAllTracked(engine);
+                return;
+            }
+
             BlockPos playerPos = client.player.blockPosition();
+            int checkRadiusBlocks = checkRadiusBlocks(client.options.renderDistance().get());
 
             for (Entity entity : level.entitiesForRendering()) {
                 if (!isTrackableSource(entity))
                     continue;
 
-                if (entity.blockPosition().distManhattan(playerPos) > CHECK_RADIUS_BLOCKS)
+                if (entity.blockPosition().distManhattan(playerPos) > checkRadiusBlocks)
                     continue;
 
                 processEntity(engine, entity);
@@ -60,7 +67,7 @@ public final class ColorLightEntityLightTicker {
             ACTIVE_SOURCES.keySet().removeIf(id -> {
                 Entity e = level.getEntity(id);
                 boolean shouldRemove = (e == null)
-                        || e.blockPosition().distManhattan(playerPos) > CHECK_RADIUS_BLOCKS;
+                        || e.blockPosition().distManhattan(playerPos) > checkRadiusBlocks;
                 if (shouldRemove) {
                     BlockPos pos = ACTIVE_SOURCES.get(id).pos();
                     engine.removeSource(pos);
@@ -76,6 +83,25 @@ public final class ColorLightEntityLightTicker {
                 || entity instanceof ItemEntity
                 || entity instanceof ItemFrame
                 || entity instanceof AbstractMinecart;
+    }
+
+    private static int checkRadiusBlocks(int clientRenderDistanceChunks) {
+        ColorLightConfig config = ColorLightClient.config;
+        int chunks = config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE
+                ? clientRenderDistanceChunks
+                : config.ENTITY_CHECK_RADIUS_CHUNKS;
+        return chunks * 16;
+    }
+
+    private static void clearAllTracked(ColorLightEngine engine) {
+        if (ACTIVE_SOURCES.isEmpty())
+            return;
+
+        for (TrackedSource tracked : ACTIVE_SOURCES.values()) {
+            engine.removeSource(tracked.pos());
+            markDirtyAround(engine, tracked.pos());
+        }
+        ACTIVE_SOURCES.clear();
     }
 
     private static void processEntity(ColorLightEngine engine, Entity entity) {

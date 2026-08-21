@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.config.gui.sodium;
 
 import me.mrhikmen.colorlight.ColorLightClient;
+import me.mrhikmen.colorlight.compat.lod.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.config.Translatable;
@@ -46,21 +47,8 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:light_range"))
                                         .setName(Translatable.LIGHT_RANGE)
                                         .setTooltip(Translatable.LIGHT_RANGE_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 1;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 30;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
-                                        .setValueFormatter(value -> Translatable.LIGHT_RANGE_Value(value))
+                                        .setRange(2, 32, 1)
+                                        .setValueFormatter(value -> Translatable.BLOCKS_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                                         .setBinding(value -> config.lightRangeBlocks = value, () -> config.lightRangeBlocks)
@@ -88,20 +76,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:brightness_weight"))
                                         .setName(Translatable.BRIGHTNESS_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -111,20 +86,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:local_weight"))
                                         .setName(Translatable.LOCAL_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -134,20 +96,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:region_weight"))
                                         .setName(Translatable.REGION_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -157,20 +106,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:alpha_weight"))
                                         .setName(Translatable.ALPHA_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -180,20 +116,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:anomaly_weight"))
                                         .setName(Translatable.ANOMALY_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -203,20 +126,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:saturation_weight"))
                                         .setName(Translatable.SATURATION_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -226,20 +136,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:glowcolorscore_weight"))
                                         .setName(Translatable.GLOWCOLORSCORE_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -249,20 +146,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .addOption(builder.createIntegerOption(Identifier.parse("colorlight:whitepenalty_weight"))
                                         .setName(Translatable.WHITEPENALTY_WEIGHT)
                                         .setTooltip(Translatable.WEIGHT_Tooltip)
-                                        .setValidator(new SteppedValidator() {
-                                            @Override
-                                            public int min() {
-                                                return 0;
-                                            }
-                                            @Override
-                                            public int max() {
-                                                return 100;
-                                            }
-                                            @Override
-                                            public int step() {
-                                                return 1;
-                                            }
-                                        })
+                                        .setRange(0, 100, 1)
                                         .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                         .setStorageHandler(this::save)
                                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
@@ -271,7 +155,75 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 )
                         )
                 )
-                .addPage(this.BlockPage(builder));
+                .addPage(this.BlockPage(builder))
+                .addPage(this.CompatibilityPage(builder));
+    }
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder) {
+        Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
+        Identifier entityFollowId = Identifier.parse("colorlight:entity_follow_render_distance");
+        Identifier voxyEnabledId = Identifier.parse("colorlight:voxy_compat_enabled");
+        Identifier voxyFollowId = Identifier.parse("colorlight:voxy_follow_lod_distance");
+        OptionPageBuilder page = builder.createOptionPage()
+                .setName(Translatable.COMPATIBILITY)
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Translatable.ENTITY_TRACKING)
+                        .addOption(builder.createBooleanOption(entityEnabledId)
+                                .setName(Translatable.ENTITY_TRACKING_ENABLED)
+                                .setTooltip(Translatable.ENTITY_TRACKING_ENABLED_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.ENTITY_TRACKING_ENABLED = value, () -> config.ENTITY_TRACKING_ENABLED)
+                                .setDefaultValue(config.ENTITY_TRACKING_ENABLED)
+                        )
+                        .addOption(builder.createBooleanOption(entityFollowId)
+                                .setName(Translatable.ENTITY_FOLLOW_RENDER_DISTANCE)
+                                .setTooltip(Translatable.ENTITY_FOLLOW_RENDER_DISTANCE_Tooltip)
+                                .setEnabledProvider(state -> state.readBooleanOption(entityEnabledId), entityEnabledId)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = value, () -> config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
+                                .setDefaultValue(config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:entity_check_radius_chunks"))
+                                .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
+                                .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
+                                .setEnabledProvider(state -> state.readBooleanOption(entityEnabledId) && !state.readBooleanOption(entityFollowId), entityEnabledId, entityFollowId)
+                                .setRange(2, 32, 1)
+                                .setValueFormatter(value -> Translatable.CHUNKS_Value(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.ENTITY_CHECK_RADIUS_CHUNKS = value, () -> config.ENTITY_CHECK_RADIUS_CHUNKS)
+                                .setDefaultValue(config.ENTITY_CHECK_RADIUS_CHUNKS)
+                        )
+                );
+        if (ColorLightVoxyCompat.isPresent()) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.VOXY)
+                    .addOption(builder.createBooleanOption(voxyEnabledId)
+                            .setName(Translatable.VOXY_COMPAT_ENABLED)
+                            .setTooltip(Translatable.VOXY_COMPAT_ENABLED_Tooltip)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.VOXY_COMPAT_ENABLED = value, () -> config.VOXY_COMPAT_ENABLED)
+                            .setDefaultValue(config.VOXY_COMPAT_ENABLED)
+                    )
+                    .addOption(builder.createBooleanOption(voxyFollowId)
+                            .setName(Translatable.VOXY_FOLLOW_LOD_DISTANCE)
+                            .setTooltip(Translatable.VOXY_FOLLOW_LOD_DISTANCE_Tooltip)
+                            .setEnabledProvider(state -> state.readBooleanOption(voxyEnabledId), voxyEnabledId)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.VOXY_FOLLOW_LOD_RENDER_DISTANCE = value, () -> config.VOXY_FOLLOW_LOD_RENDER_DISTANCE)
+                            .setDefaultValue(config.VOXY_FOLLOW_LOD_RENDER_DISTANCE)
+                    )
+                    .addOption(builder.createIntegerOption(Identifier.parse("colorlight:voxy_light_range"))
+                            .setName(Translatable.VOXY_LIGHT_RANGE)
+                            .setTooltip(Translatable.VOXY_LIGHT_RANGE_Tooltip)
+                            .setEnabledProvider(state -> state.readBooleanOption(voxyEnabledId) && !state.readBooleanOption(voxyFollowId), voxyEnabledId, voxyFollowId)
+                            .setRange(16, 512, 16)
+                            .setValueFormatter(value -> Translatable.BLOCKS_Value(value))
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.VOXY_LIGHT_RANGE_BLOCKS = value, () -> config.VOXY_LIGHT_RANGE_BLOCKS)
+                            .setDefaultValue(config.VOXY_LIGHT_RANGE_BLOCKS)
+                    )
+            );
+        }
+        return page;
     }
     private OptionPageBuilder BlockPage(ConfigBuilder builder) {
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.BLOCK);
@@ -282,7 +234,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + block.getPath()))
                                     .setName(Component.translatable("block." + block.toLanguageKey()))
                                     .setTooltip(Translatable.BLOCK_Tooltip)
-                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, entry, this::save)))
+                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, entry, this::save, this::applyImmediately)))
                             )
             );
         }
@@ -303,7 +255,13 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         pendingSave = SAVE_DEBOUNCER.schedule(() -> Minecraft.getInstance().execute(this::applySaveNow), SAVE_DEBOUNCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS
         );
     }
-
+    private void applyImmediately() {
+        if (pendingSave != null) {
+            pendingSave.cancel(false);
+            pendingSave = null;
+        }
+        this.applySaveNow();
+    }
     private void applySaveNow() {
         config.save();
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.USE_GPU_LIGHTING);

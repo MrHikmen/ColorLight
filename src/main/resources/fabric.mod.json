@@ -49,6 +49,7 @@
   },
   "suggests": {
     "sodium": "*",
-    "lambdynlights": "*"
+    "lambdynlights": "*",
+    "voxy": "*"
   }
 }

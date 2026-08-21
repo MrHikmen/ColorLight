@@ -25,6 +25,17 @@ repositories {
         name = "Gegy"
         url = "https://maven.gegy.dev"
     }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
 }
 
 dependencies {
@@ -34,10 +45,16 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
-
     implementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 
+    //LDL compat
     compileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
+
+    //voxy compat
+    compileOnly "maven.modrinth:fxxUqruK:zZX86mbc"
+
+    //dh compat
+    compileOnly "maven.modrinth:uCdwusMi:gBf0SaV1"
 }
 
 processResources {

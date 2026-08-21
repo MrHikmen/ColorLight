@@ -2,6 +2,7 @@ package me.mrhikmen.colorlight.config.gui.screen;
 
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.Translatable;
+import me.mrhikmen.colorlight.core.scanner.BlockScanner;
 
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
@@ -15,8 +16,9 @@ public class ColorLightBlockConfigScreen extends Screen {
     private final Screen parent;
     private final BlockSettings entry;
     private final Runnable onSave;
+    private final Runnable onApply;
 
-    private final ColorPickerMath colorMath;
+    private ColorPickerMath colorMath;
 
     private static final int MARGIN = 20;
     private static final int LEFT_COLUMN_WIDTH = 150;
@@ -27,12 +29,15 @@ public class ColorLightBlockConfigScreen extends Screen {
     private static final int HUE_BAR_WIDTH = 20;
     private static final int HUE_BAR_GAP = 8;
     private static final int DIVIDER_COLOR = 0xFF73EFFF;
+    private static final int ACTION_ROW_GAP = 8;
+    private static final int ACTION_BUTTON_HEIGHT = 20;
 
-    public ColorLightBlockConfigScreen(Screen parent, BlockSettings entry, Runnable onSave) {
+    public ColorLightBlockConfigScreen(Screen parent, BlockSettings entry, Runnable onSave, Runnable onApply) {
         super(Component.translatable("block." + entry.getBlock().toLanguageKey()));
         this.parent = parent;
         this.entry = entry;
         this.onSave = onSave;
+        this.onApply = onApply;
         this.colorMath = new ColorPickerMath(entry.r, entry.g, entry.b);
     }
 
@@ -45,7 +50,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         int rightX = dividerX + DIVIDER_WIDTH + DIVIDER_GAP;
 
         int contentBottom = topY + ROW_HEIGHT + ROW_HEIGHT + 16 + SQUARE_SIZE;
-        int dividerHeight = contentBottom - topY;
+        int dividerHeight = contentBottom - topY + ACTION_ROW_GAP + ACTION_BUTTON_HEIGHT + ACTION_ROW_GAP + ACTION_BUTTON_HEIGHT;
 
         int iconSize = 64;
         int iconX = leftX + (LEFT_COLUMN_WIDTH - iconSize) / 2;
@@ -97,9 +102,26 @@ public class ColorLightBlockConfigScreen extends Screen {
         );
         this.addRenderableWidget(hueBar);
 
+        int actionRow1Y = pickerY + SQUARE_SIZE + ACTION_ROW_GAP;
+
+        Button resetButton = Button.builder(Translatable.RESET_TO_DEFAULT, button -> this.resetToDefault())
+                .pos(rightX, actionRow1Y)
+                .size(260, ACTION_BUTTON_HEIGHT)
+                .build();
+        this.addRenderableWidget(resetButton);
+
+        int actionRow2Y = actionRow1Y + ACTION_BUTTON_HEIGHT + ACTION_ROW_GAP;
+        int actionButtonWidth = (260 - ACTION_ROW_GAP) / 2;
+
+        Button applyButton = Button.builder(Translatable.APPLY, button -> this.onApply.run())
+                .pos(rightX, actionRow2Y)
+                .size(actionButtonWidth, ACTION_BUTTON_HEIGHT)
+                .build();
+        this.addRenderableWidget(applyButton);
+
         Button doneButton = Button.builder(Component.translatable("gui.done"), button -> this.onClose())
-                .pos(rightX, pickerY + SQUARE_SIZE + 16)
-                .size(150, 20)
+                .pos(rightX + actionButtonWidth + ACTION_ROW_GAP, actionRow2Y)
+                .size(actionButtonWidth, ACTION_BUTTON_HEIGHT)
                 .build();
         this.addRenderableWidget(doneButton);
     }
@@ -109,6 +131,16 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.entry.r = rgb[0];
         this.entry.g = rgb[1];
         this.entry.b = rgb[2];
+        this.onSave.run();
+    }
+
+    private void resetToDefault() {
+        BlockScanner.resetToDefault(this.entry);
+
+        this.colorMath = new ColorPickerMath(this.entry.r, this.entry.g, this.entry.b);
+        this.clearWidgets();
+        this.init();
+
         this.onSave.run();
     }
 
