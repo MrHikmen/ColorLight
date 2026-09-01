@@ -1,141 +1,93 @@
-# ColorLight
+**All up-to-date information about ColorLight is stored on [Modrinth]([https://modrinth.com/mod/colorlight]%28https://modrinth.com/mod/colorlight%29); this page only contains notes that may clarify some aspects of the mod, explaining what will or will not be included in the mod.**
 
-**ColorLight / ColorLight With Shaders / Vanilla**
-![Mod Enable / ColorLight With Shader / Vanilla](https://cdn.modrinth.com/data/cached_images/54a6e293b9c6827ac9da645298fb0942abb07dc1_0.webp)
+ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
 
-**ColoLight** is a mod that automatically determines how a block should glow and generates colored lighting based on that.
+<details>
+<summary>Versions</summary>
 
-All shaders are compatible with ColorLight and do not require support from their authors.
+| Version                                                                                                                                                                                                    | Further support |
+| :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------: |
+| 1.20.x                                                                                                                                                                                                     |        No       |
+| 1.21.x                                                                                                                                                                                                     |        No       |
+| 1.21.11                                                                                                                                                                                                    |       Yes       |
+| 26.x                                                                                                                                                                                                       |       Yes       |
+| Older Minecraft versions are personally difficult for me to maintain, as sometimes I have to completely rewrite all the added code. ColorLight versions for 1.21.1 will therefore remain at 0.2.0 forever. |                 |
 
-ColorLight is well suited for building maps, structures, or vanilla servers, as the mod allows you to create your own light sources through commands. Soon, you will be able to share your light sources with other players, both on servers and in local worlds, by transferring save files.
+</details>
 
-### How the Mod Works
+<details>
+<summary>Other mods</summary>
 
-When a glowing block is detected, the mod:
+Mods that simply add a light-emitting block through vanilla registries are supported, but if a mod takes a different approach, ColorLight may simply skip it.
 
-* Finds the block's texture
-* Analyzes it
-* Determines the dominant color
-* Uses this color to illuminate the block
+Many optimization mods are supported because the mod only colors the block rather than changing vanilla lighting.
 
-### Settings
+If a mod adds features that differ from vanilla Minecraft, a separate compatibility layer will have to be written for it. The following are such mods:
 
-All mod settings are currently located in **Sodium**.
+| Mod                 |     Support    |                                     How it works                                    |
+| :------------------ | :------------: | :---------------------------------------------------------------------------------: |
+| - LambDynamicLights |       Yes      |               A lighting marker is placed at the entity's coordinates               |
+| - Voxy              |  Experimental  | When a chunk is loaded, a square is placed in the color of the light-emitting block |
+| - Distant Horizon   | In development |                              Currently being developed                              |
 
-The *"General"* tab is responsible for:
+</details>
 
-* Enabling the mod
-* Adjusting the glow radius
-* Enabling GPU calculations
-* Enabling light smoothing
-* Adjusting the lighting balance
+<details>
+<summary>Known issues</summary>
 
-The *"Blocks"* tab is responsible for:
+| Issue description                                                                  |                                          Why it happens                                         |                                                   How to fix                                                  |
+| :--------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------: |
+| "Description: Mod 'colorlight' failed while registering config options." with RRLS |   This happens because ColorLight does not have enough time to create its settings due to RRLS  | [Fix]([https://github.com/MrHikmen/ColorLight/issues/7]%28https://github.com/MrHikmen/ColorLight/issues/7%29) |
+| ColorLight settings are not applied                                                |                    The settings application was poorly implemented initially                    |                                        Wait for a fix in future updates                                       |
+| Strange triangles on version 1.21.11 or squares on version 26.2                    |                           This is an old version of Voxy compatibility                          |                      Disable "Enable Voxy compatibility" in the "Compatibility" settings                      |
+| Crashes when "Compute lighting on GPU" is enabled                                  | Your system or device is not compatible with OpenGL 4.3, and ColorLight was unable to detect it |                     Disable "Compute lighting on GPU" or wait for a fix in future updates                     |
 
-* Enabling individual blocks
-* Adjusting the lighting radius separately for each block
-* Adjusting the glow color separately for each block
-
-### Compatibility
-
-Any mod that adds its own light block will work natively with correct colored lighting, which can be adjusted separately in the settings if desired.
-
-All optimization mods are supported. If you find a mod that still does not work with ColorLight, first check whether it has already been reported on the [GitHub issues page](https://github.com/MrHikmen/ColorLight/issues). If it hasn't, please report your findings.
-
-However, some mods require separate ColorLight support, specifically mods that add features different from vanilla Minecraft.
-
-| Mod                 | Support | Development Progress |
-| :------------------ | :-----: | :------------------: |
-| - LambDynamicLights |    ✅    |       Completed      |
-| - Create Aeronautics  |    ✅    |    In Development    |
-| - Voxy              |    ✅    |    In Development    |
-| - Distant Horizons  |    ❌    |      Will Not Be     |
-
-### Supported Versions
-
-| Version     | Support |     Porting    |
-| :---------- | :-----: | :------------: |
-| - 1.20.1    |    ✅    | In Development |
-| - 1.21.1    |    ✅    |    Completed   |
-| - 1.21.2-3  |    ❌    |   Will Not Be  |
-| - 1.21.4    |    ❌    |   Will Not Be  |
-| - 1.21.5    |    ❌    |   Will Not Be  |
-| - 1.21.6-8  |    ❌    |   Will Not Be  |
-| - 1.21.9-10 |    ❌    |   Will Not Be  |
-| - 1.21.11   |    ✅    |    Completed   |
-| - 26.1.x    |    ✅    |    Completed   |
-| - 26.2      |    ✅    |    Completed   |
+</details>
 
 <details>
 <summary>Rus</summary>
 
-# ColorLight
+**Вся актуальная информация о ColorLight хранится на [modrint](https://modrinth.com/mod/colorlight), здесь лишь записи, которые могут прояснить некоторые моменты мода, сообшающие о том, что будет или не будет в моде.**
 
-**ColorLight / ColorLight С Шейдерами / Ванилла**
-![Mod Enable / ColorLight With Shader / Vanilla](https://cdn.modrinth.com/data/cached_images/54a6e293b9c6827ac9da645298fb0942abb07dc1_0.webp)
+ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
 
-**ColoLight** - мод, который сам определяет, как должен светится блок, и из результата создает цветное освещение.
+<details>
+<summary>Версии</summary>
 
-Все шейдеры совместимы с ColorLight и не требуют поддержки от авторов.
+| Версия  | Дальнейшая поддержка |
+|:--------|:--------------------:|
+| 1.20.x  |       Не будет       |
+| 1.21.x  |       Не будет       |
+| 1.21.11 |        Будет         |
+| 26.x    |        Будет         |
+Старые версии майнкрафта мне лично трудно поддерживать, так как иногда приходиться полнустью переписывать весь добавленный код. Версии ColorLight для 1.21.1 так и остануться навсегда 0.2.0
+</details>
 
-ColorLight хорошо подходит для строительства карта, построек или для ванильных серверов, ведь у мода есть возможность создавать свои собстенные источники света через команды. Вскоре вы сможете обмениваться своми источниками с другими игроками, как на сервере, так и на локальных мирах передавая сохранения.
+<details>
+<summary>Другие моды</summary>
 
-### Как работает мод
+Поддержка модов которые просто добавляют светящийся блок через ванильные реестры поддерживаются, но если мод пошёл другим путём ColorLight его может просто пропустить.
 
-При обнаружении светящегося блока мод:
+Многие моды на оптимизацию поддерживаются из-за того, что мод просто красит блок, а не меняет ванильное освещение.
 
-* Находит текстуру блока
-* Анализирует её
-* Определяет преобладающий цвет
-* Использует этот цвет для освечения блока
+Если мод добавляет специфические особенности отличные от ванильного Майнкрафта, то под него придётся писать отдельный слой совместимостей. Вот подобные моды:
 
-### Настройки
+| Мод                 |    Поддержка     |                         Как работает                          |
+|:--------------------|:----------------:|:-------------------------------------------------------------:|
+| - LambDynamicLights |       Есть       |        Метка освещение ставиться на координатах энтити        |
+| - Voxy              | Экспериментально | При загрузки чанка ставиться квадрад в цвет светящегося блока |
+| - Distant Horizon   |   В разработке   |                     Пока разрабатывается                      |
+</details>
 
-Все настройки для мода сейчас находятся в **Sodium**.
+<details>
+<summary>Известные ошибки</summary>
 
-Вкладка *"Основные"* отвечает за:
-
-* Включение мода
-* Регулировка радиуса свечения
-* Включение расчетов на GPU
-* Включения сглаживания света
-
-* Регулиравка баланса освещения
-
-Вкладка *"Блоки"* отвечает за:
-
-* Влючение отдельного блока
-* Регулировка радиуса освещение отдельная для блока
-* Регулировки цвета свечения отдельные для блока
-
-### Совместимость
-
-Совместим любой мод, который добаляет свой световой блок будет работать нативно с коректным цветным светом, который при желании можно настроить отдельно в настройках.
-
-Все моды на оптимизацию поддерживаются, если вы нашли мод, которой все же не работает с ColorLight сначала проверте не писали об этом раньше на [GitHub issues page](https://github.com/MrHikmen/ColorLight/issues), если нет, то пишите о своей находке.
-
-Но есть моды которые требуют отдельной поддержки ColorLight, а именно моды добавляющие специфические особенности отличные от ванильного Майнкрафта
-
-| Мод                 | Поддержка | Прогресс Разработки |
-|:--------------------|:---------:|:-------------------:|
-| - LambDynamicLights |     ✅     |      Завершен       |
-| - Create Aeronautics  |     ✅     |    В разработке     |
-| - Voxy              |     ✅     |    В разработке     |
-| - Distant Horizons  |     ❌     |      Не будет       |
-
-### Поддерживаемые Версии
-
-| Версия | Поддержка | Перенос | 
-| :--- | :---: | :---: |
-| - 1.20.1 | ✅ | В разработке |
-| - 1.21.1 | ✅ | Завершен |
-| - 1.21.2-3 | ❌ | Не будет |
-| - 1.21.4 | ❌ | Не будет |
-| - 1.21.5 | ❌ | Не будет |
-| - 1.21.6-8 | ❌ | Не будет |
-| - 1.21.9-10 | ❌ | Не будет |
-| - 1.21.11 | ✅ | Завершен |
-| - 26.1.x | ✅ | Завершен |
-| - 26.2 | ✅ | Завершен |
+| Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                                   Как исправить                                   |
+|:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------:|
+| "Description: Mod 'colorlight' failed while registering config options." с RRLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |          [Исправление](https://github.com/MrHikmen/ColorLight/issues/7)           |
+| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     |                     Дождаться исправление в новых обновлениях                     |
+| Непонятные треугольники на версии 1.21.11 или квадраты на версии 26.2           |                         Это старая версия совместимости с Voxy                          |        Отключить "Enable Voxy compatibility" в настройках "Compatibility"         |
+| Вылеты с включением "Compute lighting on GPU"                                   | Ваша система или устройство не совместимо с OpenGL 4.3, а ColorLight не смог это понять | Выключить "Compute lighting on GPU" или дождаться исправление в новых обновлениях |
+</details>
 
 </details>
