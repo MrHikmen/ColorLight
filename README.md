@@ -1,4 +1,4 @@
-**All up-to-date information about ColorLight is stored on [Modrinth]([https://modrinth.com/mod/colorlight]%28https://modrinth.com/mod/colorlight%29); this page only contains notes that may clarify some aspects of the mod, explaining what will or will not be included in the mod.**
+**All up-to-date information about ColorLight is stored on [Modrinth](https://modrinth.com/mod/colorlight]%28https://modrinth.com/mod/colorlight%29); this page only contains notes that may clarify some aspects of the mod, explaining what will or will not be included in the mod.**
 
 ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
 
