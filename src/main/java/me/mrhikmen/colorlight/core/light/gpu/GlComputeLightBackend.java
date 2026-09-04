@@ -163,6 +163,114 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
         return runPropagateAndSmooth(sx, sy, sz, opacity, baseColor, iterations, decayPerOpacityUnit);
     }
 
+    private static final class PendingJob {
+        final int sx, sy, sz;
+        final int resultBuffer;
+        final int smoothBuffer;
+        final long fence;
+
+        PendingJob(int sx, int sy, int sz, int resultBuffer, int smoothBuffer, long fence) {
+            this.sx = sx;
+            this.sy = sy;
+            this.sz = sz;
+            this.resultBuffer = resultBuffer;
+            this.smoothBuffer = smoothBuffer;
+            this.fence = fence;
+        }
+    }
+
+    @Override
+    public Object beginCompute(int sx, int sy, int sz, byte[] opacity, int[] baseColor, int iterations, float decayPerOpacityUnit) {
+
+        if (!isSupported())
+            throw new IllegalStateException("GPU compute backend is unavailable");
+
+        int voxelCount = sx * sy * sz;
+        if (opacity.length != voxelCount || baseColor.length != voxelCount)
+            throw new IllegalArgumentException("The array size does not match sizeX*sizeY*sizeZ.");
+
+        int[] prevBoundBuffer = new int[]{glGetInteger(GL_SHADER_STORAGE_BUFFER_BINDING)};
+
+        try {
+            ensureBufferCapacity(voxelCount);
+
+            uploadOpacity(bufOpacity, opacity);
+            uploadColor(bufBase, baseColor, voxelCount);
+            uploadColor(bufA, baseColor, voxelCount);
+
+            int groupsX = ceilDiv(sx, LOCAL_SIZE);
+            int groupsY = ceilDiv(sy, LOCAL_SIZE);
+            int groupsZ = ceilDiv(sz, LOCAL_SIZE);
+
+            glUseProgram(program);
+            glUniform3i(uSizeLoc, sx, sy, sz);
+            glUniform1f(uDecayLoc, decayPerOpacityUnit / 255f);
+
+            int prev = bufA;
+            int next = bufB;
+
+            int steps = Math.max(1, iterations);
+            for (int i = 0; i < steps; i++) {
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, bufOpacity);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, bufBase);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, prev);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, next);
+
+                glDispatchCompute(groupsX, groupsY, groupsZ);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+                int tmp = prev;
+                prev = next;
+                next = tmp;
+            }
+
+            glUseProgram(smoothProgram);
+            glUniform3i(uSmoothSizeLoc, sx, sy, sz);
+
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, bufOpacity);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, prev);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, bufSmooth);
+
+            glDispatchCompute(groupsX, groupsY, groupsZ);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+            long fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+
+            return new PendingJob(sx, sy, sz, prev, bufSmooth, fence);
+
+        } finally {
+            glUseProgram(0);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, prevBoundBuffer[0]);
+        }
+    }
+
+    @Override
+    public LightComputeResult pollResult(Object token) {
+        if (!(token instanceof PendingJob job))
+            return null;
+
+        int status = glClientWaitSync(job.fence, 0, 0);
+
+        if (status == GL_TIMEOUT_EXPIRED) {
+            return null;
+        }
+
+        if (status == GL_WAIT_FAILED) {
+            ColorLightClient.LOGGER.warn("[ColorLight] GPU fence wait failed, region result discarded.");
+            glDeleteSync(job.fence);
+            int voxelCount = job.sx * job.sy * job.sz;
+            return new LightComputeResult(new int[voxelCount], new int[voxelCount]);
+        }
+
+        glDeleteSync(job.fence);
+
+        int voxelCount = job.sx * job.sy * job.sz;
+        int[] propagated = readBack(job.resultBuffer, voxelCount);
+        int[] smoothed = readBack(job.smoothBuffer, voxelCount);
+
+        return new LightComputeResult(propagated, smoothed);
+    }
+
     private LightComputeResult runPropagateAndSmooth(int sx, int sy, int sz, byte[] opacity, int[] baseColor, int iterations, float decayPerOpacityUnit) {
 
         int voxelCount = sx * sy * sz;

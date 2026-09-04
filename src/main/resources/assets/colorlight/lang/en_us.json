@@ -29,13 +29,13 @@
   "me.colorlight.general.whitepenalty_weight": "White clipping strength",
   "me.colorlight.general.weight.tooltip": "Configure the texture scanner parameters.",
 
-  "me.colorlight.compatibility.entity_tracking": "Entity light tracking",
-  "me.colorlight.compatibility.entity_tracking_enabled": "Enable entity light tracking",
-  "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Master switch for scanning entities for glowing blocks held or worn by them. Disable it to turn this feature off completely.",
+  "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
+  "me.colorlight.compatibility.entity_tracking_enabled": "Enable LDL compatibility",
+  "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Master switch for scanning entities for glowing blocks LDL. Disable it to turn this feature off completely.",
   "me.colorlight.compatibility.entity_follow_render_distance": "Follow render distance",
-  "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Uses the client's render distance, in chunks, as the radius for scanning entities for glowing blocks they hold or wear. Disable this to use a fixed radius.",
+  "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Uses the client's render distance, in chunks, as the radius for scanning entities for glowing blocks LDL. Disable this to use a fixed radius.",
   "me.colorlight.compatibility.entity_check_radius_chunks": "Tracking radius",
-  "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Radius, in chunks, used to scan entities for glowing blocks they hold or wear. Only used when “Follow render distance” is disabled.",
+  "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Radius, in chunks, used to scan entities for glowing blocks LDL. Only used when “Follow render distance” is disabled.",
 
   "me.colorlight.compatibility.voxy": "EXPERIMENTAL: Voxy (LOD terrain)",
   "me.colorlight.compatibility.voxy_compat_enabled": "Enable Voxy compatibility",

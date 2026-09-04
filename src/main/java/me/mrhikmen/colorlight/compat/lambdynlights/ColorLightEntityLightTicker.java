@@ -36,6 +36,9 @@ public final class ColorLightEntityLightTicker {
     private static final Map<Integer, TrackedSource> ACTIVE_SOURCES = new HashMap<>();
 
     public static void register() {
+        if (!ColorLightLambDynLightsCompat.isPresent())
+            return;
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
 
             ClientLevel level = client.level;

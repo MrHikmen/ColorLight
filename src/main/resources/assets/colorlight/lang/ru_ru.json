@@ -31,13 +31,13 @@
   "me.colorlight.general.whitepenalty_weight": "Сила подавления белого",
   "me.colorlight.general.weight.tooltip": "Настраивает параметры сканера текстур.",
 
-  "me.colorlight.compatibility.entity_tracking": "Отслеживание света у сущностей",
-  "me.colorlight.compatibility.entity_tracking_enabled": "Включить отслеживание сущностей",
-  "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Основной переключатель для поиска у сущностей светящихся блоков в руках или на теле. Отключите его, чтобы полностью выключить эту функцию.",
+  "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
+  "me.colorlight.compatibility.entity_tracking_enabled": "Включить совместимость с LDL",
+  "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Основной переключатель для поиска у сущностей светящихся блоков LDL. Отключите его, чтобы полностью выключить эту функцию.",
   "me.colorlight.compatibility.entity_follow_render_distance": "Использовать дальность прорисовки",
-  "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Использует дальность прорисовки клиента в чанках как радиус поиска светящихся блоков в руках или на теле сущностей. Отключите, чтобы задать фиксированный радиус.",
+  "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Использует дальность прорисовки клиента в чанках как радиус поиска светящихся блоков LDL. Отключите, чтобы задать фиксированный радиус.",
   "me.colorlight.compatibility.entity_check_radius_chunks": "Радиус отслеживания",
-  "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Радиус в чанках, в пределах которого выполняется поиск светящихся блоков в руках или на теле сущностей. Используется только при отключённой настройке «Использовать дальность прорисовки».",
+  "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Радиус в чанках, в пределах которого выполняется поиск светящихся блоков LDL. Используется только при отключённой настройке «Использовать дальность прорисовки».",
 
   "me.colorlight.compatibility.voxy": "ЭКСПЕРИМЕНТАЛЬНО: Voxy (LOD-террейн)",
   "me.colorlight.compatibility.voxy_compat_enabled": "Включить совместимость с Voxy",

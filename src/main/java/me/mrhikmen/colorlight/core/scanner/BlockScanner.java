@@ -32,8 +32,15 @@ public final class BlockScanner {
                 continue;
 
             Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-            if (findIndex(id) >= 0)
+            int index = findIndex(id);
+
+            if (index >= 0) {
+                BlockSettings existing = ColorLightClient.config.blocks.get(index);
+                if (!existing.edit) {
+                    scanColorFor(index);
+                }
                 continue;
+            }
 
             ColorLightClient.config.blocks.add(new BlockSettings(id, maxLight, true));
             scanColorFor(ColorLightClient.config.blocks.size() - 1);
@@ -51,6 +58,7 @@ public final class BlockScanner {
         entry.r = 255;
         entry.g = 255;
         entry.b = 255;
+        entry.edit = false;
 
         int index = findIndex(id);
         if (index >= 0)
@@ -81,32 +89,32 @@ public final class BlockScanner {
         Identifier modelId = Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
         Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
 
-        if (resource.isPresent()) {
-            try (InputStream stream = resource.get().open()) {
-                JsonObject json = JsonParser.parseString(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+            if (resource.isPresent()) {
+                try (InputStream stream = resource.get().open()) {
+                    JsonObject json = JsonParser.parseString(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
 
-                if (json.has("variants")) {
-                    new VariantParser(json, index);
-                } else if (json.has("multipart")) {
-                    new MultipartParser(json, index);
-                } else {
-                    ColorLightClient.LOGGER.info("[ColorLight] Model not found");
+                    if (json.has("variants")) {
+                        new VariantParser(json, index);
+                    } else if (json.has("multipart")) {
+                        new MultipartParser(json, index);
+                    } else {
+                        ColorLightClient.LOGGER.info("[ColorLight] Model not found");
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
                 }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        } else {
-            Identifier texture = Identifier.fromNamespaceAndPath(block.getNamespace(), "block/" + block.getPath());
+            } else {
+                Identifier texture = Identifier.fromNamespaceAndPath(block.getNamespace(), "block/" + block.getPath());
 
-            PixelData best = SearchBestPixel.search(texture);
+                PixelData best = SearchBestPixel.search(texture);
 
-            if (best != null) {
-                BlockSettings data = ColorLightClient.config.blocks.get(index);
-                data.r = best.r;
-                data.g = best.g;
-                data.b = best.b;
+                if (best != null) {
+                    BlockSettings data = ColorLightClient.config.blocks.get(index);
+                    data.r = best.r;
+                    data.g = best.g;
+                    data.b = best.b;
+                }
             }
-        }
     }
 
     private BlockScanner() {

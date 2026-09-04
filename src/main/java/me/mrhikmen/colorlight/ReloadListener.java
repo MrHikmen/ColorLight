@@ -18,7 +18,6 @@ public class ReloadListener implements SimpleSynchronousResourceReloadListener {
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
         ColorLightClient.config.load();
-        ColorLightClient.config.blocks.clear();
 
         BlockScanner.discoverNewBlocks();
 

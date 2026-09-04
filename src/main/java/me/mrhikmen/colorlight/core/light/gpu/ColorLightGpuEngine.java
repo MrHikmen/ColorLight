@@ -15,17 +15,55 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ColorLightGpuEngine extends ColorLightEngine {
 
-    private static final int MAX_REGION_SIZE = 96;
+    private static final int MAX_REGION_SIZE = 64;
 
     private static final int MERGE_BUDGET_PER_TICK = 6;
+
+    private static final int APPLY_BUDGET_PER_TICK = 65536;
+
+    private static final ExecutorService REGION_PREP_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "ColorLight GPU Region Prep");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final ILightComputeBackend backend;
     private final ConcurrentLinkedQueue<long[]> pendingDirtyBoxes = new ConcurrentLinkedQueue<>();
 
     private final ConcurrentHashMap<Long, Integer> smoothData = new ConcurrentHashMap<>();
+
+    private Object pendingJob;
+    private long[] pendingRegion;
+
+    private volatile PreparedRegion readyToDispatch;
+    private volatile boolean preparing;
+
+    private PendingApply pendingApply;
+
+    private static final class PendingApply {
+        final long[] box;
+        final int sx, sy, sz;
+        final int[] result;
+        final int[] smoothed;
+        int cursor;
+
+        PendingApply(long[] box, int sx, int sy, int sz, int[] result, int[] smoothed) {
+            this.box = box;
+            this.sx = sx;
+            this.sy = sy;
+            this.sz = sz;
+            this.result = result;
+            this.smoothed = smoothed;
+        }
+    }
+
+    private record PreparedRegion(long[] box, int sx, int sy, int sz, byte[] opacity, int[] baseColor) {
+    }
 
     public ColorLightGpuEngine(LevelAccessor level, int maxRangeBlocks, ILightComputeBackend backend) {
         super(level, maxRangeBlocks);
@@ -77,6 +115,9 @@ public class ColorLightGpuEngine extends ColorLightEngine {
         super.clearAll();
         pendingDirtyBoxes.clear();
         smoothData.clear();
+        pendingJob = null;
+        pendingRegion = null;
+        readyToDispatch = null;
     }
 
     @Override
@@ -91,10 +132,51 @@ public class ColorLightGpuEngine extends ColorLightEngine {
     }
 
     public void tick() {
-        if (pendingDirtyBoxes.isEmpty())
+        if (!backend.isSupported())
             return;
 
-        if (!backend.isSupported())
+        if (pendingApply != null) {
+            if (applyPendingResult())
+                return;
+        }
+
+        if (pendingJob != null) {
+            ILightComputeBackend.LightComputeResult result = backend.pollResult(pendingJob);
+            if (result == null)
+                return;
+
+            long[] box = pendingRegion;
+            pendingJob = null;
+            pendingRegion = null;
+
+            if (box != null) {
+                int minX = (int) box[0], minY = (int) box[1], minZ = (int) box[2];
+                int maxX = (int) box[3], maxY = (int) box[4], maxZ = (int) box[5];
+                int sx = maxX - minX + 1;
+                int sy = maxY - minY + 1;
+                int sz = maxZ - minZ + 1;
+                pendingApply = new PendingApply(box, sx, sy, sz, result.propagated(), result.smoothed());
+                applyPendingResult();
+            }
+            return;
+        }
+
+        PreparedRegion prepared = readyToDispatch;
+        if (prepared != null) {
+            readyToDispatch = null;
+            try {
+                pendingJob = backend.beginCompute(prepared.sx(), prepared.sy(), prepared.sz(),
+                        prepared.opacity(), prepared.baseColor(), getMaxRangeBlocks(), getDecayPerOpacityUnit());
+                pendingRegion = prepared.box();
+            } catch (Exception e) {
+                ColorLightClient.LOGGER.error("[ColorLight] GPU calculation error in region lighting, " + "region will be recalculated upon the next change.", e);
+                pendingJob = null;
+                pendingRegion = null;
+            }
+            return;
+        }
+
+        if (preparing || pendingDirtyBoxes.isEmpty())
             return;
 
         List<long[]> batch = new ArrayList<>(MERGE_BUDGET_PER_TICK);
@@ -106,12 +188,17 @@ public class ColorLightGpuEngine extends ColorLightEngine {
             return;
 
         long[] region = mergeAndClamp(batch);
+        preparing = true;
 
-        try {
-            processRegion(region);
-        } catch (Exception e) {
-            ColorLightClient.LOGGER.error("[ColorLight] GPU calculation error in region lighting, " + "region will be recalculated upon the next change.", e);
-        }
+        REGION_PREP_EXECUTOR.submit(() -> {
+            try {
+                readyToDispatch = prepareRegion(region);
+            } catch (Exception e) {
+                ColorLightClient.LOGGER.error("[ColorLight] Error while gathering block data for region lighting, " + "region will be recalculated upon the next change.", e);
+            } finally {
+                preparing = false;
+            }
+        });
     }
 
     private long[] mergeAndClamp(List<long[]> boxes) {
@@ -138,7 +225,7 @@ public class ColorLightGpuEngine extends ColorLightEngine {
         return result;
     }
 
-    private void processRegion(long[] box) {
+    private PreparedRegion prepareRegion(long[] box) {
         int minX = (int) box[0], minY = (int) box[1], minZ = (int) box[2];
         int maxX = (int) box[3], maxY = (int) box[4], maxZ = (int) box[5];
 
@@ -148,7 +235,7 @@ public class ColorLightGpuEngine extends ColorLightEngine {
 
         int voxelCount = sx * sy * sz;
         if (voxelCount <= 0)
-            return;
+            return null;
 
         byte[] opacity = new byte[voxelCount];
         int[] baseColor = new int[voxelCount];
@@ -172,38 +259,57 @@ public class ColorLightGpuEngine extends ColorLightEngine {
             baseColor[index(x - minX, y - minY, z - minZ, sx, sy)] = entry.getValue();
         }
 
-        ILightComputeBackend.LightComputeResult computed =
-                backend.propagateAndSmooth(sx, sy, sz, opacity, baseColor, getMaxRangeBlocks(), getDecayPerOpacityUnit());
+        return new PreparedRegion(box, sx, sy, sz, opacity, baseColor);
+    }
 
-        int[] result = computed.propagated();
-        int[] smoothed = computed.smoothed();
+    private boolean applyPendingResult() {
+        PendingApply apply = pendingApply;
+        if (apply == null)
+            return false;
 
-        for (int z = 0; z < sz; z++) {
-            for (int y = 0; y < sy; y++) {
-                for (int x = 0; x < sx; x++) {
-                    int idx = index(x, y, z, sx, sy);
-                    int packed = result[idx];
-                    long key = BlockPos.asLong(minX + x, minY + y, minZ + z);
+        int minX = (int) apply.box[0];
+        int minY = (int) apply.box[1];
+        int minZ = (int) apply.box[2];
 
-                    if (ColorLightUtil.isEmpty(packed)) {
-                        data.remove(key);
-                    } else {
-                        data.put(key, packed);
-                    }
+        int total = apply.sx * apply.sy * apply.sz;
+        int end = Math.min(total, apply.cursor + APPLY_BUDGET_PER_TICK);
 
-                    int smoothPacked = smoothed[idx];
-                    if (ColorLightUtil.isEmpty(smoothPacked)) {
-                        smoothData.remove(key);
-                    } else {
-                        smoothData.put(key, smoothPacked);
-                    }
-                }
+        for (int idx = apply.cursor; idx < end; idx++) {
+            int z = idx / (apply.sx * apply.sy);
+            int rem = idx - z * apply.sx * apply.sy;
+            int y = rem / apply.sx;
+            int x = rem - y * apply.sx;
+
+            long key = BlockPos.asLong(minX + x, minY + y, minZ + z);
+
+            int packed = apply.result[idx];
+            if (ColorLightUtil.isEmpty(packed)) {
+                data.remove(key);
+            } else {
+                data.put(key, packed);
+            }
+
+            int smoothPacked = apply.smoothed[idx];
+            if (ColorLightUtil.isEmpty(smoothPacked)) {
+                smoothData.remove(key);
+            } else {
+                smoothData.put(key, smoothPacked);
             }
         }
 
+        apply.cursor = end;
+
+        if (apply.cursor < total)
+            return true;
+
         if (level instanceof ClientLevel clientLevel) {
-            ColorLightRenderUtil.setBlocksDirtySafe(clientLevel, minX, minY, minZ, maxX, maxY, maxZ);
+            ColorLightRenderUtil.setBlocksDirtySafe(clientLevel,
+                    (int) apply.box[0], (int) apply.box[1], (int) apply.box[2],
+                    (int) apply.box[3], (int) apply.box[4], (int) apply.box[5]);
         }
+
+        pendingApply = null;
+        return false;
     }
 
     private static int index(int x, int y, int z, int sx, int sy) {

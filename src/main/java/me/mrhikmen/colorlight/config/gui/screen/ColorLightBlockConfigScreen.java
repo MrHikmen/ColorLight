@@ -72,6 +72,7 @@ public class ColorLightBlockConfigScreen extends Screen {
                 .selected(this.entry.enable)
                 .onValueChange((checkbox, value) -> {
                     this.entry.enable = value;
+                    this.entry.edit = true;
                     this.onSave.run();
                 })
                 .build();
@@ -131,6 +132,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.entry.r = rgb[0];
         this.entry.g = rgb[1];
         this.entry.b = rgb[2];
+        this.entry.edit = true;
         this.onSave.run();
     }
 
@@ -180,6 +182,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         @Override
         protected void applyValue() {
             this.entry.light = toReal();
+            this.entry.edit = true;
             this.onSave.run();
         }
     }
