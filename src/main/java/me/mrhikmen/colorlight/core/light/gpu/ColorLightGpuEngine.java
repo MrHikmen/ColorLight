@@ -3,6 +3,7 @@ package me.mrhikmen.colorlight.core.light.gpu;
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.light.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.LightStorage;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -13,19 +14,35 @@ import net.minecraft.world.level.LevelAccessor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ColorLightGpuEngine extends ColorLightEngine {
 
-    private static final int MAX_REGION_SIZE = 96;
+    private static final int MAX_REGION_SIZE = 64;
 
     private static final int MERGE_BUDGET_PER_TICK = 6;
+
+    private static final ExecutorService REGION_PREP_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "ColorLight GPU Region Prep");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final ILightComputeBackend backend;
     private final ConcurrentLinkedQueue<long[]> pendingDirtyBoxes = new ConcurrentLinkedQueue<>();
 
-    private final ConcurrentHashMap<Long, Integer> smoothData = new ConcurrentHashMap<>();
+    private final LightStorage smoothData = new LightStorage();
+
+    private Object pendingJob;
+    private long[] pendingRegion;
+
+    private volatile PreparedRegion readyToDispatch;
+    private volatile boolean preparing;
+
+    private record PreparedRegion(long[] box, int sx, int sy, int sz, byte[] opacity, int[] baseColor) {
+    }
 
     public ColorLightGpuEngine(LevelAccessor level, int maxRangeBlocks, ILightComputeBackend backend) {
         super(level, maxRangeBlocks);
@@ -77,24 +94,57 @@ public class ColorLightGpuEngine extends ColorLightEngine {
         super.clearAll();
         pendingDirtyBoxes.clear();
         smoothData.clear();
+        pendingJob = null;
+        pendingRegion = null;
+        readyToDispatch = null;
     }
 
     @Override
     public int sampleSmoothColor(BlockPos pos, Direction face, float vx, float vy, float vz) {
         BlockPos facePos = (face != null) ? pos.relative(face) : pos;
 
-        Integer cachedFace = smoothData.get(facePos.asLong());
-        if (cachedFace == null)
+        int cachedFace = smoothData.getRaw(facePos.asLong());
+        if (cachedFace == LightStorage.UNSET)
             return super.sampleSmoothColor(pos, face, vx, vy, vz);
 
         return ColorLightUtil.max(cachedFace, getColor(pos));
     }
 
     public void tick() {
-        if (pendingDirtyBoxes.isEmpty())
+        if (!backend.isSupported())
             return;
 
-        if (!backend.isSupported())
+        if (pendingJob != null) {
+            ILightComputeBackend.LightComputeResult result = backend.pollResult(pendingJob);
+            if (result == null)
+                return;
+
+            long[] box = pendingRegion;
+            pendingJob = null;
+            pendingRegion = null;
+
+            if (box != null) {
+                applyResult(box, result.propagated(), result.smoothed());
+            }
+            return;
+        }
+
+        PreparedRegion prepared = readyToDispatch;
+        if (prepared != null) {
+            readyToDispatch = null;
+            try {
+                pendingJob = backend.beginCompute(prepared.sx(), prepared.sy(), prepared.sz(),
+                        prepared.opacity(), prepared.baseColor(), getMaxRangeBlocks(), getDecayPerOpacityUnit());
+                pendingRegion = prepared.box();
+            } catch (Exception e) {
+                ColorLightClient.LOGGER.error("[ColorLight] GPU calculation error in region lighting, region will be recalculated upon the next change.", e);
+                pendingJob = null;
+                pendingRegion = null;
+            }
+            return;
+        }
+
+        if (preparing || pendingDirtyBoxes.isEmpty())
             return;
 
         List<long[]> batch = new ArrayList<>(MERGE_BUDGET_PER_TICK);
@@ -106,12 +156,17 @@ public class ColorLightGpuEngine extends ColorLightEngine {
             return;
 
         long[] region = mergeAndClamp(batch);
+        preparing = true;
 
-        try {
-            processRegion(region);
-        } catch (Exception e) {
-            ColorLightClient.LOGGER.error("[ColorLight] GPU calculation error in region lighting, " + "region will be recalculated upon the next change.", e);
-        }
+        REGION_PREP_EXECUTOR.submit(() -> {
+            try {
+                readyToDispatch = prepareRegion(region);
+            } catch (Exception e) {
+                ColorLightClient.LOGGER.error("[ColorLight] Error while gathering block data for region lighting, region will be recalculated upon the next change.", e);
+            } finally {
+                preparing = false;
+            }
+        });
     }
 
     private long[] mergeAndClamp(List<long[]> boxes) {
@@ -138,7 +193,7 @@ public class ColorLightGpuEngine extends ColorLightEngine {
         return result;
     }
 
-    private void processRegion(long[] box) {
+    private PreparedRegion prepareRegion(long[] box) {
         int minX = (int) box[0], minY = (int) box[1], minZ = (int) box[2];
         int maxX = (int) box[3], maxY = (int) box[4], maxZ = (int) box[5];
 
@@ -148,7 +203,7 @@ public class ColorLightGpuEngine extends ColorLightEngine {
 
         int voxelCount = sx * sy * sz;
         if (voxelCount <= 0)
-            return;
+            return null;
 
         byte[] opacity = new byte[voxelCount];
         int[] baseColor = new int[voxelCount];
@@ -172,32 +227,41 @@ public class ColorLightGpuEngine extends ColorLightEngine {
             baseColor[index(x - minX, y - minY, z - minZ, sx, sy)] = entry.getValue();
         }
 
-        ILightComputeBackend.LightComputeResult computed =
-                backend.propagateAndSmooth(sx, sy, sz, opacity, baseColor, getMaxRangeBlocks(), getDecayPerOpacityUnit());
+        return new PreparedRegion(box, sx, sy, sz, opacity, baseColor);
+    }
 
-        int[] result = computed.propagated();
-        int[] smoothed = computed.smoothed();
+    private void applyResult(long[] box, int[] result, int[] smoothed) {
+        int minX = (int) box[0];
+        int minY = (int) box[1];
+        int minZ = (int) box[2];
+        int maxX = (int) box[3];
+        int maxY = (int) box[4];
+        int maxZ = (int) box[5];
 
-        for (int z = 0; z < sz; z++) {
-            for (int y = 0; y < sy; y++) {
-                for (int x = 0; x < sx; x++) {
-                    int idx = index(x, y, z, sx, sy);
-                    int packed = result[idx];
-                    long key = BlockPos.asLong(minX + x, minY + y, minZ + z);
+        int sx = maxX - minX + 1;
+        int sy = maxY - minY + 1;
 
-                    if (ColorLightUtil.isEmpty(packed)) {
-                        data.remove(key);
-                    } else {
-                        data.put(key, packed);
-                    }
+        int total = result.length;
+        for (int idx = 0; idx < total; idx++) {
+            int z = idx / (sx * sy);
+            int rem = idx - z * sx * sy;
+            int y = rem / sx;
+            int x = rem - y * sx;
 
-                    int smoothPacked = smoothed[idx];
-                    if (ColorLightUtil.isEmpty(smoothPacked)) {
-                        smoothData.remove(key);
-                    } else {
-                        smoothData.put(key, smoothPacked);
-                    }
-                }
+            long key = BlockPos.asLong(minX + x, minY + y, minZ + z);
+
+            int packed = result[idx];
+            if (ColorLightUtil.isEmpty(packed)) {
+                data.remove(key);
+            } else {
+                data.put(key, packed);
+            }
+
+            int smoothPacked = smoothed[idx];
+            if (ColorLightUtil.isEmpty(smoothPacked)) {
+                smoothData.remove(key);
+            } else {
+                smoothData.put(key, smoothPacked);
             }
         }
 

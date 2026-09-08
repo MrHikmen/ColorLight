@@ -35,6 +35,8 @@ public final class ColorLightChunkScanner {
         return thread;
     });
 
+    private static final int DIRTY_POSITIONS_PER_TICK = 256;
+
     private record FoundSource(BlockPos pos, int r, int g, int b, int strength) {
     }
 
@@ -72,6 +74,35 @@ public final class ColorLightChunkScanner {
                 }
             }
         }
+    }
+
+    public static void markPositionsDirty(ClientLevel level, List<BlockPos> positions) {
+        if (level == null || positions == null || positions.isEmpty())
+            return;
+
+        ColorLightEngine engine = ColorLightEngineHolder.get();
+        int radius = (engine != null ? engine.getMaxRangeBlocks() : 16) + 1;
+
+        markPositionsBatch(level, positions, 0, radius);
+    }
+
+    private static void markPositionsBatch(ClientLevel level, List<BlockPos> positions, int fromIndex, int radius) {
+        Minecraft.getInstance().execute(() -> {
+
+            int toIndex = Math.min(positions.size(), fromIndex + DIRTY_POSITIONS_PER_TICK);
+
+            for (int i = fromIndex; i < toIndex; i++) {
+                BlockPos pos = positions.get(i);
+                ColorLightRenderUtil.setBlocksDirtySafe(level,
+                        pos.getX() - radius, level.getMinY(), pos.getZ() - radius,
+                        pos.getX() + radius, level.getMaxY(), pos.getZ() + radius
+                );
+            }
+
+            if (toIndex < positions.size()) {
+                markPositionsBatch(level, positions, toIndex, radius);
+            }
+        });
     }
 
     private static void scanChunk(ClientLevel level, LevelChunk chunk) {

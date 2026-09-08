@@ -31,8 +31,7 @@ public final class ColorLightRenderUtil {
             setBlocksDirty(level, x0, y0, z0, x1, y1, z1);
         } catch (NullPointerException e) {
             if (attempt >= MAX_DIRTY_RETRIES) {
-                ColorLightClient.LOGGER.warn(
-                        "[ColorLight] Failed to rebuild chunks after {} attempts — " + "Sodium renderer never ended up being ready.", MAX_DIRTY_RETRIES);
+                ColorLightClient.LOGGER.warn("[ColorLight] Failed to rebuild chunks after {} attempts — Sodium renderer never ended up being ready.", MAX_DIRTY_RETRIES);
                 return;
             }
             Minecraft.getInstance().execute(() -> trySetBlocksDirty(level, x0, y0, z0, x1, y1, z1, attempt + 1));

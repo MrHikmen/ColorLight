@@ -20,7 +20,7 @@ public class ColorLightEngine {
 
     protected final float decayPerOpacityUnit;
 
-    protected final ConcurrentHashMap<Long, Integer> data = new ConcurrentHashMap<>();
+    protected final LightStorage data = new LightStorage();
     protected final ConcurrentHashMap<Long, Integer> sources = new ConcurrentHashMap<>();
 
     protected final LevelAccessor level;
@@ -61,8 +61,7 @@ public class ColorLightEngine {
     }
 
     protected int getRaw(long key) {
-        Integer v = data.get(key);
-        return v != null ? v : ColorLightUtil.EMPTY;
+        return data.get(key);
     }
 
     public float getDecayPerOpacityUnit() {
@@ -239,7 +238,7 @@ public class ColorLightEngine {
         return ColorLightUtil.clamp01(skyExposure * timeOfDayFactor);
     }
 
-    private static float computeTimeOfDayFactor(Level level) {
+    public static float computeTimeOfDayFactor(Level level) {
         long dayTime = level.getDefaultClockTime() % 24000L;
         if (dayTime < 0)
             dayTime += 24000L;
