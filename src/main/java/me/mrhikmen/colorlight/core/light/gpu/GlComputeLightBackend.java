@@ -52,7 +52,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
             GLCapabilities caps = GL.getCapabilities();
 
             if (!caps.OpenGL43) {
-                ColorLightClient.LOGGER.warn("[ColorLight] GPU context is not OpenGL 4.3 (current context: {}) " + "GPU lighting calculation is disabled, CPU is being used.", glGetString(GL_VERSION));
+                ColorLightClient.LOGGER.warn("[ColorLight] GPU context is not OpenGL 4.3 (current context: {}) GPU lighting calculation is disabled, CPU is being used.", glGetString(GL_VERSION));
                 return;
             }
 
@@ -73,7 +73,7 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
             this.uSmoothSizeLoc = glGetUniformLocation(smoothProgram, "uSize");
 
             if (!runSelfTest()) {
-                ColorLightClient.LOGGER.warn("[ColorLight] GPU failed the verification test calculation " + "(compute shader compiled, but the result is incorrect or a GL error occurred) — " + "GPU lighting calculation is disabled, CPU is being used.");
+                ColorLightClient.LOGGER.warn("[ColorLight] GPU failed the verification test calculation (compute shader compiled, but the result is incorrect or a GL error occurred) — GPU lighting calculation is disabled, CPU is being used.");
                 glDeleteProgram(program);
                 glDeleteProgram(smoothProgram);
                 program = -1;
@@ -83,10 +83,10 @@ public final class GlComputeLightBackend implements ILightComputeBackend {
 
             this.supported = true;
 
-            ColorLightClient.LOGGER.info("[ColorLight] GPU lighting calculation enabled " + "(OpenGL compute shader, SSBO backend, test passed).");
+            ColorLightClient.LOGGER.info("[ColorLight] GPU lighting calculation enabled (OpenGL compute shader, SSBO backend, test passed).");
 
         } catch (Exception e) {
-            ColorLightClient.LOGGER.error("[ColorLight] Failed to initialize GPU lighting calculation, " + "CPU fallback is used.", e);
+            ColorLightClient.LOGGER.error("[ColorLight] Failed to initialize GPU lighting calculation, CPU fallback is used.", e);
         }
     }
 

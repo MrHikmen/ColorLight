@@ -5,13 +5,14 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 <details>
 <summary>Versions</summary>
 
-| Version                                                                                                                                                                                                    | Further support |
-| :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------: |
-| 1.20.x                                                                                                                                                                                                     |        No       |
-| 1.21.x                                                                                                                                                                                                     |        No       |
-| 1.21.11                                                                                                                                                                                                    |       Yes       |
-| 26.x                                                                                                                                                                                                       |       Yes       |
-| Older Minecraft versions are personally difficult for me to maintain, as sometimes I have to completely rewrite all the added code. ColorLight versions for 1.21.1 will therefore remain at 0.2.0 forever. |                 |
+| Version | Further support |
+|:--------| :-------------: |
+| 1.20.x  |        No       |
+| 1.21.x  |        No       |
+| 1.21.11 |       Yes       |
+| 26.x    |       Yes       |
+
+Older Minecraft versions are personally difficult for me to maintain, as sometimes I have to completely rewrite all the added code. ColorLight versions for 1.21.1 will therefore remain at 0.2.0 forever.
 
 </details>
 
@@ -47,7 +48,7 @@ If a mod adds features that differ from vanilla Minecraft, a separate compatibil
 <details>
 <summary>Rus</summary>
 
-**Вся актуальная информация о ColorLight хранится на [modrint](https://modrinth.com/mod/colorlight), здесь лишь записи, которые могут прояснить некоторые моменты мода, сообшающие о том, что будет или не будет в моде.**
+**Вся актуальная информация о ColorLight хранится на [Modrint](https://modrinth.com/mod/colorlight), здесь лишь записи, которые могут прояснить некоторые моменты мода, сообшающие о том, что будет или не будет в моде.**
 
 ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
 
@@ -60,6 +61,7 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 | 1.21.x  |       Не будет       |
 | 1.21.11 |        Будет         |
 | 26.x    |        Будет         |
+
 Старые версии майнкрафта мне лично трудно поддерживать, так как иногда приходиться полнустью переписывать весь добавленный код. Версии ColorLight для 1.21.1 так и остануться навсегда 0.2.0
 </details>
 
@@ -82,12 +84,13 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 <details>
 <summary>Известные ошибки</summary>
 
-| Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                                   Как исправить                                   |
-|:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------:|
-| "Description: Mod 'colorlight' failed while registering config options." с RRLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |          [Исправление](https://github.com/MrHikmen/ColorLight/issues/7)           |
-| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     |                     Дождаться исправление в новых обновлениях                     |
-| Непонятные треугольники на версии 1.21.11 или квадраты на версии 26.2           |                         Это старая версия совместимости с Voxy                          |        Отключить "Enable Voxy compatibility" в настройках "Compatibility"         |
-| Вылеты с включением "Compute lighting on GPU"                                   | Ваша система или устройство не совместимо с OpenGL 4.3, а ColorLight не смог это понять | Выключить "Compute lighting on GPU" или дождаться исправление в новых обновлениях |
+| Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                                      Как исправить                                      |
+|:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------:|
+| "Description: Mod 'colorlight' failed while registering config options." с RRLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |             [Исправление](https://github.com/MrHikmen/ColorLight/issues/7)              |
+| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     |                        Дождаться исправление в новых обновлениях                        |
+| Непонятные треугольники на версии 1.21.11 или квадраты на версии 26.2           |                         Это старая версия совместимости с Voxy                          |           Отключить "Enable Voxy compatibility" в настройках "Compatibility"            |
+| Вылеты с включением "Compute lighting on GPU"                                   | Ваша система или устройство не совместимо с OpenGL 4.3, а ColorLight не смог это понять |    Выключить "Compute lighting on GPU" или дождаться исправление в новых обновлениях    |
+| Фризы в обычном мире                                                            |     Возникает из-за огромного количества источников света (более 10000 источников)      | Пока рекомендую избегать большого количества источников, исправлю это в ближайщие время |
 </details>
 
 </details>

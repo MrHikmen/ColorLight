@@ -28,8 +28,6 @@ import java.util.Map;
 
 public final class ColorLightEntityLightTicker {
 
-    private static final int CHECK_RADIUS_BLOCKS = 32;
-
     private record TrackedSource(BlockPos pos, BlockSettings settings) {
     }
 

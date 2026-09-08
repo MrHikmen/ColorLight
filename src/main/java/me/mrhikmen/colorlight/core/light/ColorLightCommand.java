@@ -20,7 +20,6 @@ public final class ColorLightCommand {
 
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-
             dispatcher.register(ClientCommands.literal("colorlight")
                     .then(ClientCommands.literal("inspect")
                             .executes(ColorLightCommand::debugDaylight))

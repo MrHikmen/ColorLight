@@ -13,11 +13,8 @@ import java.util.LinkedList;
 public class ColorLightConfig {
 
     public boolean ENABLE = true;
-
     public int lightRangeBlocks = 15;
-
     public boolean USE_GPU_LIGHTING = true;
-
     public boolean SMOOTH_LIGHTING = true;
 
     public int BRIGHTNESS_WEIGHT     = 100;

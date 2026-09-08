@@ -86,8 +86,9 @@ public final class BlockScanner {
     private static void scanColorFor(int index) {
         Identifier block = ColorLightClient.config.blocks.get(index).getBlock();
 
-        Identifier modelId = Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
-        Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
+        Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(
+                Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json")
+        );
 
             if (resource.isPresent()) {
                 try (InputStream stream = resource.get().open()) {
@@ -98,7 +99,7 @@ public final class BlockScanner {
                     } else if (json.has("multipart")) {
                         new MultipartParser(json, index);
                     } else {
-                        ColorLightClient.LOGGER.info("[ColorLight] Model not found");
+                        ColorLightClient.LOGGER.info("[ColorLight] Model not found; name: ");
                     }
                 } catch (IOException e) {
                     throw new RuntimeException(e);

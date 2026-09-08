@@ -69,7 +69,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setStorageHandler(this::save)
                                 .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
                                 .setBinding(value -> config.USE_GPU_LIGHTING = value, () -> config.USE_GPU_LIGHTING)
-                                .setDefaultValue(config.USE_GPU_LIGHTING)
+                                .setDefaultValue(config.USE_GPU_LIGHTING)  //GPU_BACKEND.isSupported()
                         )
                         .addOption(builder.createBooleanOption(Identifier.parse("colorlight:smooth_lighting"))
                                 .setName(Translatable.SMOOTH_LIGHTING)
