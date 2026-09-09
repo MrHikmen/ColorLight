@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightLambDynLightsCompat;
-//import me.mrhikmen.colorlight.compat.lod.LodColorLightCompat;
+import me.mrhikmen.colorlight.compat.lod.LodColorLightCompat;
 import me.mrhikmen.colorlight.compat.lod.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
@@ -49,7 +49,7 @@ public class ColorLightClient implements ClientModInitializer {
         ColorLightChunkScanner.register();
         ColorLightCommand.register();
         if (ColorLightVoxyCompat.isPresent()) {
-//            LodColorLightCompat.register();
+            LodColorLightCompat.register();
             ColorLightClient.LOGGER.info("[ColorLight] Voxy initialized");
         }
 
