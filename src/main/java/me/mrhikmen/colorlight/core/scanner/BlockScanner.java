@@ -32,8 +32,15 @@ public final class BlockScanner {
                 continue;
 
             Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-            if (findIndex(id) >= 0)
+            int index = findIndex(id);
+
+            if (index >= 0) {
+                BlockSettings existing = ColorLightClient.config.blocks.get(index);
+                if (!existing.edit) {
+                    scanColorFor(index);
+                }
                 continue;
+            }
 
             ColorLightClient.config.blocks.add(new BlockSettings(id, maxLight, true));
             scanColorFor(ColorLightClient.config.blocks.size() - 1);
@@ -51,6 +58,7 @@ public final class BlockScanner {
         entry.r = 255;
         entry.g = 255;
         entry.b = 255;
+        entry.edit = false;
 
         int index = findIndex(id);
         if (index >= 0)
@@ -78,8 +86,9 @@ public final class BlockScanner {
     private static void scanColorFor(int index) {
         Identifier block = ColorLightClient.config.blocks.get(index).getBlock();
 
-        Identifier modelId = Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json");
-        Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(modelId);
+        Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(
+                Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json")
+        );
 
         if (resource.isPresent()) {
             try (InputStream stream = resource.get().open()) {
@@ -90,7 +99,7 @@ public final class BlockScanner {
                 } else if (json.has("multipart")) {
                     new MultipartParser(json, index);
                 } else {
-                    ColorLightClient.LOGGER.info("[ColorLight] Model not found");
+                    ColorLightClient.LOGGER.info("[ColorLight] Model not found; name: ");
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e);
