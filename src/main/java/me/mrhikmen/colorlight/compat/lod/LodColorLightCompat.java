@@ -5,9 +5,9 @@ import java.util.List;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.compat.lod.voxy.ColorLightVoxyCompat;
-import me.mrhikmen.colorlight.core.light.ColorLightEngine;
-import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;

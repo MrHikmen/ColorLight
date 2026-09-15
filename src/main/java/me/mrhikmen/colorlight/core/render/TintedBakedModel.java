@@ -1,9 +1,9 @@
 package me.mrhikmen.colorlight.core.render;
 
 import me.mrhikmen.colorlight.ColorLightClient;
-import me.mrhikmen.colorlight.core.light.ColorLightEngine;
-import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
 
@@ -48,10 +48,10 @@ public class TintedBakedModel implements BlockStateModel {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
-        if (engine == null) {
-            wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
-            return;
-        }
+//        if (engine == null || engine.hasSource(pos)) {
+//            wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
+//            return;
+//        }
 
         emitter.pushTransform(quad -> {
             Direction face = quad.lightFace();

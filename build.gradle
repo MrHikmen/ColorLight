@@ -8,7 +8,7 @@ version = project.mod_version
 group = project.maven_group
 
 base {
-    archivesName = project.archives_base_name + "-" + project.minecraft_version
+    archivesName = "test-" + project.mod_test + "-" + project.archives_base_name + "-" + project.minecraft_version
 }
 
 repositories {
@@ -40,6 +40,9 @@ repositories {
             includeGroup "maven.modrinth"
         }
     }
+    flatDir {
+        dir "deps"
+    }
 }
 
 dependencies {
@@ -55,10 +58,12 @@ dependencies {
     compileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
 
     //voxy compat
-    compileOnly "maven.modrinth:fxxUqruK:zZX86mbc"
+    compileOnly "maven.modrinth:fxxUqruK:LzyXnE51"
 
     //dh compat
     compileOnly "maven.modrinth:uCdwusMi:gBf0SaV1"
+
+    compileOnly files("deps/poks-colored-light-0.1.0-SNAPSHOT.jar")
 }
 
 processResources {

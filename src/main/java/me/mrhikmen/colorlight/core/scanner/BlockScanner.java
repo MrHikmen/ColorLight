@@ -99,7 +99,7 @@ public final class BlockScanner {
                     } else if (json.has("multipart")) {
                         new MultipartParser(json, index);
                     } else {
-                        ColorLightClient.LOGGER.info("[ColorLight] Model not found; name: ");
+                        ColorLightClient.LOGGER.info("[ColorLight] Model not found; name: {}", block.getPath());
                     }
                 } catch (IOException e) {
                     throw new RuntimeException(e);

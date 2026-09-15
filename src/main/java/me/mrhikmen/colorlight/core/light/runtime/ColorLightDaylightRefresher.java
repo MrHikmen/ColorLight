@@ -1,5 +1,7 @@
-package me.mrhikmen.colorlight.core.light;
+package me.mrhikmen.colorlight.core.light.runtime;
 
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -24,7 +26,6 @@ public final class ColorLightDaylightRefresher {
 
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-
             ClientLevel level = client.level;
             if (level == null || client.player == null)
                 return;
@@ -42,7 +43,6 @@ public final class ColorLightDaylightRefresher {
             float factor = ColorLightEngine.computeTimeOfDayFactor(level);
             if (Float.compare(factor, lastFactor) == 0)
                 return;
-
             lastFactor = factor;
 
             ColorLightEngine engine = ColorLightEngineHolder.get();
@@ -64,7 +64,6 @@ public final class ColorLightDaylightRefresher {
     private static void processBatch(ClientLevel level) {
         List<BlockPos> sources = pendingSources;
         int radius = pendingRadius;
-
         int toIndex = Math.min(sources.size(), pendingIndex + SOURCES_PER_TICK);
 
         for (int i = pendingIndex; i < toIndex; i++) {
@@ -78,7 +77,6 @@ public final class ColorLightDaylightRefresher {
                     sourcePos.getX() + radius, sourcePos.getY() + radius, sourcePos.getZ() + radius
             );
         }
-
         pendingIndex = toIndex;
         if (pendingIndex >= sources.size()) {
             pendingSources = null;

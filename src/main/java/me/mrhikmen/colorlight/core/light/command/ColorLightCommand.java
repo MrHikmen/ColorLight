@@ -1,9 +1,14 @@
-package me.mrhikmen.colorlight.core.light;
+package me.mrhikmen.colorlight.core.light.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
 import me.mrhikmen.colorlight.config.Translatable;
+import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
@@ -30,8 +35,11 @@ public final class ColorLightCommand {
                                     .then(ClientCommands.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                             .then(ClientCommands.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                     .then(ClientCommands.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                                            .then(ClientCommands.argument("strength", IntegerArgumentType.integer(0, 30))
-                                                                    .executes(ColorLightCommand::addAtTarget))))))
+                                                            .then(ClientCommands.argument("strength", IntegerArgumentType.integer(1, 32))
+                                                                    .then(ClientCommands.literal("grid")
+                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.GRID)))
+                                                                    .then(ClientCommands.literal("smooth")
+                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.SMOOTH))))))))
 
                             .then(ClientCommands.literal("reset")
                                     .executes(ColorLightCommand::removeAtTarget))
@@ -86,7 +94,7 @@ public final class ColorLightCommand {
         return 1;
     }
 
-    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx) {
+    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx, ColorLightPropagationMode mode) {
 
         ColorLightCommand.removeAtTarget(ctx);
 
@@ -107,7 +115,8 @@ public final class ColorLightCommand {
         int b = IntegerArgumentType.getInteger(ctx, "b");
         int strength = IntegerArgumentType.getInteger(ctx, "strength");
 
-        engine.addSource(pos, r, g, b, strength);
+        engine.addSource(pos, r, g, b, strength, mode);
+
         markDirtyAround(pos);
 
         ctx.getSource().sendFeedback(Translatable.LIGHT_ADD);

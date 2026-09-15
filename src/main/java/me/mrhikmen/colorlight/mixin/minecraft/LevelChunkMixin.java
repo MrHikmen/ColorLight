@@ -1,10 +1,10 @@
 package me.mrhikmen.colorlight.mixin.minecraft;
 
 import me.mrhikmen.colorlight.config.BlockSettings;
-import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.core.light.ColorLightEngine;
-import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.minecraft.client.multiplayer.ClientLevel;

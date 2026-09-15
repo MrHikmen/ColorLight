@@ -1,7 +1,10 @@
-package me.mrhikmen.colorlight.core.light;
+package me.mrhikmen.colorlight.core.light.scan;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;
+import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;

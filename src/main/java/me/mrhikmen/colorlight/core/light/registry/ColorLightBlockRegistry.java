@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.light;
+package me.mrhikmen.colorlight.core.light.registry;
 
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
@@ -15,9 +15,7 @@ public final class ColorLightBlockRegistry {
 
     public static void load(ColorLightConfig config) {
         Map<Block, BlockSettings> map = new HashMap<>();
-
         for (BlockSettings entry : config.blocks) {
-
             if (!entry.enable)
                 continue;
 
@@ -35,7 +33,6 @@ public final class ColorLightBlockRegistry {
             } catch (Exception e) {
             }
         }
-
         byBlock = map;
     }
 

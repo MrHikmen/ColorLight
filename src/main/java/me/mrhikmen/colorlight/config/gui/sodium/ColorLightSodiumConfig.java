@@ -7,14 +7,16 @@ import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.config.Translatable;
 import me.mrhikmen.colorlight.config.gui.screen.ColorLightBlockConfigScreen;
-import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
 import net.caffeinemc.mods.sodium.api.config.option.OptionFlag;
+import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 import net.caffeinemc.mods.sodium.api.config.structure.OptionPageBuilder;
 
@@ -53,31 +55,43 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setBinding(value -> config.ENABLE = value, () -> config.ENABLE)
                                 .setDefaultValue(config.ENABLE)
                         )
+                )
+                .addOptionGroup(builder.createOptionGroup()
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:light_range"))
                                 .setName(Translatable.LIGHT_RANGE)
                                 .setTooltip(Translatable.LIGHT_RANGE_Tooltip)
-                                .setRange(2, 32, 1)
+                                .setRange(1, 32, 1)
                                 .setValueFormatter(value -> Translatable.BLOCKS_Value(value))
                                 .setStorageHandler(this::save)
                                 .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                                .setImpact(OptionImpact.HIGH)
                                 .setBinding(value -> config.lightRangeBlocks = value, () -> config.lightRangeBlocks)
                                 .setDefaultValue(config.lightRangeBlocks)
-                        )
-                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:use_gpu_lighting"))
-                                .setName(Translatable.USE_GPU_LIGHTING)
-                                .setTooltip(Translatable.USE_GPU_LIGHTING_Tooltip)
-                                .setStorageHandler(this::save)
-                                .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
-                                .setBinding(value -> config.USE_GPU_LIGHTING = value, () -> config.USE_GPU_LIGHTING)
-                                .setDefaultValue(config.USE_GPU_LIGHTING)  //GPU_BACKEND.isSupported()
                         )
                         .addOption(builder.createBooleanOption(Identifier.parse("colorlight:smooth_lighting"))
                                 .setName(Translatable.SMOOTH_LIGHTING)
                                 .setTooltip(Translatable.SMOOTH_LIGHTING_Tooltip)
                                 .setStorageHandler(this::save)
-                                .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
+                                .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                                .setImpact(OptionImpact.MEDIUM)
                                 .setBinding(value -> config.SMOOTH_LIGHTING = value, () -> config.SMOOTH_LIGHTING)
                                 .setDefaultValue(config.SMOOTH_LIGHTING)
+                        )
+                        .addOption(builder.createEnumOption(Identifier.parse("colorlight:propagation_mode"), ColorLightPropagationMode.class)
+                                .setName(Translatable.PROPAGATION_MODE)
+                                .setTooltip(Translatable.PROPAGATION_MODE_Tooltip)
+                                .setElementNameProvider(mode -> switch (mode) {
+                                    case GRID -> Translatable.PROPAGATION_MODE_GRID;
+                                    case SMOOTH -> Translatable.PROPAGATION_MODE_SMOOTH;
+                                })
+                                .setStorageHandler(this::save)
+                                .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                                .setImpact(OptionImpact.VARIES)
+                                .setBinding(
+                                        value -> config.PROPAGATION_MODE = value.name(),
+                                        () -> ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE)
+                                )
+                                .setDefaultValue(ColorLightPropagationMode.GRID)
                         )
                 )
                 .addOptionGroup(builder.createOptionGroup()
@@ -193,6 +207,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                     .addOption(builder.createBooleanOption(entityEnabledId)
                             .setName(Translatable.ENTITY_TRACKING_ENABLED)
                             .setTooltip(Translatable.ENTITY_TRACKING_ENABLED_Tooltip)
+                            .setImpact(OptionImpact.MEDIUM)
                             .setStorageHandler(this::save)
                             .setBinding(value -> config.ENTITY_TRACKING_ENABLED = value, () -> config.ENTITY_TRACKING_ENABLED)
                             .setDefaultValue(config.ENTITY_TRACKING_ENABLED)
@@ -208,6 +223,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                     .addOption(builder.createIntegerOption(Identifier.parse("colorlight:entity_check_radius_chunks"))
                             .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
+                            .setImpact(OptionImpact.HIGH)
                             .setEnabledProvider(state -> state.readBooleanOption(entityEnabledId) && !state.readBooleanOption(entityFollowId), entityEnabledId, entityFollowId)
                             .setRange(2, 32, 1)
                             .setValueFormatter(value -> Translatable.CHUNKS_Value(value))
@@ -223,6 +239,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                     .addOption(builder.createBooleanOption(voxyEnabledId)
                             .setName(Translatable.VOXY_COMPAT_ENABLED)
                             .setTooltip(Translatable.VOXY_COMPAT_ENABLED_Tooltip)
+                            .setImpact(OptionImpact.HIGH)
                             .setStorageHandler(this::save)
                             .setBinding(value -> config.VOXY_COMPAT_ENABLED = value, () -> config.VOXY_COMPAT_ENABLED)
                             .setDefaultValue(config.VOXY_COMPAT_ENABLED)
@@ -238,6 +255,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                     .addOption(builder.createIntegerOption(Identifier.parse("colorlight:voxy_light_range"))
                             .setName(Translatable.VOXY_LIGHT_RANGE)
                             .setTooltip(Translatable.VOXY_LIGHT_RANGE_Tooltip)
+                            .setImpact(OptionImpact.HIGH)
                             .setEnabledProvider(state -> state.readBooleanOption(voxyEnabledId) && !state.readBooleanOption(voxyFollowId), voxyEnabledId, voxyFollowId)
                             .setRange(16, 512, 16)
                             .setValueFormatter(value -> Translatable.BLOCKS_Value(value))
@@ -273,7 +291,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     }
     private void applySaveNow() {
         config.save();
-        ColorLightEngineHolder.configure(config.lightRangeBlocks, config.USE_GPU_LIGHTING);
+        ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));
         ColorLightBlockRegistry.load(config);
         var client = net.minecraft.client.Minecraft.getInstance();
         if (client.level != null) {
