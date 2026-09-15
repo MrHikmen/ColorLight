@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.light.color;
+package me.mrhikmen.colorlight.core.light;
 
 public final class ColorLightUtil {
 
@@ -12,9 +12,11 @@ public final class ColorLightUtil {
     public static int r(int packed) {
         return packed & 0xFF;
     }
+
     public static int g(int packed) {
         return (packed >> 8) & 0xFF;
     }
+
     public static int b(int packed) {
         return (packed >> 16) & 0xFF;
     }

@@ -11,15 +11,12 @@
 
   "me.colorlight.general.enable": "Enable mod",
   "me.colorlight.general.enable.tooltip": "Enable or disable automatic colored block lighting.",
-
   "me.colorlight.general.light_range": "Light range",
   "me.colorlight.general.light_range.tooltip": "Maximum distance that colored light can spread.",
+  "me.colorlight.general.use_gpu_lighting": "Compute lighting on GPU",
+  "me.colorlight.general.use_gpu_lighting.tooltip": "Uses a GPU compute shader instead of the CPU to calculate colored light propagation. A small test runs automatically on startup; if the GPU or driver fails or produces an incorrect result, the mod silently falls back to the CPU.",
   "me.colorlight.general.smooth_lighting": "Smooth colored lighting",
-  "me.colorlight.general.smooth_lighting.tooltip": "Blends colored light between neighboring blocks at each vertex for a softer appearance. When disabled, each face uses a single sample instead, which is cheaper.",
-  "me.colorlight.general.propagation_mode": "Method of light propagation",
-  "me.colorlight.general.propagation_mode.grid": "Rhomboid",
-  "me.colorlight.general.propagation_mode.smooth": "Circular",
-  "me.colorlight.general.propagation_mode.tooltip": "Changes how light spreads from standard blocks.\nExplanation of these methods:\n - rhomboid: light spreads like vanilla block light (diamond-shaped falloff).\n - circular: light spreads in a circle, with a precision of 1/8 of a block. This setting affects only light from blocks; dynamic entity lighting (e.g., from LambDynamicLights) always uses the circular model, regardless of this toggle. Existing light is recalculated when the setting is changed.",
+  "me.colorlight.general.smooth_lighting.tooltip": "Blends colored light between neighboring blocks at each vertex for a softer appearance. When disabled, each face uses a single sample instead, which is cheaper. The setting works the same whether lighting is computed on the CPU or GPU.",
 
   "me.colorlight.general.weight": "Scanner parameters",
   "me.colorlight.general.brightness_weight": "Brightness weight",

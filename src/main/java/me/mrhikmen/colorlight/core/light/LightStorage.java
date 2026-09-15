@@ -1,6 +1,4 @@
-package me.mrhikmen.colorlight.core.light.engine;
-
-import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
+package me.mrhikmen.colorlight.core.light;
 
 import net.minecraft.core.BlockPos;
 
@@ -17,11 +15,6 @@ public final class LightStorage {
 
     private final ConcurrentHashMap<Long, AtomicIntegerArray> sections = new ConcurrentHashMap<>();
 
-    private record CachedSection(long sectionKey, AtomicIntegerArray section) {
-    }
-
-    private volatile CachedSection hotSection;
-
     public int get(long blockKey) {
         int raw = getRaw(blockKey);
         return raw == UNSET ? ColorLightUtil.EMPTY : raw;
@@ -29,7 +22,7 @@ public final class LightStorage {
 
     public int getRaw(long blockKey) {
         BlockPos pos = BlockPos.of(blockKey);
-        AtomicIntegerArray section = sectionFor(pos, false);
+        AtomicIntegerArray section = sections.get(sectionKey(pos));
         if (section == null)
             return UNSET;
         return section.get(localIndex(pos));
@@ -37,40 +30,19 @@ public final class LightStorage {
 
     public void put(long blockKey, int value) {
         BlockPos pos = BlockPos.of(blockKey);
-        AtomicIntegerArray section = sectionFor(pos, true);
+        AtomicIntegerArray section = sections.computeIfAbsent(sectionKey(pos), k -> newEmptySection());
         section.set(localIndex(pos), value);
     }
 
     public void remove(long blockKey) {
         BlockPos pos = BlockPos.of(blockKey);
-        AtomicIntegerArray section = sectionFor(pos, false);
+        AtomicIntegerArray section = sections.get(sectionKey(pos));
         if (section != null)
             section.set(localIndex(pos), UNSET);
     }
 
     public void clear() {
         sections.clear();
-        hotSection = null;
-    }
-
-    private AtomicIntegerArray sectionFor(BlockPos pos, boolean createIfAbsent) {
-        long key = sectionKey(pos);
-
-        CachedSection cached = hotSection;
-        if (cached != null && cached.sectionKey() == key)
-            return cached.section();
-
-        AtomicIntegerArray section;
-        if (createIfAbsent) {
-            section = sections.computeIfAbsent(key, k -> newEmptySection());
-        } else {
-            section = sections.get(key);
-            if (section == null)
-                return null;
-        }
-
-        hotSection = new CachedSection(key, section);
-        return section;
     }
 
     private static AtomicIntegerArray newEmptySection() {

@@ -13,10 +13,8 @@ import java.util.LinkedList;
 public class ColorLightConfig {
 
     public boolean ENABLE = true;
-
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
-    public String PROPAGATION_MODE = "GRID";
 
     public int BRIGHTNESS_WEIGHT     = 100;
     public int LOCAL_WEIGHT          = 100;
@@ -49,11 +47,9 @@ public class ColorLightConfig {
                 JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
                 this.ENABLE = loaded.ENABLE;
-
                 this.blocks = loaded.blocks;
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
-                this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
 
                 this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
                 this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;

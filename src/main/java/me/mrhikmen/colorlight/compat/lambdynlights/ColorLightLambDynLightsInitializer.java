@@ -7,6 +7,7 @@ public class ColorLightLambDynLightsInitializer implements DynamicLightsInitiali
 
     @Override
     public void onInitializeDynamicLights(DynamicLightsContext context) {
+
         context.itemLightSourceManager().onRegisterEvent().register(registerContext -> {
             for (me.mrhikmen.colorlight.config.BlockSettings entry : me.mrhikmen.colorlight.ColorLightClient.config.blocks) {
                 if (!entry.enable)

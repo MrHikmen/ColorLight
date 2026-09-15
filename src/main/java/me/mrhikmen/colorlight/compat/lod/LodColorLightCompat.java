@@ -5,9 +5,9 @@ import java.util.List;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.compat.lod.voxy.ColorLightVoxyCompat;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.ColorLightUtil;
 
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;
@@ -40,7 +40,7 @@ public final class LodColorLightCompat {
             return;
 
         LevelExtractionEvents.END_EXTRACTION.register(LodColorLightCompat::onExtract);
-        LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(LodLightOverlayRenderer::draw);
+//        LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(LodLightOverlayRenderer::draw);
     }
 
     private static void onExtract(LevelExtractionContext context) {
@@ -49,14 +49,14 @@ public final class LodColorLightCompat {
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null) {
-            LodLightOverlayRenderer.setGlows(List.of());
+//            LodLightOverlayRenderer.setGlows(List.of());
             return;
         }
 
         ClientLevel level = Minecraft.getInstance().level;
         var player = Minecraft.getInstance().player;
         if (level == null || player == null) {
-            LodLightOverlayRenderer.setGlows(List.of());
+//            LodLightOverlayRenderer.setGlows(List.of());
             return;
         }
 
@@ -64,7 +64,7 @@ public final class LodColorLightCompat {
         double py = player.getY();
         double pz = player.getZ();
 
-        List<LodLightOverlayRenderer.GlowState> glows = new ArrayList<>();
+//        List<LodLightOverlayRenderer.GlowState> glows = new ArrayList<>();
 
         for (BlockPos sourcePos : engine.getSourcePositions()) {
             int color = engine.getColor(sourcePos);
@@ -84,38 +84,38 @@ public final class LodColorLightCompat {
             if (distSq > (double) range * range)
                 continue;
 
-            LodLightOverlayRenderer.GlowState glow = buildGlow(provider, level, sourcePos, color, engine.getMaxRangeBlocks());
-            if (glow != null)
-                glows.add(glow);
+//            LodLightOverlayRenderer.GlowState glow = buildGlow(provider, level, sourcePos, color, engine.getMaxRangeBlocks());
+//            if (glow != null)
+//                glows.add(glow);
         }
-        LodLightOverlayRenderer.setGlows(glows);
+//        LodLightOverlayRenderer.setGlows(glows);
     }
 
-    private static LodLightOverlayRenderer.GlowState buildGlow(ILodTerrainProvider provider, ClientLevel level, BlockPos sourcePos, int packedColor, int maxRangeBlocks) {
-        int r = ColorLightUtil.r(packedColor);
-        int g = ColorLightUtil.g(packedColor);
-        int b = ColorLightUtil.b(packedColor);
-
-        int strength = Math.max(r, Math.max(g, b));
-        if (strength <= 0)
-            return null;
-
-        float strengthFactor = strength / (float) ColorLightUtil.MAX;
-        float radius = MIN_RADIUS + RADIUS_PER_STRENGTH * Math.min(maxRangeBlocks, 15);
-        float alpha = MAX_ALPHA * strengthFactor;
-
-        BlockPos anchor = findSurfaceAnchor(provider, level, sourcePos);
-
-        float cx = anchor.getX() + 0.5f;
-        float cy = anchor.getY() + 0.5f;
-        float cz = anchor.getZ() + 0.5f;
-
-        return new LodLightOverlayRenderer.GlowState(
-                cx - radius, cy - radius, cz - radius,
-                cx + radius, cy + radius, cz + radius,
-                r / 255f, g / 255f, b / 255f, alpha
-        );
-    }
+//    private static LodLightOverlayRenderer.GlowState buildGlow(ILodTerrainProvider provider, ClientLevel level, BlockPos sourcePos, int packedColor, int maxRangeBlocks) {
+//        int r = ColorLightUtil.r(packedColor);
+//        int g = ColorLightUtil.g(packedColor);
+//        int b = ColorLightUtil.b(packedColor);
+//
+//        int strength = Math.max(r, Math.max(g, b));
+//        if (strength <= 0)
+//            return null;
+//
+//        float strengthFactor = strength / (float) ColorLightUtil.MAX;
+//        float radius = MIN_RADIUS + RADIUS_PER_STRENGTH * Math.min(maxRangeBlocks, 15);
+//        float alpha = MAX_ALPHA * strengthFactor;
+//
+//        BlockPos anchor = findSurfaceAnchor(provider, level, sourcePos);
+//
+//        float cx = anchor.getX() + 0.5f;
+//        float cy = anchor.getY() + 0.5f;
+//        float cz = anchor.getZ() + 0.5f;
+//
+//        return new LodLightOverlayRenderer.GlowState(
+//                cx - radius, cy - radius, cz - radius,
+//                cx + radius, cy + radius, cz + radius,
+//                r / 255f, g / 255f, b / 255f, alpha
+//        );
+//    }
 
     private static BlockPos findSurfaceAnchor(ILodTerrainProvider provider, ClientLevel level, BlockPos sourcePos) {
         if (provider.isSolidAt(level, sourcePos))

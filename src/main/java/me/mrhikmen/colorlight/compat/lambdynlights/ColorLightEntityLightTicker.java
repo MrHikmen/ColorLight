@@ -3,9 +3,8 @@ package me.mrhikmen.colorlight.compat.lambdynlights;
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -25,17 +24,11 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public final class ColorLightEntityLightTicker {
-    private record QuantizedPos(long ex, long ey, long ez) {
-        static QuantizedPos of(double x, double y, double z) {
-            return new QuantizedPos(Math.round(x * 8.0), Math.round(y * 8.0), Math.round(z * 8.0));
-        }
-    }
 
-    private record TrackedSource(QuantizedPos qpos, List<BlockPos> keys, BlockPos anchor, BlockSettings settings) {
+    private record TrackedSource(BlockPos pos, BlockSettings settings) {
     }
 
     private static final Map<Integer, TrackedSource> ACTIVE_SOURCES = new HashMap<>();
@@ -45,12 +38,15 @@ public final class ColorLightEntityLightTicker {
             return;
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+
             ClientLevel level = client.level;
             if (level == null || client.player == null)
                 return;
+
             ColorLightEngine engine = ColorLightEngineHolder.get();
             if (engine == null)
                 return;
+
             if (!ColorLightClient.config.ENTITY_TRACKING_ENABLED) {
                 clearAllTracked(engine);
                 return;
@@ -58,6 +54,7 @@ public final class ColorLightEntityLightTicker {
 
             BlockPos playerPos = client.player.blockPosition();
             int checkRadiusBlocks = checkRadiusBlocks(client.options.renderDistance().get());
+
             for (Entity entity : level.entitiesForRendering()) {
                 if (!isTrackableSource(entity))
                     continue;
@@ -67,13 +64,15 @@ public final class ColorLightEntityLightTicker {
 
                 processEntity(engine, entity);
             }
+
             ACTIVE_SOURCES.keySet().removeIf(id -> {
                 Entity e = level.getEntity(id);
                 boolean shouldRemove = (e == null)
                         || e.blockPosition().distManhattan(playerPos) > checkRadiusBlocks;
                 if (shouldRemove) {
-                    TrackedSource tracked = ACTIVE_SOURCES.get(id);
-                    removeTracked(engine, tracked);
+                    BlockPos pos = ACTIVE_SOURCES.get(id).pos();
+                    engine.removeSource(pos);
+                    markDirtyAround(engine, pos);
                 }
                 return shouldRemove;
             });
@@ -100,7 +99,8 @@ public final class ColorLightEntityLightTicker {
             return;
 
         for (TrackedSource tracked : ACTIVE_SOURCES.values()) {
-            removeTracked(engine, tracked);
+            engine.removeSource(tracked.pos());
+            markDirtyAround(engine, tracked.pos());
         }
         ACTIVE_SOURCES.clear();
     }
@@ -113,29 +113,22 @@ public final class ColorLightEntityLightTicker {
             return;
         }
 
-        double x = entity.getX();
-        double y = entity.getY();
-        double z = entity.getZ();
-        QuantizedPos qpos = QuantizedPos.of(x, y, z);
-
+        BlockPos currentPos = entity.blockPosition();
         TrackedSource previous = ACTIVE_SOURCES.get(entity.getId());
 
-        if (previous != null && previous.qpos().equals(qpos) && previous.settings() == settings)
+        if (previous != null && previous.pos().equals(currentPos) && previous.settings() == settings)
             return;
 
         if (previous != null) {
-            for (BlockPos key : previous.keys()) {
-                engine.removeSource(key);
-            }
+            engine.removeSource(previous.pos());
         }
-        BlockPos anchor = entity.blockPosition();
-        List<BlockPos> keys = engine.addBlendedSource(x, y, z, settings.r, settings.g, settings.b,
-                Math.min(7, settings.light), ColorLightPropagationMode.SMOOTH);
-        ACTIVE_SOURCES.put(entity.getId(), new TrackedSource(qpos, keys, anchor, settings));
 
-        markDirtyAround(engine, anchor);
-        if (previous != null && !previous.anchor().equals(anchor)) {
-            markDirtyAround(engine, previous.anchor());
+        engine.addSource(currentPos, settings.r, settings.g, settings.b, Math.min(15, settings.light));
+        ACTIVE_SOURCES.put(entity.getId(), new TrackedSource(currentPos, settings));
+
+        markDirtyAround(engine, currentPos);
+        if (previous != null && !previous.pos().equals(currentPos)) {
+            markDirtyAround(engine, previous.pos());
         }
     }
 
@@ -191,15 +184,9 @@ public final class ColorLightEntityLightTicker {
     private static void removeIfTracked(ColorLightEngine engine, int entityId) {
         TrackedSource tracked = ACTIVE_SOURCES.remove(entityId);
         if (tracked != null) {
-            removeTracked(engine, tracked);
+            engine.removeSource(tracked.pos());
+            markDirtyAround(engine, tracked.pos());
         }
-    }
-
-    private static void removeTracked(ColorLightEngine engine, TrackedSource tracked) {
-        for (BlockPos key : tracked.keys()) {
-            engine.removeSource(key);
-        }
-        markDirtyAround(engine, tracked.anchor());
     }
 
     private static void markDirtyAround(ColorLightEngine engine, BlockPos pos) {

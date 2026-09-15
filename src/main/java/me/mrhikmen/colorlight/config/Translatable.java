@@ -15,15 +15,12 @@ public class Translatable {
 
     public static Component ENABLE = Component.translatable("me.colorlight.general.enable");
     public static Component ENABLE_Tooltip = Component.translatable("me.colorlight.general.enable.tooltip");
-
     public static Component LIGHT_RANGE = Component.translatable("me.colorlight.general.light_range");
     public static Component LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.general.light_range.tooltip");
+    public static Component USE_GPU_LIGHTING = Component.translatable("me.colorlight.general.use_gpu_lighting");
+    public static Component USE_GPU_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.use_gpu_lighting.tooltip");
     public static Component SMOOTH_LIGHTING = Component.translatable("me.colorlight.general.smooth_lighting");
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
-    public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
-    public static Component PROPAGATION_MODE_GRID = Component.translatable("me.colorlight.general.propagation_mode.grid");
-    public static Component PROPAGATION_MODE_SMOOTH = Component.translatable("me.colorlight.general.propagation_mode.smooth");
-    public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
 
     public static Component WEIGHT = Component.translatable("me.colorlight.general.weight");
     public static Component BRIGHTNESS_WEIGHT = Component.translatable("me.colorlight.general.brightness_weight");

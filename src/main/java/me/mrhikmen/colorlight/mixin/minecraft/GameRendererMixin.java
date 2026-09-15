@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.mixin.minecraft;
 
-import me.mrhikmen.colorlight.compat.lod.LodLightOverlayRenderer;
+//import me.mrhikmen.colorlight.compat.lod.LodLightOverlayRenderer;
 
 import net.minecraft.client.renderer.GameRenderer;
 
@@ -14,6 +14,6 @@ public class GameRendererMixin {
 
     @Inject(method = "close", at = @At("RETURN"))
     private void colorlight$onGameRendererClose(CallbackInfo ci) {
-        LodLightOverlayRenderer.close();
+//        LodLightOverlayRenderer.close();
     }
 }

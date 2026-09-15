@@ -154,7 +154,7 @@ public class ColorLightBlockConfigScreen extends Screen {
     private static class LightRangeSlider extends AbstractSliderButton {
 
         private static final int MIN = 1;
-        private static final int MAX = 32;
+        private static final int MAX = 15;
 
         private final BlockSettings entry;
         private final Runnable onSave;
