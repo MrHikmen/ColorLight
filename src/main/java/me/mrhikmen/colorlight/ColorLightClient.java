@@ -5,11 +5,13 @@ import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightLambDynLightsCompat
 import me.mrhikmen.colorlight.compat.lod.LodColorLightCompat;
 import me.mrhikmen.colorlight.compat.lod.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
-import me.mrhikmen.colorlight.core.light.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.core.light.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.core.light.ColorLightDaylightRefresher;
-import me.mrhikmen.colorlight.core.light.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.ColorLightCommand;
+import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
+import me.mrhikmen.colorlight.core.light.runtime.ColorLightDaylightRefresher;
+import me.mrhikmen.colorlight.core.light.runtime.ColorLightDirtyFlusher;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.core.render.ModelPlugin;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -34,20 +36,21 @@ public class ColorLightClient implements ClientModInitializer {
     public void onInitializeClient() {
         config.load();
 
-        ColorLightEngineHolder.configure(config.lightRangeBlocks, config.USE_GPU_LIGHTING);
+        ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));
         ColorLightBlockRegistry.load(config);
         ColorLightDaylightRefresher.register();
+        ColorLightDirtyFlusher.register();
 
         ModelLoadingPlugin.register(new ModelPlugin());
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
-                ColorLightEngineHolder.set(client.level));
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
-                ColorLightEngineHolder.set(null));
+
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> ColorLightEngineHolder.set(client.level));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ColorLightEngineHolder.set(null));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> ColorLightEngineHolder.tick());
 
         ColorLightChunkScanner.register();
         ColorLightCommand.register();
+
         if (ColorLightVoxyCompat.isPresent()) {
             LodColorLightCompat.register();
             ColorLightClient.LOGGER.info("[ColorLight] Voxy initialized");

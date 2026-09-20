@@ -1,10 +1,13 @@
-package me.mrhikmen.colorlight.core.light;
+package me.mrhikmen.colorlight.core.light.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
 import me.mrhikmen.colorlight.config.Translatable;
-import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -30,8 +33,11 @@ public final class ColorLightCommand {
                                     .then(ClientCommands.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                             .then(ClientCommands.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                     .then(ClientCommands.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
-                                                            .then(ClientCommands.argument("strength", IntegerArgumentType.integer(0, 30))
-                                                                    .executes(ColorLightCommand::addAtTarget))))))
+                                                            .then(ClientCommands.argument("strength", IntegerArgumentType.integer(1, 32))
+                                                                    .then(ClientCommands.literal("grid")
+                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.GRID)))
+                                                                    .then(ClientCommands.literal("smooth")
+                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.SMOOTH))))))))
 
                             .then(ClientCommands.literal("reset")
                                     .executes(ColorLightCommand::removeAtTarget))
@@ -68,25 +74,14 @@ public final class ColorLightCommand {
         if (engine == null)
             return 0;
 
+        // clearAll() marks every section it had lit as dirty itself
         engine.clearAll();
-
-        var client = Minecraft.getInstance();
-        var player = client.player;
-        if (player != null && client.level != null) {
-            BlockPos pos = player.blockPosition();
-            int radius = 64;
-
-            ColorLightRenderUtil.setBlocksDirty(client.level,
-                    pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                    pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-            );
-        }
 
         ctx.getSource().sendFeedback(Translatable.CLEAN_ALL);
         return 1;
     }
 
-    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx) {
+    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx, ColorLightPropagationMode mode) {
 
         ColorLightCommand.removeAtTarget(ctx);
 
@@ -107,8 +102,7 @@ public final class ColorLightCommand {
         int b = IntegerArgumentType.getInteger(ctx, "b");
         int strength = IntegerArgumentType.getInteger(ctx, "strength");
 
-        engine.addSource(pos, r, g, b, strength);
-        markDirtyAround(pos);
+        engine.addSource(pos, r, g, b, strength, mode);
 
         ctx.getSource().sendFeedback(Translatable.LIGHT_ADD);
         return 1;
@@ -127,7 +121,6 @@ public final class ColorLightCommand {
             return 0;
 
         engine.removeSource(pos);
-        markDirtyAround(pos);
 
         ctx.getSource().sendFeedback(Translatable.LIGHT_DEL);
         return 1;
@@ -139,20 +132,6 @@ public final class ColorLightCommand {
             return blockHit.getBlockPos();
         }
         return null;
-    }
-
-    private static void markDirtyAround(BlockPos pos) {
-        var client = Minecraft.getInstance();
-        if (client.level == null)
-            return;
-
-        ColorLightEngine engine = ColorLightEngineHolder.get();
-        int radius = (engine != null ? engine.getMaxRangeBlocks() : 15) + 1;
-
-        ColorLightRenderUtil.setBlocksDirty(client.level,
-                pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-        );
     }
 
     private ColorLightCommand() {
