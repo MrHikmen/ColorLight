@@ -5,15 +5,12 @@ import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
-import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.ItemFrame;
@@ -21,24 +18,61 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Keeps a coloured light glowing on entities that hold/are a light-emitting block.
+ * <p>
+ * The game thread only decides <i>what</i> each entity's light should currently look like; the
+ * expensive part (flooding the light through the surrounding blocks) runs on a dedicated worker
+ * thread into the engine's separate dynamic layer. Requests are coalesced per entity - if the worker
+ * is busy the newest position simply replaces the older one - so walking around, or a crowd of
+ * light-holding mobs, can never stall a frame or build up a backlog.
+ */
 public final class ColorLightEntityLightTicker {
-    private record QuantizedPos(long ex, long ey, long ez) {
-        static QuantizedPos of(double x, double y, double z) {
-            return new QuantizedPos(Math.round(x * 8.0), Math.round(y * 8.0), Math.round(z * 8.0));
-        }
+
+    /** Same ceiling the old implementation used for entity light. */
+    private static final int MAX_ENTITY_STRENGTH = 7;
+
+    /** Light is only recomputed after the entity moved at least this fraction of a block (1/8). */
+    private static final double POSITION_STEPS_PER_BLOCK = 8.0;
+
+    private record Request(ColorLightEngine engine, int id, boolean remove,
+                           double x, double y, double z, int r, int g, int b, int strength) {
     }
 
-    private record TrackedSource(QuantizedPos qpos, List<BlockPos> keys, BlockPos anchor, BlockSettings settings) {
+    /** Last state sent to the worker for one entity. Game thread only. */
+    private static final class Tracked {
+        long qx, qy, qz;
+        BlockSettings settings;
+        int lastSeenTick;
     }
 
-    private static final Map<Integer, TrackedSource> ACTIVE_SOURCES = new HashMap<>();
+    private static final Map<Integer, Tracked> TRACKED = new HashMap<>();
+    private static ColorLightEngine trackedEngine;
+    private static int tickCounter;
+
+    private static final ConcurrentHashMap<Integer, Request> REQUESTS = new ConcurrentHashMap<>();
+    private static final AtomicBoolean DRAIN_SCHEDULED = new AtomicBoolean();
+    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "ColorLight Dynamic Light");
+        thread.setDaemon(true);
+        thread.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
+        return thread;
+    });
+
+    // worker thread only
+    private static ColorLightEngine workerEngine;
+    private static ColorLightEngine.DynamicLightWorker worker;
+    private static boolean loggedFailure;
 
     public static void register() {
         if (!ColorLightLambDynLightsCompat.isPresent())
@@ -51,13 +85,24 @@ public final class ColorLightEntityLightTicker {
             ColorLightEngine engine = ColorLightEngineHolder.get();
             if (engine == null)
                 return;
+
+            if (engine != trackedEngine) {
+                // new world / rebuilt engine: everything tracked belonged to the old one
+                TRACKED.clear();
+                REQUESTS.clear();
+                trackedEngine = engine;
+            }
+
             if (!ColorLightClient.config.ENTITY_TRACKING_ENABLED) {
-                clearAllTracked(engine);
+                removeAllTracked(engine);
                 return;
             }
 
+            tickCounter++;
+
             BlockPos playerPos = client.player.blockPosition();
             int checkRadiusBlocks = checkRadiusBlocks(client.options.renderDistance().get());
+
             for (Entity entity : level.entitiesForRendering()) {
                 if (!isTrackableSource(entity))
                     continue;
@@ -67,16 +112,16 @@ public final class ColorLightEntityLightTicker {
 
                 processEntity(engine, entity);
             }
-            ACTIVE_SOURCES.keySet().removeIf(id -> {
-                Entity e = level.getEntity(id);
-                boolean shouldRemove = (e == null)
-                        || e.blockPosition().distManhattan(playerPos) > checkRadiusBlocks;
-                if (shouldRemove) {
-                    TrackedSource tracked = ACTIVE_SOURCES.get(id);
-                    removeTracked(engine, tracked);
+
+            // anything not seen this tick left range, despawned or dropped the light
+            Iterator<Map.Entry<Integer, Tracked>> it = TRACKED.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<Integer, Tracked> entry = it.next();
+                if (entry.getValue().lastSeenTick != tickCounter) {
+                    submitRemove(engine, entry.getKey());
+                    it.remove();
                 }
-                return shouldRemove;
-            });
+            }
         });
     }
 
@@ -95,56 +140,76 @@ public final class ColorLightEntityLightTicker {
         return chunks * 16;
     }
 
-    private static void clearAllTracked(ColorLightEngine engine) {
-        if (ACTIVE_SOURCES.isEmpty())
+    private static void removeAllTracked(ColorLightEngine engine) {
+        if (TRACKED.isEmpty())
             return;
 
-        for (TrackedSource tracked : ACTIVE_SOURCES.values()) {
-            removeTracked(engine, tracked);
+        for (Integer id : TRACKED.keySet()) {
+            submitRemove(engine, id);
         }
-        ACTIVE_SOURCES.clear();
+        TRACKED.clear();
     }
 
     private static void processEntity(ColorLightEngine engine, Entity entity) {
+        int id = entity.getId();
         BlockSettings settings = findGlowingBlockSettings(entity);
+        Tracked tracked = TRACKED.get(id);
 
         if (settings == null) {
-            removeIfTracked(engine, entity.getId());
+            if (tracked != null) {
+                submitRemove(engine, id);
+                TRACKED.remove(id);
+            }
             return;
         }
 
         double x = entity.getX();
         double y = entity.getY();
         double z = entity.getZ();
-        QuantizedPos qpos = QuantizedPos.of(x, y, z);
+        long qx = Math.round(x * POSITION_STEPS_PER_BLOCK);
+        long qy = Math.round(y * POSITION_STEPS_PER_BLOCK);
+        long qz = Math.round(z * POSITION_STEPS_PER_BLOCK);
 
-        TrackedSource previous = ACTIVE_SOURCES.get(entity.getId());
-
-        if (previous != null && previous.qpos().equals(qpos) && previous.settings() == settings)
-            return;
-
-        if (previous != null) {
-            for (BlockPos key : previous.keys()) {
-                engine.removeSource(key);
-            }
+        if (tracked == null) {
+            tracked = new Tracked();
+            TRACKED.put(id, tracked);
+        } else {
+            tracked.lastSeenTick = tickCounter;
+            // unchanged and no block changed inside its light: nothing to do
+            if (tracked.qx == qx && tracked.qy == qy && tracked.qz == qz
+                    && tracked.settings == settings && !engine.isDynamicStale(id))
+                return;
         }
-        BlockPos anchor = entity.blockPosition();
-        List<BlockPos> keys = engine.addBlendedSource(x, y, z, settings.r, settings.g, settings.b,
-                Math.min(7, settings.light), ColorLightPropagationMode.SMOOTH);
-        ACTIVE_SOURCES.put(entity.getId(), new TrackedSource(qpos, keys, anchor, settings));
 
-        markDirtyAround(engine, anchor);
-        if (previous != null && !previous.anchor().equals(anchor)) {
-            markDirtyAround(engine, previous.anchor());
-        }
+        tracked.lastSeenTick = tickCounter;
+        tracked.qx = qx;
+        tracked.qy = qy;
+        tracked.qz = qz;
+        tracked.settings = settings;
+
+        REQUESTS.put(id, new Request(engine, id, false, x, y, z,
+                settings.r, settings.g, settings.b, Math.min(MAX_ENTITY_STRENGTH, settings.light)));
+        scheduleDrain();
     }
+
+    private static void submitRemove(ColorLightEngine engine, int id) {
+        REQUESTS.put(id, new Request(engine, id, true, 0, 0, 0, 0, 0, 0, 0));
+        scheduleDrain();
+    }
+
+    // ---- item / block -> light settings (registry lookup, no config scans) ----
 
     private static BlockSettings findGlowingBlockSettings(Entity entity) {
         if (entity instanceof LivingEntity living) {
-            BlockSettings fromMain = settingsOf(living.getMainHandItem());
+            ItemStack main = living.getMainHandItem();
+            ItemStack off = living.getOffhandItem();
+            if (main.isEmpty() && off.isEmpty())
+                return null;
+
+            BlockSettings fromMain = settingsOf(main);
             if (fromMain != null)
                 return fromMain;
-            return settingsOf(living.getOffhandItem());
+            return settingsOf(off);
         }
 
         if (entity instanceof ItemEntity itemEntity) {
@@ -168,50 +233,74 @@ public final class ColorLightEntityLightTicker {
         if (!(stack.getItem() instanceof BlockItem blockItem))
             return null;
 
-        return settingsOf(blockItem.getBlock().defaultBlockState());
+        BlockSettings settings = ColorLightBlockRegistry.get(blockItem.getBlock());
+        if (settings == null)
+            return null;
+
+        // A resource pack set this item to "luminance": 0 for LambDynamicLights: it is not a light source, so
+        // ColorLight doesn't light it either. Only stacks that would otherwise glow get here, so this is cheap.
+        if (LdlItemLuminanceOverrides.isDisabled(stack))
+            return null;
+
+        return settings;
     }
 
     private static BlockSettings settingsOf(BlockState state) {
         if (state == null || state.isAir())
             return null;
 
-        Block block = state.getBlock();
-        Identifier blockId = BuiltInRegistries.BLOCK.getKey(block);
-        if (blockId == null)
-            return null;
+        return ColorLightBlockRegistry.get(state.getBlock());
+    }
 
-        for (BlockSettings entry : ColorLightClient.config.blocks) {
-            if (entry.enable && entry.getBlock().equals(blockId)) {
-                return entry;
+    // ---- worker ----
+
+    private static void scheduleDrain() {
+        if (DRAIN_SCHEDULED.compareAndSet(false, true)) {
+            WORKER.execute(ColorLightEntityLightTicker::drain);
+        }
+    }
+
+    private static void drain() {
+        try {
+            while (true) {
+                Iterator<Request> it = REQUESTS.values().iterator();
+                if (!it.hasNext())
+                    break;
+
+                Request request = it.next();
+                // if a newer request replaced it meanwhile, skip this one and pick up the newer next round
+                if (!REQUESTS.remove(request.id(), request))
+                    continue;
+
+                try {
+                    apply(request);
+                } catch (Throwable t) {
+                    if (!loggedFailure) {
+                        loggedFailure = true;
+                        ColorLightClient.LOGGER.warn("[ColorLight] Dynamic light update failed (further failures are not logged)", t);
+                    }
+                }
             }
-        }
-        return null;
-    }
-
-    private static void removeIfTracked(ColorLightEngine engine, int entityId) {
-        TrackedSource tracked = ACTIVE_SOURCES.remove(entityId);
-        if (tracked != null) {
-            removeTracked(engine, tracked);
+        } finally {
+            DRAIN_SCHEDULED.set(false);
+            if (!REQUESTS.isEmpty())
+                scheduleDrain();
         }
     }
 
-    private static void removeTracked(ColorLightEngine engine, TrackedSource tracked) {
-        for (BlockPos key : tracked.keys()) {
-            engine.removeSource(key);
+    private static void apply(Request request) {
+        ColorLightEngine engine = request.engine();
+        if (workerEngine != engine) {
+            workerEngine = engine;
+            worker = engine.newDynamicWorker();
         }
-        markDirtyAround(engine, tracked.anchor());
-    }
 
-    private static void markDirtyAround(ColorLightEngine engine, BlockPos pos) {
-        var client = net.minecraft.client.Minecraft.getInstance();
-        if (client.level == null || pos == null)
-            return;
-
-        int radius = engine.getMaxRangeBlocks() + 1;
-        ColorLightRenderUtil.setBlocksDirty(client.level,
-                pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-        );
+        if (request.remove()) {
+            worker.remove(request.id());
+        } else {
+            worker.update(request.id(), request.x(), request.y(), request.z(),
+                    request.r(), request.g(), request.b(), request.strength());
+        }
     }
 
     private ColorLightEntityLightTicker() {

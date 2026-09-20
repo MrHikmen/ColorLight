@@ -7,6 +7,7 @@ import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.compat.lod.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.core.light.engine.SourceSnapshot;
 import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionContext;
@@ -25,6 +26,17 @@ public final class LodColorLightCompat {
     private static final float MIN_RADIUS = 0.6f;
     private static final float RADIUS_PER_STRENGTH = 0.09f;
     private static final float MAX_ALPHA = 0.55f;
+
+    /**
+     * onExtract runs every frame, but which sources are in range/in LOD terrain barely changes from
+     * one frame to the next. The glow list is rebuilt at most this often. A changed source set does NOT
+     * force a rebuild on its own: while flying, chunks load and unload constantly, so the set changes
+     * nearly every frame and that would bring back the per-frame rebuild this throttle exists to avoid.
+     */
+    private static final long REBUILD_INTERVAL_NANOS = 400_000_000L;
+
+    private static ColorLightEngine lastEngine;
+    private static long lastBuildNanos;
 
     public static void register() {
         if (registered)
@@ -50,6 +62,7 @@ public final class LodColorLightCompat {
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null) {
             LodLightOverlayRenderer.setGlows(List.of());
+            lastEngine = null;
             return;
         }
 
@@ -57,8 +70,18 @@ public final class LodColorLightCompat {
         var player = Minecraft.getInstance().player;
         if (level == null || player == null) {
             LodLightOverlayRenderer.setGlows(List.of());
+            lastEngine = null;
             return;
         }
+
+        long now = System.nanoTime();
+        if (engine == lastEngine && now - lastBuildNanos < REBUILD_INTERVAL_NANOS)
+            return; // the glows already handed to the renderer are still good
+
+        lastEngine = engine;
+        lastBuildNanos = now;
+
+        SourceSnapshot snapshot = engine.getSourceSnapshot();
 
         double px = player.getX();
         double py = player.getY();
@@ -66,7 +89,7 @@ public final class LodColorLightCompat {
 
         List<LodLightOverlayRenderer.GlowState> glows = new ArrayList<>();
 
-        for (BlockPos sourcePos : engine.getSourcePositions()) {
+        for (BlockPos sourcePos : snapshot.positions()) {
             int color = engine.getColor(sourcePos);
             if (ColorLightUtil.isEmpty(color))
                 continue;

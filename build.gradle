@@ -40,9 +40,6 @@ repositories {
             includeGroup "maven.modrinth"
         }
     }
-    flatDir {
-        dir "deps"
-    }
 }
 
 dependencies {
@@ -62,8 +59,6 @@ dependencies {
 
     //dh compat
     compileOnly "maven.modrinth:uCdwusMi:gBf0SaV1"
-
-    compileOnly files("deps/poks-colored-light-0.1.0-SNAPSHOT.jar")
 }
 
 processResources {

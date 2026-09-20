@@ -11,7 +11,6 @@ import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
-import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
@@ -296,24 +295,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         var client = net.minecraft.client.Minecraft.getInstance();
         if (client.level != null) {
             var oldEngine = ColorLightEngineHolder.get();
-            java.util.List<net.minecraft.core.BlockPos> oldSources = oldEngine != null ? oldEngine.getSourcePositions() : java.util.List.of();
             ColorLightEngineHolder.set(client.level);
+            var newEngine = ColorLightEngineHolder.get();
+            // the old engine's light is gone: rebuild exactly the sections it had lit (no whole-render-distance rebuild)
+            if (newEngine != null && oldEngine != null) {
+                newEngine.inheritDirtyFrom(oldEngine);
+            }
             if (config.ENABLE) {
-                ColorLightChunkScanner.markPositionsDirty(client.level, oldSources);
                 ColorLightChunkScanner.rescanAll(client.level);
-            } else {
-                markWholeRenderDistanceDirty(client);
             }
         }
-    }
-    private static void markWholeRenderDistanceDirty(net.minecraft.client.Minecraft client) {
-        var player = client.player;
-        if (player == null || client.level == null) return;
-        int renderDistanceBlocks = client.options.renderDistance().get() << 4;
-        var pos = player.blockPosition();
-        ColorLightRenderUtil.setBlocksDirtySafe(client.level,
-                pos.getX() - renderDistanceBlocks, client.level.getMinY(), pos.getZ() - renderDistanceBlocks,
-                pos.getX() + renderDistanceBlocks, client.level.getMaxY(), pos.getZ() + renderDistanceBlocks
-        );
     }
 }

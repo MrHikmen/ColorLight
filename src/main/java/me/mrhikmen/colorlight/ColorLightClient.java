@@ -8,6 +8,7 @@ import me.mrhikmen.colorlight.config.ColorLightConfig;
 import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.runtime.ColorLightDaylightRefresher;
+import me.mrhikmen.colorlight.core.light.runtime.ColorLightDirtyFlusher;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
 import me.mrhikmen.colorlight.core.light.command.ColorLightCommand;
@@ -38,6 +39,7 @@ public class ColorLightClient implements ClientModInitializer {
         ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));
         ColorLightBlockRegistry.load(config);
         ColorLightDaylightRefresher.register();
+        ColorLightDirtyFlusher.register();
 
         ModelLoadingPlugin.register(new ModelPlugin());
 

@@ -1,6 +1,5 @@
 package me.mrhikmen.colorlight.core.scanner.model;
 
-import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
 import me.mrhikmen.colorlight.core.scanner.texture.SearchBestPixel;
@@ -19,13 +18,29 @@ import com.google.gson.JsonParser;
 
 public class ModelTextureResolver {
 
-    public static void resolve(List<Identifier> models, int i) {
+    /**
+     * Resolved texture map per model for the current resource reload. A block with many state
+     * variants points at the same few models over and over, and the same model is shared between blocks
+     * (torch / wall torch, ...); parsing its JSON and its parent chain once is enough.
+     */
+    private static final Map<Identifier, Map<String, String>> MODEL_CACHE = new HashMap<>();
+
+    public static void clearCache() {
+        MODEL_CACHE.clear();
+    }
+
+    public static void resolve(List<Identifier> models, BlockSettings data) {
 
         List<PixelData> bestPixels = new ArrayList<>();
 
-        for (Identifier modelId : models) {
+        // repeats can't change the outcome (a later equal score never replaces an earlier one), so skip them
+        for (Identifier modelId : new LinkedHashSet<>(models)) {
 
-            Map<String, String> textures = resolveTextures(modelId, new HashSet<>());
+            Map<String, String> textures = MODEL_CACHE.get(modelId);
+            if (textures == null) {
+                textures = resolveTextures(modelId, new HashSet<>());
+                MODEL_CACHE.put(modelId, textures);
+            }
 
             for (Map.Entry<String, String> entry : textures.entrySet()) {
 
@@ -63,8 +78,6 @@ public class ModelTextureResolver {
         }
 
         if (best != null) {
-            BlockSettings data = ColorLightClient.config.blocks.get(i);
-
             data.r = best.r;
             data.g = best.g;
             data.b = best.b;

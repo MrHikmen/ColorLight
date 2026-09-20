@@ -17,6 +17,11 @@ public final class IntQueue {
         return size == 0;
     }
 
+    public void clear() {
+        head = 0;
+        size = 0;
+    }
+
     public int size() {
         return size;
     }

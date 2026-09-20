@@ -4,14 +4,11 @@ import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
-import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -35,64 +32,47 @@ public abstract class LevelChunkMixin {
         if (cir.getReturnValue() == null)
             return;
 
-        if (!(this.level instanceof ClientLevel clientLevel))
+        if (!(this.level instanceof ClientLevel))
             return;
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null)
             return;
 
-        Block newBlock = state.getBlock();
-        BlockSettings entry = ColorLightBlockRegistry.get(newBlock);
+        // The engine records exactly which render sections its change touched
+        // (see ColorLightEngine#drainDirtySections), so nothing needs to be marked dirty by hand here.
+        BlockSettings entry = ColorLightBlockRegistry.get(state.getBlock());
+        int emission = (entry != null) ? state.getLightEmission() : 0;
 
-        boolean mayAffectLighting;
+        // Flags dynamic lights near the change for recomputation. Lock-free, so it stays on the game thread.
+        engine.invalidateDynamicAround(pos);
 
-        if (entry != null) {
-
-            int emission = state.getLightEmission();
-
-            if (emission > 0) {
-                int strength = Math.min(entry.light, emission);
-                engine.addSource(pos, entry.r, entry.g, entry.b, strength);
-                mayAffectLighting = true;
-            } else if (engine.hasSource(pos)) {
-                engine.removeSource(pos);
-                mayAffectLighting = true;
-            } else if (colorlight$mayAffectLighting(engine, pos)) {
-                engine.onBlockChanged(pos);
-                mayAffectLighting = true;
-            } else {
-                mayAffectLighting = false;
-            }
-        } else if (engine.hasSource(pos)) {
-            engine.removeSource(pos);
-            mayAffectLighting = true;
-        } else if (colorlight$mayAffectLighting(engine, pos)) {
-            engine.onBlockChanged(pos);
-            mayAffectLighting = true;
-        } else {
-            mayAffectLighting = false;
-        }
-
-        if (!mayAffectLighting)
+        // Nothing lit nearby and not a source: the change cannot affect static light, so don't even queue it.
+        // (Checked lock-free; this is the overwhelmingly common case.) Only trusted while no flood is running -
+        // otherwise light that hasn't reached this block yet would later pass straight through it.
+        if (emission <= 0 && ColorLightChunkScanner.isApplyIdle()
+                && !engine.hasSource(pos) && !engine.hasStaticLightNear(pos))
             return;
 
-        int radius = engine.getMaxRangeBlocks() + 1;
+        // The light update itself needs the engine lock, which the apply thread can hold for milliseconds while
+        // flooding freshly loaded chunks. Do it there (FIFO with chunk loads/unloads) instead of stalling the frame.
+        final BlockPos changed = pos.immutable();
+        final BlockSettings source = (emission > 0) ? entry : null;
+        final int strength = (source != null) ? Math.min(source.light, emission) : 0;
 
-        ColorLightRenderUtil.setBlocksDirtySafe(clientLevel,
-                pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-        );
-    }
+        ColorLightChunkScanner.runOnApplyThread(() -> {
+            if (engine != ColorLightEngineHolder.get())
+                return; // world changed meanwhile
 
-    private static boolean colorlight$mayAffectLighting(ColorLightEngine engine, BlockPos pos) {
-        if (!ColorLightUtil.isEmpty(engine.getColor(pos)))
-            return true;
-
-        for (Direction dir : Direction.values()) {
-            if (!ColorLightUtil.isEmpty(engine.getColor(pos.relative(dir))))
-                return true;
-        }
-        return false;
+            if (source != null) {
+                // re-adding an identical source is a no-op, a changed one is cleaned up and re-flooded
+                engine.addSource(changed, source.r, source.g, source.b, strength);
+            } else if (engine.hasSource(changed)) {
+                engine.removeSource(changed);
+            } else {
+                // a cheap early-out if no static light is nearby
+                engine.onBlockChanged(changed);
+            }
+        });
     }
 }

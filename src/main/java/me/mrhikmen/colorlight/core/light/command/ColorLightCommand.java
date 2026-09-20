@@ -8,8 +8,6 @@ import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
-import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -76,19 +74,8 @@ public final class ColorLightCommand {
         if (engine == null)
             return 0;
 
+        // clearAll() marks every section it had lit as dirty itself
         engine.clearAll();
-
-        var client = Minecraft.getInstance();
-        var player = client.player;
-        if (player != null && client.level != null) {
-            BlockPos pos = player.blockPosition();
-            int radius = 64;
-
-            ColorLightRenderUtil.setBlocksDirty(client.level,
-                    pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                    pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-            );
-        }
 
         ctx.getSource().sendFeedback(Translatable.CLEAN_ALL);
         return 1;
@@ -117,8 +104,6 @@ public final class ColorLightCommand {
 
         engine.addSource(pos, r, g, b, strength, mode);
 
-        markDirtyAround(pos);
-
         ctx.getSource().sendFeedback(Translatable.LIGHT_ADD);
         return 1;
     }
@@ -136,7 +121,6 @@ public final class ColorLightCommand {
             return 0;
 
         engine.removeSource(pos);
-        markDirtyAround(pos);
 
         ctx.getSource().sendFeedback(Translatable.LIGHT_DEL);
         return 1;
@@ -148,20 +132,6 @@ public final class ColorLightCommand {
             return blockHit.getBlockPos();
         }
         return null;
-    }
-
-    private static void markDirtyAround(BlockPos pos) {
-        var client = Minecraft.getInstance();
-        if (client.level == null)
-            return;
-
-        ColorLightEngine engine = ColorLightEngineHolder.get();
-        int radius = (engine != null ? engine.getMaxRangeBlocks() : 15) + 1;
-
-        ColorLightRenderUtil.setBlocksDirty(client.level,
-                pos.getX() - radius, pos.getY() - radius, pos.getZ() - radius,
-                pos.getX() + radius, pos.getY() + radius, pos.getZ() + radius
-        );
     }
 
     private ColorLightCommand() {

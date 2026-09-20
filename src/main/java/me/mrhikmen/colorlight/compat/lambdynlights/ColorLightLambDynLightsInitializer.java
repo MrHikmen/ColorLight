@@ -8,6 +8,10 @@ public class ColorLightLambDynLightsInitializer implements DynamicLightsInitiali
     @Override
     public void onInitializeDynamicLights(DynamicLightsContext context) {
         context.itemLightSourceManager().onRegisterEvent().register(registerContext -> {
+            // Read what resource packs say about item luminance first (this fires whenever LambDynamicLights applies
+            // its data), so an explicit "luminance": 0 can be honoured below and by the entity light ticker.
+            LdlItemLuminanceOverrides.reload(registerContext.registryLookup());
+
             for (me.mrhikmen.colorlight.config.BlockSettings entry : me.mrhikmen.colorlight.ColorLightClient.config.blocks) {
                 if (!entry.enable)
                     continue;
@@ -19,6 +23,11 @@ public class ColorLightLambDynLightsInitializer implements DynamicLightsInitiali
 
                 net.minecraft.world.item.Item item = block.asItem();
                 if (item == net.minecraft.world.item.Items.AIR)
+                    continue;
+
+                // LambDynamicLights takes the maximum over all sources, so registering a light here would override
+                // a resource pack that deliberately set this item to luminance 0. Leave such items alone.
+                if (LdlItemLuminanceOverrides.isDisabled(new net.minecraft.world.item.ItemStack(item)))
                     continue;
 
                 registerContext.register(item, Math.min(15, entry.light));

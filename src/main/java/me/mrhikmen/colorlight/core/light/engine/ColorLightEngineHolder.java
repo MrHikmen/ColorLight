@@ -4,7 +4,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 
 public final class ColorLightEngineHolder {
 
-    private static ColorLightEngine engine;
+    private static volatile ColorLightEngine engine;
 
     private static int maxRangeBlocks = 15;
     private static ColorLightPropagationMode propagationMode = ColorLightPropagationMode.GRID;

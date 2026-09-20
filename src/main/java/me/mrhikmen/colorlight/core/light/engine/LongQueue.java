@@ -22,6 +22,12 @@ public final class LongQueue {
         return size == 0;
     }
 
+    /** Empties the queue but keeps its backing array, so it can be reused between passes. */
+    public void clear() {
+        head = 0;
+        size = 0;
+    }
+
     public int size() {
         return size;
     }

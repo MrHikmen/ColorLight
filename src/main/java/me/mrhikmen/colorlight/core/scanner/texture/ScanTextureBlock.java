@@ -9,11 +9,15 @@ import net.minecraft.server.packs.resources.Resource;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 
+/**
+ * Texture access and the individual pixel-scoring terms used by {@link SearchBestPixel}.
+ * <p>
+ * Pixels are held as plain int arrays (one int per pixel) instead of one {@code PixelData} object each
+ * plus a 2D object array plus a list: a 512x512 resource-pack texture used to allocate ~262k objects
+ * just to be scanned once. The formulas are unchanged.
+ */
 public class ScanTextureBlock {
 
     public static class TextureData {
@@ -21,14 +25,13 @@ public class ScanTextureBlock {
         public final int width;
         public final int height;
 
-        public final List<PixelData> pixels;
-        public final PixelData[][] image;
+        /** Row-major (index = y * width + x), each value exactly what {@code NativeImage#getPixel} returned. */
+        public final int[] rgba;
 
-        public TextureData(int width, int height, List<PixelData> pixels, PixelData[][] image) {
+        public TextureData(int width, int height, int[] rgba) {
             this.width = width;
             this.height = height;
-            this.pixels = pixels;
-            this.image = image;
+            this.rgba = rgba;
         }
     }
 
@@ -41,44 +44,53 @@ public class ScanTextureBlock {
             return null;
         }
 
-        try (InputStream stream = resource.get().open()) {
-
-            NativeImage image = NativeImage.read(stream);
+        try (InputStream stream = resource.get().open(); NativeImage image = NativeImage.read(stream)) {
 
             int width = image.getWidth();
             int height = image.getHeight();
 
-            PixelData[][] map = new PixelData[width][height];
-            List<PixelData> pixels = new ArrayList<>(width * height);
-
+            int[] pixels = new int[width * height];
             for (int y = 0; y < height; y++) {
+                int row = y * width;
                 for (int x = 0; x < width; x++) {
-                    int rgba = image.getPixel(x, y);
-
-                    int a = (rgba >>> 24) & 255;
-                    int b = (rgba >>> 16) & 255;
-                    int g = (rgba >>> 8) & 255;
-                    int r = rgba & 255;
-
-                    PixelData pixel = new PixelData(x, y, b, g, r, a);
-
-                    pixels.add(pixel);
-                    map[x][y] = pixel;
+                    pixels[row + x] = image.getPixel(x, y);
                 }
             }
-            image.close();
-
-            return new TextureData(width, height, pixels, map);
+            return new TextureData(width, height, pixels);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static double brightness(PixelData p) {
-        return (0.2126 * p.r + 0.7152 * p.g + 0.0722 * p.b) / 255.0;
+    // Channel decoding is deliberately identical to the old PixelData construction:
+    // PixelData.r = bits 16..23, PixelData.g = bits 8..15, PixelData.b = bits 0..7.
+
+    public static int alpha(int rgba) {
+        return (rgba >>> 24) & 255;
     }
 
-    public static double localBrightness(PixelData[][] image, PixelData center, int width, int height) {
+    public static int red(int rgba) {
+        return (rgba >>> 16) & 255;
+    }
+
+    public static int green(int rgba) {
+        return (rgba >>> 8) & 255;
+    }
+
+    public static int blue(int rgba) {
+        return rgba & 255;
+    }
+
+    public static boolean isVisible(int rgba) {
+        return alpha(rgba) > 0;
+    }
+
+    public static double brightness(int rgba) {
+        return (0.2126 * red(rgba) + 0.7152 * green(rgba) + 0.0722 * blue(rgba)) / 255.0;
+    }
+
+    /** Mean brightness of the visible pixels in the 3x3 patch around (x, y), including the centre. */
+    public static double localBrightness(TextureData tex, int x, int y) {
 
         double sum = 0;
         int count = 0;
@@ -86,18 +98,18 @@ public class ScanTextureBlock {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
 
-                int nx = center.x + dx;
-                int ny = center.y + dy;
+                int nx = x + dx;
+                int ny = y + dy;
 
                 if (nx < 0 || ny < 0)
                     continue;
 
-                if (nx >= width || ny >= height)
+                if (nx >= tex.width || ny >= tex.height)
                     continue;
 
-                PixelData p = image[nx][ny];
+                int p = tex.rgba[ny * tex.width + nx];
 
-                if (p == null || !p.isVisible())
+                if (!isVisible(p))
                     continue;
 
                 sum += brightness(p);
@@ -106,145 +118,115 @@ public class ScanTextureBlock {
         }
         return count == 0 ? 0 : sum / count;
     }
-    public static class Component {
-
-        public final List<PixelData> pixels = new ArrayList<>();
-        public int size() {
-            return pixels.size();
-        }
-    }
 
     private static final int COLOR_DISTANCE = 70;
-    private static boolean colorDistance(PixelData a, PixelData b) {
+    private static final int COLOR_DISTANCE_SQ = COLOR_DISTANCE * COLOR_DISTANCE;
 
-        int dr = a.r - b.r;
-        int dg = a.g - b.g;
-        int db = a.b - b.b;
+    /**
+     * Sizes of the colour regions of the texture, indexed like {@link TextureData#rgba}.
+     * A region grows (8-neighbourhood) from its first pixel over visible, not-yet-claimed pixels that lie within
+     * {@value #COLOR_DISTANCE} colour distance of that <i>first</i> pixel - the same rule as before.
+     * Expensive, so callers only ask for it when region size actually influences the score.
+     */
+    public static int[] regionSizes(TextureData tex) {
 
-        return Math.sqrt(dr * dr + dg * dg + db * db) <= COLOR_DISTANCE;
-    }
+        int w = tex.width;
+        int h = tex.height;
+        int total = w * h;
 
-    public static Component component(PixelData start, PixelData[][] image, boolean[][] visited, int width, int height) {
+        int[] regionSize = new int[total];
+        boolean[] visited = new boolean[total];
+        int[] queue = new int[total];
 
-        Component component = new Component();
+        for (int start = 0; start < total; start++) {
 
-        ArrayDeque<PixelData> queue = new ArrayDeque<>();
+            int startPixel = tex.rgba[start];
+            if (!isVisible(startPixel) || visited[start])
+                continue;
 
-        queue.add(start);
-        visited[start.x][start.y] = true;
+            int sr = red(startPixel), sg = green(startPixel), sb = blue(startPixel);
 
-        while (!queue.isEmpty()) {
+            int head = 0, tail = 0;
+            queue[tail++] = start;
+            visited[start] = true;
 
-            PixelData current = queue.poll();
-            component.pixels.add(current);
+            while (head < tail) {
+                int cur = queue[head++];
+                int cx = cur % w;
+                int cy = cur / w;
 
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    if (dx == 0 && dy == 0)
-                        continue;
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        if (dx == 0 && dy == 0)
+                            continue;
 
-                    int nx = current.x + dx;
-                    int ny = current.y + dy;
+                        int nx = cx + dx;
+                        int ny = cy + dy;
 
-                    if (nx < 0 || ny < 0)
-                        continue;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                            continue;
 
-                    if (nx >= width || ny >= height)
-                        continue;
+                        int ni = ny * w + nx;
+                        if (visited[ni])
+                            continue;
 
-                    if (visited[nx][ny])
-                        continue;
+                        int n = tex.rgba[ni];
+                        if (!isVisible(n))
+                            continue;
 
-                    PixelData neighbour = image[nx][ny];
+                        int dr = sr - red(n);
+                        int dg = sg - green(n);
+                        int db = sb - blue(n);
+                        if (dr * dr + dg * dg + db * db > COLOR_DISTANCE_SQ)
+                            continue;
 
-                    if (neighbour == null)
-                        continue;
-
-                    if (!neighbour.isVisible())
-                        continue;
-
-                    if (!colorDistance(start, neighbour))
-                        continue;
-
-                    visited[nx][ny] = true;
-
-                    queue.add(neighbour);
+                        visited[ni] = true;
+                        queue[tail++] = ni;
+                    }
                 }
             }
+
+            for (int i = 0; i < tail; i++) {
+                regionSize[queue[i]] = tail;
+            }
         }
-        return component;
+        return regionSize;
     }
 
-    public static List<Component> findComponents(TextureData texture) {
+    public static double anomaly(int rgba, int avgR, int avgG, int avgB) {
 
-        List<Component> components = new ArrayList<>();
-        boolean[][] visited = new boolean[texture.width][texture.height];
-
-        for (PixelData pixel : texture.pixels) {
-            if (!pixel.isVisible())
-                continue;
-
-            if (visited[pixel.x][pixel.y])
-                continue;
-
-            Component component = component(pixel, texture.image, visited, texture.width, texture.height);
-
-            if (!component.pixels.isEmpty())
-                components.add(component);
-        }
-        return components;
-    }
-
-    public static int largestComponent(List<Component> components) {
-
-        int max = 1;
-
-        for (Component component : components)
-            max = Math.max(max, component.size());
-
-
-        return max;
-    }
-
-    public static double anomaly(PixelData p, int avgR, int avgG, int avgB) {
-
-        double dr = p.r - avgR;
-        double dg = p.g - avgG;
-        double db = p.b - avgB;
+        double dr = red(rgba) - avgR;
+        double dg = green(rgba) - avgG;
+        double db = blue(rgba) - avgB;
 
         double distance = Math.sqrt(dr * dr + dg * dg + db * db);
 
         return distance / 441.67;
     }
-    public static double saturation(PixelData p) {
 
-        int max = Math.max(p.r, Math.max(p.g, p.b));
-        int min = Math.min(p.r, Math.min(p.g, p.b));
+    public static double saturation(int rgba) {
+
+        int max = Math.max(red(rgba), Math.max(green(rgba), blue(rgba)));
+        int min = Math.min(red(rgba), Math.min(green(rgba), blue(rgba)));
 
         return (max - min) / 255.0;
     }
 
-    public static double whitePenalty(PixelData p) {
+    public static double whitePenalty(int rgba) {
 
-        int max = Math.max(p.r, Math.max(p.g, p.b));
+        double saturation = saturation(rgba);
 
-        int min = Math.min(p.r, Math.min(p.g, p.b));
-
-
-        double saturation = (max - min) / 255.0;
-
-        if (saturation < 0.08 && brightness(p) > 0.85)
+        if (saturation < 0.08 && brightness(rgba) > 0.85)
             return 0.3;
-
 
         return 1.0;
     }
 
-    public static double glowColorScore(PixelData p) {
+    public static double glowColorScore(int rgba) {
 
-        double saturation = saturation(p);
+        double saturation = saturation(rgba);
 
-        double bright = brightness(p);
+        double bright = brightness(rgba);
 
         return bright * 0.6 + saturation * 0.4;
     }

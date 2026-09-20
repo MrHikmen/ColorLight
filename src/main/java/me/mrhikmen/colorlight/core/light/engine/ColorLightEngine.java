@@ -3,98 +3,112 @@ package me.mrhikmen.colorlight.core.light.engine;
 import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LightLayer;
-import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
+import static me.mrhikmen.colorlight.core.light.engine.PropagationTables.*;
+
+/**
+ * Coloured light field: a flood-fill engine for static sources (blocks) plus a separate layer for
+ * moving sources (entities).
+ *
+ * <h3>Design notes</h3>
+ * <ul>
+ *     <li><b>No allocation in hot loops.</b> Everything runs on packed {@code long} keys / raw ints
+ *     ({@link PosKey}), primitive queues and primitive per-pass memo maps ({@link PassMap}).</li>
+ *     <li><b>One block-state lookup per cell per pass.</b> Opacity is memoized for the duration of a
+ *     pass; a smooth flood used to ask the level for the same cell up to 26 times.</li>
+ *     <li><b>Thread-safe mutation.</b> Every mutation of the static field takes {@link #lock}; before,
+ *     the chunk-apply thread and the game thread could flood/darken concurrently. Reads (the mesher)
+ *     stay lock-free.</li>
+ *     <li><b>Exact dirty tracking.</b> Each changed cell records the render section(s) whose mesh depends
+ *     on it; {@link #drainDirtySections()} hands them to the flusher, which replaces the old
+ *     "mark a (2R+2)^3 block cube dirty after every change".</li>
+ *     <li><b>Dynamic lights live in their own layer</b> ({@link DynamicLightLayer}); sampling returns
+ *     {@code max(static, dynamic)}. Moving a light never runs a darkening pass through static light.</li>
+ * </ul>
+ * The stored int per cell is {@code flags(8) | b(8) | g(8) | r(8)}; flags mark a cell as a source
+ * (and which propagation model it uses) so {@link #hasSource} is a lock-free single read.
+ */
 public class ColorLightEngine {
 
     protected static final int VANILLA_MAX_OPACITY = 15;
 
-    private static final Direction[] DIRECTIONS = Direction.values();
+    static final int RGB_MASK = LightStorage.RGB_MASK;
+    static final int FLAG_SOURCE = 1 << 24;
+    static final int FLAG_SMOOTH = 1 << 25;
+    static final int FLAG_MASK = 0xFF000000;
 
-    /**
-     * A single propagation edge: the coordinate offset of a neighbor and how
-     * far away it actually is. For {@link ColorLightPropagationMode#GRID} this
-     * is always exactly 1 (axis-aligned hop); for
-     * {@link ColorLightPropagationMode#SMOOTH} diagonal neighbors carry their
-     * true Euclidean distance so decay scales correctly with how far the light
-     * actually travelled.
-     */
-    private record Neighbor(int dx, int dy, int dz, float distance) {
-    }
-
-    /** Every light source remembers its own color plus which model spread it. */
-    private record SourceState(int color, ColorLightPropagationMode mode) {
-    }
-
-    /**
-     * The two independently-flooded relight queues produced by a single darken
-     * pass: cells that need to be re-lit via {@link ColorLightPropagationMode#GRID}
-     * and cells that need {@link ColorLightPropagationMode#SMOOTH}. Kept apart so
-     * that re-lighting after a block edit never blurs a classic block light into
-     * a round one, or vice versa.
-     */
-    private record RelightPlan(LongQueue gridSeeds, LongQueue smoothSeeds) {
-    }
-
-    private static final Neighbor[] GRID_NEIGHBORS = buildGridNeighbors();
-    private static final Neighbor[] SMOOTH_NEIGHBORS = buildSmoothNeighbors();
-
-    /** 1 / 0.125 — the finest sub-unit step {@link ColorLightPropagationMode#SMOOTH} tracks internally. */
+    /** 1 / 0.125 - the finest sub-unit step SMOOTH tracks internally. */
     private static final int FIXED_POINT_SCALE = 8;
 
-    /** How many sub-positions (1/8 = 0.125 of a block) {@link #addBlendedSource} snaps a continuous coordinate to, per axis. */
-    private static final int POSITION_SUBDIVISIONS = 8;
+    /** How many sources are flooded per lock acquisition when adding a batch (keeps game-thread stalls short). */
+    private static final int BATCH_GROUP_SIZE = 4;
 
-    private static Neighbor[] buildGridNeighbors() {
-        Neighbor[] result = new Neighbor[DIRECTIONS.length];
-        for (int i = 0; i < DIRECTIONS.length; i++) {
-            Direction d = DIRECTIONS[i];
-            result[i] = new Neighbor(d.getStepX(), d.getStepY(), d.getStepZ(), 1f);
-        }
-        return result;
-    }
-
-    private static Neighbor[] buildSmoothNeighbors() {
-        List<Neighbor> list = new ArrayList<>(26);
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx == 0 && dy == 0 && dz == 0)
-                        continue;
-                    float distance = (float) Math.sqrt((double) dx * dx + (double) dy * dy + (double) dz * dz);
-                    list.add(new Neighbor(dx, dy, dz, distance));
-                }
-            }
-        }
-        return list.toArray(new Neighbor[0]);
-    }
+    private static final long[] NO_KEYS = new long[0];
+    private static final long TIME_FACTOR_TTL_NANOS = 50_000_000L;
 
     private final int maxRangeBlocks;
-
     protected final float decayPerOpacityUnit;
-
-    protected final LightStorage data = new LightStorage();
-    protected final ConcurrentHashMap<Long, SourceState> sources = new ConcurrentHashMap<>();
-
     protected final LevelAccessor level;
-
-    /**
-     * Default model used for sources that don't specify their own (regular
-     * blocks, via {@link #addSource(BlockPos, int, int, int, int)}) and as the
-     * fallback for generic, non-source cells re-lit after a block edit — see
-     * {@link #darkenAndCollectSeeds}.
-     */
     private final ColorLightPropagationMode propagationMode;
+
+    private final int[] gridDecay;
+    private final int[][] smoothDecay;
+
+    private final LightStorage data = new LightStorage();
+    private final DynamicLightLayer dynamic;
+
+    /** key -> the source's own (pre-spread) colour. Guarded by {@link #lock}. */
+    private final LongIntMap sourceColors = new LongIntMap(256);
+    /** Sections changed by the mutation currently running. Guarded by {@link #lock}; published by {@link #unlock()}. */
+    private final LongIntMap dirtySections = new LongIntMap(256);
+    /**
+     * Sections waiting to be handed to the renderer. Guarded by its own tiny monitor, so the game thread
+     * can read and add to it without ever waiting for a flood that holds {@link #lock}. Floods publish into it
+     * at the end of every locked operation (see {@link #unlock()}), so light changes reach the renderer
+     * promptly even while the apply thread keeps the lock busy back-to-back.
+     */
+    private final LongIntMap externalDirty = new LongIntMap(256);
+
+    private final ReentrantLock lock = new ReentrantLock();
+
+    // ---- scratch state, only touched while holding the lock ----
+    private final BlockPos.MutableBlockPos scratchPos = new BlockPos.MutableBlockPos();
+    private final PassMap opacityMemo = new PassMap(1 << 12);
+    private final PassMap eighthsMemo = new PassMap(1 << 12);
+    private final PassMap seedSeen = new PassMap(1 << 10);
+    private final LongQueue gridQueue = new LongQueue(1 << 10);
+    private final LongQueue smoothQueue = new LongQueue(1 << 10);
+    private final LongQueue darkenKeys = new LongQueue(1 << 10);
+    private final IntQueue darkenColors = new IntQueue(1 << 10);
+
+    private volatile int sourceVersion;
+    private volatile SourceSnapshot snapshot;
+
+    private volatile long timeFactorStamp;
+    private volatile float timeFactor;
+
+    /** Releases {@link #lock}, first publishing the sections this operation touched to {@link #externalDirty}. */
+    private void unlock() {
+        try {
+            if (!dirtySections.isEmpty()) {
+                long[] keys = dirtySections.keysToArray();
+                dirtySections.clear();
+                synchronized (externalDirty) {
+                    for (long key : keys) {
+                        externalDirty.put(key, 1);
+                    }
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
 
     public ColorLightEngine(LevelAccessor level, int maxRangeBlocks) {
         this(level, maxRangeBlocks, ColorLightPropagationMode.GRID);
@@ -105,61 +119,132 @@ public class ColorLightEngine {
         this.maxRangeBlocks = Math.max(1, maxRangeBlocks); // защита от 0/отрицательных значений из конфига
         this.decayPerOpacityUnit = ColorLightUtil.MAX / (float) this.maxRangeBlocks;
         this.propagationMode = (propagationMode != null) ? propagationMode : ColorLightPropagationMode.GRID;
+        this.gridDecay = buildGridDecay(decayPerOpacityUnit);
+        this.smoothDecay = buildSmoothDecay(decayPerOpacityUnit, FIXED_POINT_SCALE);
+        this.dynamic = new DynamicLightLayer(this::markDirty);
     }
+
+    // =====================================================================================
+    // Simple accessors
+    // =====================================================================================
 
     public int getMaxRangeBlocks() {
         return maxRangeBlocks;
     }
 
-    /** The engine-wide default model (what plain block sources use). Individual sources may override it — see {@link #addSource(BlockPos, int, int, int, int, ColorLightPropagationMode)}. */
+    /** The engine-wide default model (what plain block sources use). Individual sources may override it. */
     public ColorLightPropagationMode getPropagationMode() {
         return propagationMode;
-    }
-
-    public int getColor(BlockPos pos) {
-        return getRaw(pos.asLong());
-    }
-
-    public boolean hasSource(BlockPos pos) {
-        return sources.containsKey(pos.asLong());
-    }
-
-    public boolean isOpaque(BlockPos pos) {
-        return getOpacity(pos) >= VANILLA_MAX_OPACITY;
-    }
-
-    public List<BlockPos> getSourcePositions() {
-        List<BlockPos> result = new ArrayList<>();
-        for (Long key : sources.keySet()) {
-            result.add(BlockPos.of(key));
-        }
-        return result;
-    }
-
-    public void clearAll() {
-        data.clear();
-        sources.clear();
-    }
-
-    protected int getRaw(long key) {
-        return data.get(key);
     }
 
     public float getDecayPerOpacityUnit() {
         return decayPerOpacityUnit;
     }
 
-    /**
-     * Rough upper bound on how many nodes a single flood-fill from one source
-     * is likely to touch, used only to size the initial ring-buffer capacity
-     * so we grow() less often. SMOOTH has ~4x the edges per node of GRID, so
-     * it gets a proportionally larger head start.
-     */
-    private int initialQueueCapacity(ColorLightPropagationMode mode) {
-        int perRangeUnit = (mode == ColorLightPropagationMode.SMOOTH) ? 24 : 12;
-        int estimate = (maxRangeBlocks + 1) * perRangeUnit;
-        return Math.min(4096, Math.max(16, estimate));
+    /** Colour of a cell as the renderer sees it: static and dynamic light merged. */
+    public int getColor(BlockPos pos) {
+        return getColor(pos.getX(), pos.getY(), pos.getZ());
     }
+
+    public int getColor(int x, int y, int z) {
+        int color = data.get(x, y, z) & RGB_MASK;
+        if (dynamic.isActive()) {
+            int dyn = dynamic.storage().get(x, y, z);
+            if (dyn != 0)
+                color = ColorLightUtil.max(color, dyn);
+        }
+        return color;
+    }
+
+    /** Static (block) light only - what block edits can affect. */
+    public int getStaticColor(BlockPos pos) {
+        return data.get(pos.getX(), pos.getY(), pos.getZ()) & RGB_MASK;
+    }
+
+    /** Lock-free: reads the source flag stored with the cell. */
+    public boolean hasSource(BlockPos pos) {
+        return (data.get(pos.getX(), pos.getY(), pos.getZ()) & FLAG_SOURCE) != 0;
+    }
+
+    public boolean isOpaque(BlockPos pos) {
+        return getOpacity(pos) >= VANILLA_MAX_OPACITY;
+    }
+
+    protected int getOpacity(BlockPos pos) {
+        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, level.getBlockState(pos).getLightDampening()));
+    }
+
+    /**
+     * True if neither this block's section nor (when the block touches a section border) the
+     * adjacent ones contain any light at all. A mesh block within a lit-free area can skip all
+     * light sampling: the answer is "white" for every vertex.
+     */
+    public boolean isLightFreeAround(int x, int y, int z) {
+        int sx = x >> 4, sy = y >> 4, sz = z >> 4;
+        int lx = x & 15, ly = y & 15, lz = z & 15;
+        int x0 = lx == 0 ? sx - 1 : sx, x1 = lx == 15 ? sx + 1 : sx;
+        int y0 = ly == 0 ? sy - 1 : sy, y1 = ly == 15 ? sy + 1 : sy;
+        int z0 = lz == 0 ? sz - 1 : sz, z1 = lz == 15 ? sz + 1 : sz;
+
+        boolean dyn = dynamic.isActive();
+        for (int a = x0; a <= x1; a++) {
+            for (int b = y0; b <= y1; b++) {
+                for (int c = z0; c <= z1; c++) {
+                    if (!data.isSectionEmpty(a, b, c))
+                        return false;
+                    if (dyn && !dynamic.storage().isSectionEmpty(a, b, c))
+                        return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // =====================================================================================
+    // Source snapshot
+    // =====================================================================================
+
+    private static final SourceSnapshot EMPTY_SNAPSHOT = new SourceSnapshot(new long[0], new int[0], -1);
+
+    /**
+     * Cached until the set of static sources changes. Never blocks the caller (usually the render or
+     * game thread): if a flood is running while the snapshot is out of date, the previous one is
+     * returned and the fresh one is built by whichever call finds the lock free.
+     */
+    public SourceSnapshot getSourceSnapshot() {
+        SourceSnapshot current = snapshot;
+        int version = sourceVersion;
+        if (current != null && current.version() == version)
+            return current;
+
+        if (!lock.tryLock())
+            return current != null ? current : EMPTY_SNAPSHOT;
+        try {
+            version = sourceVersion;
+            current = snapshot;
+            if (current != null && current.version() == version)
+                return current;
+
+            long[] keys = sourceColors.keysToArray();
+            int[] colors = new int[keys.length];
+            for (int i = 0; i < keys.length; i++) {
+                colors[i] = sourceColors.get(keys[i], 0);
+            }
+            current = new SourceSnapshot(keys, colors, version);
+            snapshot = current;
+            return current;
+        } finally {
+            lock.unlock(); // read-only: nothing to publish
+        }
+    }
+
+    public List<BlockPos> getSourcePositions() {
+        return getSourceSnapshot().positions();
+    }
+
+    // =====================================================================================
+    // Static sources
+    // =====================================================================================
 
     /** Adds a source using the engine's default model (plain blocks). */
     public void addSource(BlockPos pos, int r, int g, int b, int strength) {
@@ -167,430 +252,657 @@ public class ColorLightEngine {
     }
 
     /**
-     * Adds a source that spreads using {@code mode} specifically, independent
-     * of the engine's default — e.g. an LDL-tracked entity can glow with a
-     * round {@link ColorLightPropagationMode#SMOOTH} halo while ordinary block
-     * light around it stays the classic {@link ColorLightPropagationMode#GRID}
-     * diamond. Both kinds of light share the same underlying field and blend
-     * correctly (brighter channel always wins), since only the flood-fill
-     * shape differs, not the storage.
+     * Adds a source that spreads using {@code mode} specifically, independent of the engine's default.
+     * Re-adding an identical source is a no-op; re-adding it with a different colour/model first
+     * removes the old one so stale light around it is cleaned up.
      */
     public void addSource(BlockPos pos, int r, int g, int b, int strength, ColorLightPropagationMode mode) {
-        ColorLightPropagationMode resolvedMode = (mode != null) ? mode : propagationMode;
+        ColorLightPropagationMode resolved = (mode != null) ? mode : propagationMode;
 
         float scale = ColorLightUtil.clamp01(strength / 15f);
         int packed = ColorLightUtil.pack(Math.round(r * scale), Math.round(g * scale), Math.round(b * scale));
 
-        addSourceRaw(pos, packed, resolvedMode);
+        lock.lock();
+        try {
+            addSourceLocked(pos.getX(), pos.getY(), pos.getZ(), packed, resolved);
+        } finally {
+            unlock();
+        }
     }
 
     /**
-     * Adds a light source at a continuous, sub-block position instead of a
-     * single block coordinate — used for entity-tracked light (e.g. LDL
-     * compat) so it doesn't only visibly move when the entity crosses a whole
-     * block boundary. X/Z are snapped to the nearest 1/8th of a block (0.125)
-     * and each active corner's brightness is set directly from its real
-     * Euclidean distance to the entity's exact position — so an entity at
-     * (0.0, y, 0.0) and one at (0.125, y, 0.125) genuinely light neighboring
-     * blocks differently, without a big dip in between (see below), and
-     * without only updating when a whole-block boundary is crossed.
-     * <p>
-     * Two things worth calling out about the shape of this:
-     * <ul>
-     *     <li><b>Distance-based, not weight-product-based.</b> An earlier
-     *     version derived each corner's brightness by multiplying its
-     *     per-axis trilinear weights together (as if splitting one fixed
-     *     amount of "light energy" between corners). That collapses hard
-     *     between lattice points — e.g. at the exact diagonal midpoint of a
-     *     cell only ~57% of the peak brightness survived even after boosting
-     *     — which read as the light visibly fading out mid-step and then
-     *     reappearing. Computing each active corner's brightness straight
-     *     from {@code baseBrightness - realDistanceToEntity * decayPerOpacityUnit}
-     *     instead keeps every corner within a cell close to full strength,
-     *     since the entity is never more than ~1 block from any of them.</li>
-     *     <li><b>Only X/Z get split, not Y.</b> Most tracked entities (mobs,
-     *     players, dropped items) sit on the ground, so a separate vertical
-     *     corner rarely adds anything visible — it would just double the
-     *     number of flood-fills below for no real gain. Y still feeds into
-     *     the real-distance decay above, it just doesn't get its own corner.</li>
-     * </ul>
-     * Combined with skipping corners whose decayed brightness rounds down to
-     * nothing, this keeps the common case (entity roughly aligned to the
-     * grid) down to 1 flood-fill and the worst case (exactly between 4
-     * corners) at 4 — half of the up-to-8 the previous version always ran —
-     * which matters a lot given this can re-run on every tick a tracked
-     * entity moves at least 1/8 of a block.
-     * <p>
-     * The caller must later call {@link #removeSource} on every
-     * {@link BlockPos} in the returned list (e.g. when the entity moves to a
-     * new sub-position or despawns) — {@link #addBlendedSource} itself never
-     * removes anything.
+     * Adds many sources of the engine's default model at once, e.g. everything found in a freshly
+     * loaded chunk. Sources are flooded together in one pass per group instead of one flood each.
+     *
+     * @return true if the light field changed
      */
-    public List<BlockPos> addBlendedSource(double x, double y, double z, int r, int g, int b, int strength, ColorLightPropagationMode mode) {
-        ColorLightPropagationMode resolvedMode = (mode != null) ? mode : propagationMode;
-        float scale = ColorLightUtil.clamp01(strength / 15f);
+    public boolean addSources(SourceBatch batch) {
+        if (batch == null || batch.isEmpty())
+            return false;
 
-        float baseR = r * scale;
-        float baseG = g * scale;
-        float baseB = b * scale;
-
-        int iy = (int) Math.floor(y);
-
-        long ex = Math.round(x * POSITION_SUBDIVISIONS);
-        long ez = Math.round(z * POSITION_SUBDIVISIONS);
-
-        long ix = Math.floorDiv(ex, POSITION_SUBDIVISIONS);
-        long iz = Math.floorDiv(ez, POSITION_SUBDIVISIONS);
-
-        int fx = (int) (ex - ix * POSITION_SUBDIVISIONS);
-        int fz = (int) (ez - iz * POSITION_SUBDIVISIONS);
-
-        List<BlockPos> touched = new ArrayList<>(4);
-        LongQueue queue = new LongQueue(initialQueueCapacity(resolvedMode));
-
-        for (int dx = 0; dx <= 1; dx++) {
-            if (dx == 1 && fx == 0)
-                continue; // exactly aligned on X — the ceil corner would just duplicate coverage
-
-            long cornerX = ix + dx;
-
-            for (int dz = 0; dz <= 1; dz++) {
-                if (dz == 1 && fz == 0)
-                    continue; // same, for Z
-
-                long cornerZ = iz + dz;
-
-                double ddx = x - cornerX;
-                double ddy = y - iy;
-                double ddz = z - cornerZ;
-                float distance = (float) Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-                float decay = distance * decayPerOpacityUnit;
-
-                int cr = ColorLightUtil.clamp(Math.round(baseR - decay));
-                int cg = ColorLightUtil.clamp(Math.round(baseG - decay));
-                int cb = ColorLightUtil.clamp(Math.round(baseB - decay));
-
-                if (cr == 0 && cg == 0 && cb == 0)
-                    continue; // negligible — not worth a flood-fill
-
-                BlockPos cornerPos = new BlockPos((int) cornerX, iy, (int) cornerZ);
-                int packed = ColorLightUtil.pack(cr, cg, cb);
-
-                long key = cornerPos.asLong();
-                sources.put(key, new SourceState(packed, resolvedMode));
-                data.put(key, packed);
-                queue.add(key);
-                touched.add(cornerPos);
+        boolean changed = false;
+        int total = batch.size();
+        for (int from = 0; from < total; from += BATCH_GROUP_SIZE) {
+            int to = Math.min(total, from + BATCH_GROUP_SIZE);
+            lock.lock();
+            try {
+                gridQueue.clear();
+                smoothQueue.clear();
+                for (int i = from; i < to; i++) {
+                    long key = batch.key(i);
+                    changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), propagationMode);
+                }
+                flushQueuesLocked();
+            } finally {
+                unlock();
             }
         }
-
-        propagateAdd(queue, resolvedMode);
-        return touched;
+        return changed;
     }
 
-    private void addSourceRaw(BlockPos pos, int packed, ColorLightPropagationMode mode) {
-        long key = pos.asLong();
-
-        sources.put(key, new SourceState(packed, mode));
-        data.put(key, packed);
-
-        LongQueue queue = new LongQueue(initialQueueCapacity(mode));
-        queue.add(key);
-        propagateAdd(queue, mode);
+    private void addSourceLocked(int x, int y, int z, int packed, ColorLightPropagationMode mode) {
+        gridQueue.clear();
+        smoothQueue.clear();
+        placeSourceLocked(x, y, z, packed, mode);
+        flushQueuesLocked();
     }
 
-    private void propagateAdd(LongQueue queue, ColorLightPropagationMode mode) {
-        if (queue.isEmpty())
+    /** Writes the source cell and queues it as a seed; the caller floods afterwards. @return whether anything changed */
+    private boolean placeSourceLocked(int x, int y, int z, int packed, ColorLightPropagationMode mode) {
+        long key = PosKey.pack(x, y, z);
+        int flags = FLAG_SOURCE | (mode == ColorLightPropagationMode.SMOOTH ? FLAG_SMOOTH : 0);
+
+        int existing = data.get(x, y, z);
+        if ((existing & FLAG_SOURCE) != 0) {
+            if ((existing & (FLAG_MASK)) == flags && sourceColors.get(key, -1) == packed)
+                return false; // identical source already there
+
+            // different colour/strength/model: clean up what the old one lit before adding the new one
+            flushQueuesLocked(); // don't lose seeds already queued for this batch group
+            removeSourceLocked(x, y, z);
+            existing = data.get(x, y, z);
+        }
+
+        sourceColors.put(key, packed);
+        sourceVersion++;
+
+        int merged = ColorLightUtil.max(existing & RGB_MASK, packed);
+        data.put(x, y, z, flags | merged);
+        markDirty(x, y, z);
+
+        (mode == ColorLightPropagationMode.SMOOTH ? smoothQueue : gridQueue).add(key);
+        return true;
+    }
+
+    public void removeSource(BlockPos pos) {
+        lock.lock();
+        try {
+            removeSourceLocked(pos.getX(), pos.getY(), pos.getZ());
+        } finally {
+            unlock();
+        }
+    }
+
+    private void removeSourceLocked(int x, int y, int z) {
+        long key = PosKey.pack(x, y, z);
+        int cell = data.get(x, y, z);
+        if ((cell & FLAG_SOURCE) == 0)
             return;
 
-        if (mode == ColorLightPropagationMode.SMOOTH) {
-            propagateAddSmooth(queue);
-        } else {
-            propagateAddGrid(queue);
-        }
+        sourceColors.remove(key);
+        sourceVersion++;
+
+        int old = cell & RGB_MASK;
+        data.put(x, y, z, 0);
+        if (old != 0)
+            markDirty(x, y, z);
+
+        darkenAndCollectSeeds(key, old);
+        flushQueuesLocked();
     }
 
-    /** Original behaviour: strictly axis-aligned, whole-unit decay per hop. */
-    private void propagateAddGrid(LongQueue queue) {
-        while (!queue.isEmpty()) {
-            long key = queue.poll();
-            BlockPos pos = BlockPos.of(key);
-            int current = getRaw(key);
+    /**
+     * Called after a block changed. Invalidates any dynamic footprint the block touches and, if
+     * the change can affect static light, darkens and re-floods the affected region.
+     */
+    public void onBlockChanged(BlockPos pos) {
+        int x = pos.getX(), y = pos.getY(), z = pos.getZ();
 
-            int r = ColorLightUtil.r(current);
-            int g = ColorLightUtil.g(current);
-            int b = ColorLightUtil.b(current);
+        lock.lock();
+        try {
+            dynamic.markStaleAround(x, y, z);
 
-            if (r == 0 && g == 0 && b == 0)
-                continue;
+            int cell = data.get(x, y, z);
+            if ((cell & FLAG_SOURCE) != 0)
+                return;
+            if (!hasStaticLightNear(x, y, z))
+                return;
 
-            for (Neighbor n : GRID_NEIGHBORS) {
+            long key = PosKey.pack(x, y, z);
+            int old = cell & RGB_MASK;
+            data.put(x, y, z, 0);
+            if (old != 0)
+                markDirty(x, y, z);
 
-                BlockPos neighborPos = pos.offset(n.dx(), n.dy(), n.dz());
-                long neighborKey = neighborPos.asLong();
+            darkenAndCollectSeeds(key, old);
 
-                int opacity = getOpacity(neighborPos);
-                if (opacity >= VANILLA_MAX_OPACITY)
-                    continue;
-
-                int decay = Math.round((1 + opacity) * decayPerOpacityUnit);
-
-                int nr = Math.max(0, r - decay);
-                int ng = Math.max(0, g - decay);
-                int nb = Math.max(0, b - decay);
-
-                if (nr == 0 && ng == 0 && nb == 0)
-                    continue;
-
-                int neighborCurrent = getRaw(neighborKey);
-                int cr = ColorLightUtil.r(neighborCurrent);
-                int cg = ColorLightUtil.g(neighborCurrent);
-                int cb = ColorLightUtil.b(neighborCurrent);
-
-                boolean changed = false;
-                int fr = cr, fg = cg, fb = cb;
-
-                if (nr > cr) { fr = nr; changed = true; }
-                if (ng > cg) { fg = ng; changed = true; }
-                if (nb > cb) { fb = nb; changed = true; }
-
-                if (changed) {
-                    data.put(neighborKey, ColorLightUtil.pack(fr, fg, fb));
-                    queue.add(neighborKey);
-                }
+            seedOnce(propagationMode, key);
+            for (int n = 0; n < SMOOTH_COUNT; n++) {
+                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
+                int nCell = data.get(nx, ny, nz);
+                if ((nCell & RGB_MASK) == 0 && (nCell & FLAG_SOURCE) == 0)
+                    continue; // nothing there that could spread into the changed cell
+                seedOnce(modeOf(nCell), PosKey.pack(nx, ny, nz));
             }
+
+            flushQueuesLocked();
+        } finally {
+            unlock();
         }
     }
 
     /**
-     * Alternate falloff: hops through all 26 neighbors (including diagonals),
-     * so light isn't confined to the 3 cardinal coordinate axes, and decay is
-     * scaled by each neighbor's real Euclidean distance. That distance scaling
-     * is almost never a whole number (a face diagonal is √2 blocks away, a
-     * corner diagonal √3), so the running value is tracked in eighth-unit
-     * (0.125) fixed point for the duration of this flood-fill — precise enough
-     * to avoid the directional rounding bias plain integer steps would build
-     * up over a long diagonal run — and only rounded back to a whole unit when
-     * it's written out to {@link #data}, so storage and everything reading it
-     * (rendering, commands, save data) stays exactly as before.
+     * Lock-free: is there any static light in the 3x3x3 cells around this block? If not, a block change there
+     * cannot affect static light and needn't be queued at all.
      */
-    private void propagateAddSmooth(LongQueue queue) {
-        Map<Long, Long> eighths = new HashMap<>();
+    public boolean hasStaticLightNear(BlockPos pos) {
+        return hasStaticLightNear(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private boolean hasStaticLightNear(int x, int y, int z) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if ((data.get(x + dx, y + dy, z + dz) & RGB_MASK) != 0)
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Drops all light. Every previously lit section is marked dirty first so the renderer refreshes it. */
+    public void clearAll() {
+        lock.lock();
+        try {
+            data.forEachLitSection(this::markSectionAndNeighborsDirty);
+            dynamic.storage().forEachLitSection(this::markSectionAndNeighborsDirty);
+            data.clear();
+            dynamic.clear();
+            sourceColors.clear();
+            sourceVersion++;
+        } finally {
+            unlock();
+        }
+    }
+
+    /** See {@link #removeChunks(long[])}. */
+    public void removeChunk(int chunkX, int chunkZ) {
+        removeChunks(new long[]{chunkKey(chunkX, chunkZ)});
+    }
+
+    /** Packs chunk coordinates for {@link #removeChunks(long[])}. */
+    public static long chunkKey(int chunkX, int chunkZ) {
+        return PosKey.pack(chunkX, 0, chunkZ);
+    }
+
+    /**
+     * Forgets everything about the given chunk columns (sources and light values) after they unloaded.
+     * All chunks are handled in a <b>single</b> pass over the source table, so a burst of unloads costs
+     * one scan of the sources instead of one scan per chunk. Light that spilled into still-loaded
+     * neighbours is left alone: it sits at the edge of the render distance and disappears/refreshes as
+     * soon as those chunks change or unload too.
+     *
+     * @param chunkKeys keys from {@link #chunkKey(int, int)}
+     */
+    public void removeChunks(long[] chunkKeys) {
+        if (chunkKeys == null || chunkKeys.length == 0)
+            return;
+
+        LongIntMap wanted = new LongIntMap(chunkKeys.length * 2);
+        for (long key : chunkKeys) {
+            wanted.put(key, 1);
+        }
+
+        lock.lock();
+        try {
+            long[][] holder = {new long[16]};
+            int[] count = {0};
+            // collect first (removing while iterating would shift entries under the iterator)
+            sourceColors.forEachKey(key -> {
+                if (!wanted.containsKey(chunkKey(PosKey.x(key) >> 4, PosKey.z(key) >> 4)))
+                    return;
+                if (count[0] == holder[0].length)
+                    holder[0] = java.util.Arrays.copyOf(holder[0], count[0] << 1);
+                holder[0][count[0]++] = key;
+            });
+
+            for (int i = 0; i < count[0]; i++) {
+                sourceColors.remove(holder[0][i]);
+            }
+            if (count[0] > 0)
+                sourceVersion++;
+
+            for (long key : chunkKeys) {
+                data.removeColumn(PosKey.x(key), PosKey.z(key));
+            }
+        } finally {
+            unlock();
+        }
+    }
+
+    // =====================================================================================
+    // Flood fill
+    // =====================================================================================
+
+    private ColorLightPropagationMode modeOf(int cell) {
+        if ((cell & FLAG_SOURCE) != 0)
+            return (cell & FLAG_SMOOTH) != 0 ? ColorLightPropagationMode.SMOOTH : ColorLightPropagationMode.GRID;
+        return propagationMode;
+    }
+
+    private void flushQueuesLocked() {
+        if (!gridQueue.isEmpty())
+            propagateGrid(gridQueue);
+        if (!smoothQueue.isEmpty())
+            propagateSmooth(smoothQueue);
+    }
+
+    private int opacityAt(int x, int y, int z) {
+        long key = PosKey.pack(x, y, z);
+        long cached = opacityMemo.get(key, -1L);
+        if (cached >= 0)
+            return (int) cached;
+
+        scratchPos.set(x, y, z);
+        int opacity = level.getBlockState(scratchPos).getLightDampening();
+        opacity = Math.max(0, Math.min(VANILLA_MAX_OPACITY, opacity));
+        opacityMemo.put(key, opacity);
+        return opacity;
+    }
+
+    /** Strictly axis-aligned, whole-unit decay per hop. */
+    private void propagateGrid(LongQueue queue) {
+        opacityMemo.clear();
 
         while (!queue.isEmpty()) {
             long key = queue.poll();
-            long currentEighths = eighths.computeIfAbsent(key, k -> toEighths(getRaw(k)));
+            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
 
-            int r = eighthsR(currentEighths);
-            int g = eighthsG(currentEighths);
-            int b = eighthsB(currentEighths);
-
-            if (r == 0 && g == 0 && b == 0)
+            int cur = data.get(x, y, z);
+            int r = cur & 0xFF, g = (cur >> 8) & 0xFF, b = (cur >> 16) & 0xFF;
+            if ((r | g | b) == 0)
                 continue;
 
-            BlockPos pos = BlockPos.of(key);
+            for (int n = 0; n < 6; n++) {
+                int nx = x + GRID_DX[n], ny = y + GRID_DY[n], nz = z + GRID_DZ[n];
 
-            for (Neighbor n : SMOOTH_NEIGHBORS) {
-
-                BlockPos neighborPos = pos.offset(n.dx(), n.dy(), n.dz());
-                long neighborKey = neighborPos.asLong();
-
-                int opacity = getOpacity(neighborPos);
+                int opacity = opacityAt(nx, ny, nz);
                 if (opacity >= VANILLA_MAX_OPACITY)
                     continue;
 
-                // At least one eighth-step so distance-scaled decay can never
-                // round down to "no change", which would otherwise let light
-                // leak forever along a direction with near-zero decay.
-                int decay = Math.max(1, Math.round(n.distance() * (1 + opacity) * decayPerOpacityUnit * FIXED_POINT_SCALE));
-
-                int nr = Math.max(0, r - decay);
-                int ng = Math.max(0, g - decay);
-                int nb = Math.max(0, b - decay);
-
-                if (nr == 0 && ng == 0 && nb == 0)
+                int decay = gridDecay[opacity];
+                int nr = r - decay; if (nr < 0) nr = 0;
+                int ng = g - decay; if (ng < 0) ng = 0;
+                int nb = b - decay; if (nb < 0) nb = 0;
+                if ((nr | ng | nb) == 0)
                     continue;
 
-                long neighborCurrentEighths = eighths.computeIfAbsent(neighborKey, k -> toEighths(getRaw(k)));
-                int cr = eighthsR(neighborCurrentEighths);
-                int cg = eighthsG(neighborCurrentEighths);
-                int cb = eighthsB(neighborCurrentEighths);
+                int nCell = data.get(nx, ny, nz);
+                int cr = nCell & 0xFF, cg = (nCell >> 8) & 0xFF, cb = (nCell >> 16) & 0xFF;
 
                 boolean changed = false;
                 int fr = cr, fg = cg, fb = cb;
-
                 if (nr > cr) { fr = nr; changed = true; }
                 if (ng > cg) { fg = ng; changed = true; }
                 if (nb > cb) { fb = nb; changed = true; }
 
                 if (changed) {
-                    eighths.put(neighborKey, packEighths(fr, fg, fb));
-                    data.put(neighborKey, ColorLightUtil.pack(fromEighths(fr), fromEighths(fg), fromEighths(fb)));
-                    queue.add(neighborKey);
+                    data.put(nx, ny, nz, (nCell & FLAG_MASK) | fr | (fg << 8) | (fb << 16));
+                    markDirty(nx, ny, nz);
+                    queue.add(PosKey.pack(nx, ny, nz));
                 }
             }
         }
+        opacityMemo.trim();
     }
 
-    private static long packEighths(int r, int g, int b) {
-        return (r & 0xFFFFL) | ((g & 0xFFFFL) << 16) | ((b & 0xFFFFL) << 32);
-    }
+    /**
+     * Hops through all 26 neighbours with decay scaled by real Euclidean distance. The running
+     * value is tracked in 1/8-unit fixed point for the duration of the pass and only rounded to whole
+     * units when written out, exactly as before.
+     */
+    private void propagateSmooth(LongQueue queue) {
+        opacityMemo.clear();
+        eighthsMemo.clear();
 
-    private static int eighthsR(long packed) {
-        return (int) (packed & 0xFFFF);
-    }
+        while (!queue.isEmpty()) {
+            long key = queue.poll();
+            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
 
-    private static int eighthsG(long packed) {
-        return (int) ((packed >>> 16) & 0xFFFF);
-    }
+            long curEighths = eighthsMemo.get(key, -1L);
+            if (curEighths < 0) {
+                curEighths = toEighths(data.get(x, y, z));
+                eighthsMemo.put(key, curEighths);
+            }
 
-    private static int eighthsB(long packed) {
-        return (int) ((packed >>> 32) & 0xFFFF);
+            int r = eighthsR(curEighths), g = eighthsG(curEighths), b = eighthsB(curEighths);
+            if ((r | g | b) == 0)
+                continue;
+
+            for (int n = 0; n < SMOOTH_COUNT; n++) {
+                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
+
+                int opacity = opacityAt(nx, ny, nz);
+                if (opacity >= VANILLA_MAX_OPACITY)
+                    continue;
+
+                int decay = smoothDecay[n][opacity];
+                int nr = r - decay; if (nr < 0) nr = 0;
+                int ng = g - decay; if (ng < 0) ng = 0;
+                int nb = b - decay; if (nb < 0) nb = 0;
+                if ((nr | ng | nb) == 0)
+                    continue;
+
+                long nKey = PosKey.pack(nx, ny, nz);
+                int nCell = data.get(nx, ny, nz);
+
+                long nEighths = eighthsMemo.get(nKey, -1L);
+                if (nEighths < 0)
+                    nEighths = toEighths(nCell);
+
+                int cr = eighthsR(nEighths), cg = eighthsG(nEighths), cb = eighthsB(nEighths);
+
+                boolean changed = false;
+                int fr = cr, fg = cg, fb = cb;
+                if (nr > cr) { fr = nr; changed = true; }
+                if (ng > cg) { fg = ng; changed = true; }
+                if (nb > cb) { fb = nb; changed = true; }
+
+                if (changed) {
+                    eighthsMemo.put(nKey, packEighths(fr, fg, fb));
+
+                    int rounded = ColorLightUtil.pack(fromEighths(fr), fromEighths(fg), fromEighths(fb));
+                    if (rounded != (nCell & RGB_MASK)) {
+                        data.put(nx, ny, nz, (nCell & FLAG_MASK) | rounded);
+                        markDirty(nx, ny, nz);
+                    }
+                    queue.add(nKey);
+                }
+            }
+        }
+        opacityMemo.trim();
+        eighthsMemo.trim();
     }
 
     private static long toEighths(int packedByteColor) {
-        int r = ColorLightUtil.r(packedByteColor) * FIXED_POINT_SCALE;
-        int g = ColorLightUtil.g(packedByteColor) * FIXED_POINT_SCALE;
-        int b = ColorLightUtil.b(packedByteColor) * FIXED_POINT_SCALE;
-        return packEighths(r, g, b);
+        return packEighths(
+                (packedByteColor & 0xFF) * FIXED_POINT_SCALE,
+                ((packedByteColor >> 8) & 0xFF) * FIXED_POINT_SCALE,
+                ((packedByteColor >> 16) & 0xFF) * FIXED_POINT_SCALE);
     }
 
     private static int fromEighths(int eighthsValue) {
         return ColorLightUtil.clamp(Math.round(eighthsValue / (float) FIXED_POINT_SCALE));
     }
 
-    public void removeSource(BlockPos pos) {
-        long key = pos.asLong();
-        SourceState removed = sources.remove(key);
-        if (removed == null)
+    /**
+     * Invalidates the region downstream of a removed/changed colour and queues the cells that
+     * must radiate again into the grid / smooth seed queues.
+     * <p>
+     * The search always walks the full 26-neighbour graph (a superset of the 6-neighbour one).
+     * An encountered source re-lights with its own model; an ordinary surviving cell falls back to
+     * the engine default. Two refinements over the old version, both covered by tests:
+     * <ul>
+     *     <li>a cell is only re-seeded if it holds an independent value in a channel the removed light
+     *     actually carried (previously any non-empty neighbour was, which for coloured light meant
+     *     re-flooding half the surroundings), and each cell is seeded once;</li>
+     *     <li>a source cell that had been raised by the removed light is reset to its own colour
+     *     instead of keeping the stale glow forever.</li>
+     * </ul>
+     */
+    private void darkenAndCollectSeeds(long startKey, int oldColorAtStart) {
+        gridQueue.clear();
+        smoothQueue.clear();
+        darkenKeys.clear();
+        darkenColors.clear();
+        seedSeen.clear();
+
+        if (oldColorAtStart == 0)
             return;
 
-        int old = getRaw(key);
-        data.put(key, ColorLightUtil.EMPTY);
-
-        RelightPlan plan = darkenAndCollectSeeds(key, old);
-        propagateAdd(plan.gridSeeds(), ColorLightPropagationMode.GRID);
-        propagateAdd(plan.smoothSeeds(), ColorLightPropagationMode.SMOOTH);
-    }
-
-    /**
-     * Invalidates the region downstream of a removed/changed color and sorts
-     * the cells that need to radiate again into a GRID queue and a SMOOTH
-     * queue, so each is re-lit with the same shape it originally had.
-     * <p>
-     * The search itself always walks the full 26-neighbor graph regardless of
-     * which model(s) are actually in play nearby — that's strictly a superset
-     * of the 6-neighbor GRID graph, so it's guaranteed to find every cell a
-     * GRID-only invalidation would have found too. It only decides re-lighting
-     * <em>shape</em> per seed: an encountered source re-lights with its own
-     * stored model, and an ordinary surviving cell falls back to the engine's
-     * default model, since a bare block position doesn't remember who lit it.
-     */
-    private RelightPlan darkenAndCollectSeeds(long startKey, int oldColorAtStart) {
-
-        // Position keys and their packed pre-darken color travel in lockstep across two
-        // primitive queues instead of one ArrayDeque<long[]>, avoiding a small array
-        // allocation for every node visited while darkening.
-        int capacity = initialQueueCapacity(ColorLightPropagationMode.SMOOTH);
-        LongQueue darkenKeys = new LongQueue(capacity);
-        IntQueue darkenColors = new IntQueue(capacity);
-        LongQueue gridSeeds = new LongQueue(capacity);
-        LongQueue smoothSeeds = new LongQueue(capacity);
-
-        if (!ColorLightUtil.isEmpty(oldColorAtStart)) {
-            darkenKeys.add(startKey);
-            darkenColors.add(oldColorAtStart);
-        }
+        darkenKeys.add(startKey);
+        darkenColors.add(oldColorAtStart);
 
         while (!darkenKeys.isEmpty()) {
-
             long curKey = darkenKeys.poll();
             int curColor = darkenColors.poll();
-            int r = ColorLightUtil.r(curColor);
-            int g = ColorLightUtil.g(curColor);
-            int b = ColorLightUtil.b(curColor);
+            int r = curColor & 0xFF, g = (curColor >> 8) & 0xFF, b = (curColor >> 16) & 0xFF;
 
-            BlockPos curPos = BlockPos.of(curKey);
+            int x = PosKey.x(curKey), y = PosKey.y(curKey), z = PosKey.z(curKey);
 
-            for (Neighbor n : SMOOTH_NEIGHBORS) {
+            for (int n = 0; n < SMOOTH_COUNT; n++) {
+                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
+                int nCell = data.get(nx, ny, nz);
 
-                BlockPos neighborPos = curPos.offset(n.dx(), n.dy(), n.dz());
-                long neighborKey = neighborPos.asLong();
+                int nr = nCell & 0xFF, ng = (nCell >> 8) & 0xFF, nb = (nCell >> 16) & 0xFF;
 
-                SourceState neighborSource = sources.get(neighborKey);
-                if (neighborSource != null) {
-                    addSeed(neighborSource.mode(), neighborKey, gridSeeds, smoothSeeds);
+                if ((nCell & FLAG_SOURCE) != 0) {
+                    long nKey = PosKey.pack(nx, ny, nz);
+                    int own = sourceColors.get(nKey, 0);
+                    int or = own & 0xFF, og = (own >> 8) & 0xFF, ob = (own >> 16) & 0xFF;
+
+                    // channels above the source's own value but below what was removed were fed by the removed light
+                    int fr = (nr > or && nr < r) ? or : nr;
+                    int fg = (ng > og && ng < g) ? og : ng;
+                    int fb = (nb > ob && nb < b) ? ob : nb;
+
+                    if (fr != nr || fg != ng || fb != nb) {
+                        data.put(nx, ny, nz, (nCell & FLAG_MASK) | fr | (fg << 8) | (fb << 16));
+                        markDirty(nx, ny, nz);
+                        darkenKeys.add(nKey);
+                        darkenColors.add(nr | (ng << 8) | (nb << 16));
+                    }
+                    seedOnce(modeOf(nCell), nKey);
                     continue;
                 }
 
-                int neighborPacked = getRaw(neighborKey);
-                int nr = ColorLightUtil.r(neighborPacked);
-                int ng = ColorLightUtil.g(neighborPacked);
-                int nb = ColorLightUtil.b(neighborPacked);
-
-                if (nr == 0 && ng == 0 && nb == 0)
+                if ((nr | ng | nb) == 0)
                     continue;
 
-                boolean darkened = false;
                 int fr = nr, fg = ng, fb = nb;
-
+                boolean darkened = false;
                 if (nr != 0 && nr < r) { fr = 0; darkened = true; }
                 if (ng != 0 && ng < g) { fg = 0; darkened = true; }
                 if (nb != 0 && nb < b) { fb = 0; darkened = true; }
 
+                long nKey = PosKey.pack(nx, ny, nz);
+
                 if (darkened) {
-                    data.put(neighborKey, ColorLightUtil.pack(fr, fg, fb));
-                    darkenKeys.add(neighborKey);
-                    darkenColors.add(ColorLightUtil.pack(nr, ng, nb));
+                    data.put(nx, ny, nz, fr | (fg << 8) | (fb << 16));
+                    markDirty(nx, ny, nz);
+                    darkenKeys.add(nKey);
+                    darkenColors.add(nr | (ng << 8) | (nb << 16));
                 }
 
-                if (nr >= r || ng >= g || nb >= b) {
-                    addSeed(propagationMode, neighborKey, gridSeeds, smoothSeeds);
+                // independent light in a channel the removed light carried -> must radiate again
+                if ((r > 0 && nr >= r) || (g > 0 && ng >= g) || (b > 0 && nb >= b)) {
+                    seedOnce(propagationMode, nKey);
                 }
             }
         }
-        return new RelightPlan(gridSeeds, smoothSeeds);
     }
 
-    private static void addSeed(ColorLightPropagationMode mode, long key, LongQueue gridSeeds, LongQueue smoothSeeds) {
-        if (mode == ColorLightPropagationMode.SMOOTH) {
-            smoothSeeds.add(key);
-        } else {
-            gridSeeds.add(key);
-        }
-    }
-
-    public void onBlockChanged(BlockPos pos) {
-        long key = pos.asLong();
-
-        if (sources.containsKey(key))
+    private void seedOnce(ColorLightPropagationMode mode, long key) {
+        if (seedSeen.contains(key))
             return;
+        seedSeen.put(key, 1L);
+        (mode == ColorLightPropagationMode.SMOOTH ? smoothQueue : gridQueue).add(key);
+    }
 
-        int old = getRaw(key);
-        data.put(key, ColorLightUtil.EMPTY);
+    // =====================================================================================
+    // Dynamic (entity) lights
+    // =====================================================================================
 
-        RelightPlan plan = darkenAndCollectSeeds(key, old);
+    /**
+     * Creates a helper that computes dynamic-light footprints off the game thread. Give each
+     * worker thread its own instance.
+     */
+    public DynamicLightWorker newDynamicWorker() {
+        return new DynamicLightWorker(new DynamicFlood(level, decayPerOpacityUnit));
+    }
 
-        addSeed(propagationMode, key, plan.gridSeeds(), plan.smoothSeeds());
-        for (Neighbor n : SMOOTH_NEIGHBORS) {
-            long neighborKey = pos.offset(n.dx(), n.dy(), n.dz()).asLong();
-            SourceState neighborSource = sources.get(neighborKey);
-            addSeed(neighborSource != null ? neighborSource.mode() : propagationMode, neighborKey, plan.gridSeeds(), plan.smoothSeeds());
+    /** Thread-confined handle used to (re)compute and apply one dynamic light at a time. */
+    public final class DynamicLightWorker {
+        private final DynamicFlood flood;
+
+        private DynamicLightWorker(DynamicFlood flood) {
+            this.flood = flood;
         }
 
-        propagateAdd(plan.gridSeeds(), ColorLightPropagationMode.GRID);
-        propagateAdd(plan.smoothSeeds(), ColorLightPropagationMode.SMOOTH);
+        /**
+         * Floods the light at its exact sub-block position (no engine lock needed) and then applies
+         * the result to the dynamic layer under the lock, changing only the cells that differ.
+         */
+        public void update(int id, double x, double y, double z, int r, int g, int b, int strength) {
+            DynamicFootprint footprint = flood.compute(x, y, z, r, g, b, strength);
+            lock.lock();
+            try {
+                dynamic.replace(id, footprint);
+            } finally {
+                unlock();
+            }
+        }
+
+        public void remove(int id) {
+            lock.lock();
+            try {
+                dynamic.remove(id);
+            } finally {
+                unlock();
+            }
+        }
     }
+
+    /** True if a block changed inside this dynamic light's footprint since it was computed. */
+    public boolean isDynamicStale(int id) {
+        return dynamic.isStale(id);
+    }
+
+    /** Flags dynamic lights near a changed block for recomputation without touching static light. Lock-free. */
+    public void invalidateDynamicAround(BlockPos pos) {
+        dynamic.markStaleAround(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    public boolean hasDynamic(int id) {
+        return dynamic.has(id);
+    }
+
+    // =====================================================================================
+    // Dirty section tracking
+    // =====================================================================================
+
+    /** The cell's colour changed: every mesh block within 1 cell of it reads it, so mark those sections. */
+    private void markDirty(int x, int y, int z) {
+        int sx = x >> 4, sy = y >> 4, sz = z >> 4;
+        int lx = x & 15, ly = y & 15, lz = z & 15;
+        int x0 = lx == 0 ? sx - 1 : sx, x1 = lx == 15 ? sx + 1 : sx;
+        int y0 = ly == 0 ? sy - 1 : sy, y1 = ly == 15 ? sy + 1 : sy;
+        int z0 = lz == 0 ? sz - 1 : sz, z1 = lz == 15 ? sz + 1 : sz;
+        for (int a = x0; a <= x1; a++) {
+            for (int b = y0; b <= y1; b++) {
+                for (int c = z0; c <= z1; c++) {
+                    dirtySections.put(PosKey.pack(a, b, c), 1);
+                }
+            }
+        }
+    }
+
+    private void markSectionAndNeighborsDirty(long sectionKey) {
+        int sx = PosKey.x(sectionKey), sy = PosKey.y(sectionKey), sz = PosKey.z(sectionKey);
+        for (int a = sx - 1; a <= sx + 1; a++) {
+            for (int b = sy - 1; b <= sy + 1; b++) {
+                for (int c = sz - 1; c <= sz + 1; c++) {
+                    dirtySections.put(PosKey.pack(a, b, c), 1);
+                }
+            }
+        }
+    }
+
+    /** Marks every section touched by the block box (padded by one block) as needing a rebuild. Never waits for a flood. */
+    public void markRegionDirty(int x0, int y0, int z0, int x1, int y1, int z1) {
+        int sx0 = (x0 - 1) >> 4, sx1 = (x1 + 1) >> 4;
+        int sy0 = (y0 - 1) >> 4, sy1 = (y1 + 1) >> 4;
+        int sz0 = (z0 - 1) >> 4, sz1 = (z1 + 1) >> 4;
+        synchronized (externalDirty) {
+            for (int a = sx0; a <= sx1; a++) {
+                for (int b = sy0; b <= sy1; b++) {
+                    for (int c = sz0; c <= sz1; c++) {
+                        externalDirty.put(PosKey.pack(a, b, c), 1);
+                    }
+                }
+            }
+        }
+    }
+
+    /** After replacing an engine (config change): rebuild everything the old engine had lit, since it just went away. */
+    public void inheritDirtyFrom(ColorLightEngine old) {
+        if (old == null || old == this)
+            return;
+        List<Long> keys = new java.util.ArrayList<>();
+        old.data.forEachLitSection(keys::add);
+        old.dynamic.storage().forEachLitSection(keys::add);
+        synchronized (externalDirty) {
+            for (long key : keys) {
+                int sx = PosKey.x(key), sy = PosKey.y(key), sz = PosKey.z(key);
+                for (int a = sx - 1; a <= sx + 1; a++) {
+                    for (int b = sy - 1; b <= sy + 1; b++) {
+                        for (int c = sz - 1; c <= sz + 1; c++) {
+                            externalDirty.put(PosKey.pack(a, b, c), 1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns and clears the packed section coordinates ({@link PosKey}) that need a mesh rebuild.
+     * Only touches {@link #externalDirty}'s own monitor, so it never waits for a flood.
+     */
+    public long[] drainDirtySections() {
+        synchronized (externalDirty) {
+            if (externalDirty.isEmpty())
+                return NO_KEYS;
+            long[] out = externalDirty.keysToArray();
+            externalDirty.clear();
+            return out;
+        }
+    }
+
+    // =====================================================================================
+    // Daylight
+    // =====================================================================================
 
     public float getDaylightFactor(BlockPos pos) {
         if (!(level instanceof Level realLevel))
             return 0f;
 
+        float timeOfDayFactor = cachedTimeOfDayFactor(realLevel);
+        if (timeOfDayFactor <= 0f)
+            return 0f; // night: skip reading sky light altogether
+
         float skyExposure = realLevel.getBrightness(LightLayer.SKY, pos) / 15f;
-
-        float timeOfDayFactor = computeTimeOfDayFactor(realLevel);
-
         return ColorLightUtil.clamp01(skyExposure * timeOfDayFactor);
+    }
+
+    private float cachedTimeOfDayFactor(Level realLevel) {
+        long now = System.nanoTime();
+        if (now - timeFactorStamp > TIME_FACTOR_TTL_NANOS) {
+            timeFactor = computeTimeOfDayFactor(realLevel);
+            timeFactorStamp = now;
+        }
+        return timeFactor;
     }
 
     public static float computeTimeOfDayFactor(Level level) {
@@ -637,78 +949,8 @@ public class ColorLightEngine {
         return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime + " rawSky=" + rawSky + " skyExposure=" + skyExposure + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor + " defaultPropagationMode=" + propagationMode;
     }
 
-    protected int getOpacity(BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightDampening()));
-    }
-
-    public int sampleSmoothColor(BlockPos pos, Direction face, float vx, float vy, float vz) {
-
-        BlockPos facePos = (face != null) ? pos.relative(face) : pos;
-
-        if (face == null) {
-            return ColorLightUtil.max(getColor(pos), getColor(facePos));
-        }
-
-        Direction.Axis axisA;
-        Direction.Axis axisB;
-
-        switch (face.getAxis()) {
-            case X -> { axisA = Direction.Axis.Y; axisB = Direction.Axis.Z; }
-            case Y -> { axisA = Direction.Axis.X; axisB = Direction.Axis.Z; }
-            default -> { axisA = Direction.Axis.X; axisB = Direction.Axis.Y; }
-        }
-
-        float coordA = axisCoord(axisA, vx, vy, vz);
-        float coordB = axisCoord(axisB, vx, vy, vz);
-
-        int[] offsetsA = (coordA < 0.5f) ? new int[]{-1, 0} : new int[]{0, 1};
-        int[] offsetsB = (coordB < 0.5f) ? new int[]{-1, 0} : new int[]{0, 1};
-
-        int sumR = 0, sumG = 0, sumB = 0;
-        int validSamples = 0;
-
-        for (int oa : offsetsA) {
-            for (int ob : offsetsB) {
-                BlockPos samplePos = offsetAxis(offsetAxis(facePos, axisA, oa), axisB, ob);
-
-                if (isOpaque(samplePos))
-                    continue;
-
-                int color = getColor(samplePos);
-                sumR += ColorLightUtil.r(color);
-                sumG += ColorLightUtil.g(color);
-                sumB += ColorLightUtil.b(color);
-                validSamples++;
-            }
-        }
-
-        int avg = (validSamples > 0)
-                ? ColorLightUtil.pack(Math.round(sumR / (float) validSamples), Math.round(sumG / (float) validSamples), Math.round(sumB / (float) validSamples))
-                : ColorLightUtil.EMPTY;
-
-        return ColorLightUtil.max(avg, getColor(pos));
-    }
-
-    public int sampleFlatColor(BlockPos pos, Direction face) {
+    public int sampleFlatColor(BlockPos pos, net.minecraft.core.Direction face) {
         BlockPos facePos = (face != null) ? pos.relative(face) : pos;
         return ColorLightUtil.max(getColor(pos), getColor(facePos));
-    }
-
-    private static float axisCoord(Direction.Axis axis, float x, float y, float z) {
-        return switch (axis) {
-            case X -> x;
-            case Y -> y;
-            case Z -> z;
-        };
-    }
-
-    private static BlockPos offsetAxis(BlockPos pos, Direction.Axis axis, int amount) {
-        if (amount == 0) return pos;
-        return switch (axis) {
-            case X -> pos.offset(amount, 0, 0);
-            case Y -> pos.offset(0, amount, 0);
-            case Z -> pos.offset(0, 0, amount);
-        };
     }
 }

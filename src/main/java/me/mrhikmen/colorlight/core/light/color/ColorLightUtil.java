@@ -27,11 +27,12 @@ public final class ColorLightUtil {
         return packed == EMPTY;
     }
 
+    /** Per-channel maximum. Inputs are masked to 8 bits per channel, so no re-clamping is needed. */
     public static int max(int a, int b) {
-        int r = Math.max(r(a), r(b));
-        int g = Math.max(g(a), g(b));
-        int bl = Math.max(b(a), b(b));
-        return pack(r, g, bl);
+        int r = Math.max(a & 0xFF, b & 0xFF);
+        int g = Math.max((a >> 8) & 0xFF, (b >> 8) & 0xFF);
+        int bl = Math.max((a >> 16) & 0xFF, (b >> 16) & 0xFF);
+        return r | (g << 8) | (bl << 16);
     }
 
     private static final float INTENSITY_SCALE = 0.85f;
