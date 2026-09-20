@@ -4,6 +4,7 @@ import com.google.gson.*;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,8 +15,8 @@ public class ColorLightConfig {
     public boolean ENABLE = true;
 
     public int lightRangeBlocks = 15;
-    public boolean USE_GPU_LIGHTING = true;
     public boolean SMOOTH_LIGHTING = true;
+    public String PROPAGATION_MODE = "GRID";
 
     public int BRIGHTNESS_WEIGHT     = 100;
     public int LOCAL_WEIGHT          = 100;
@@ -48,10 +49,11 @@ public class ColorLightConfig {
                 JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
                 this.ENABLE = loaded.ENABLE;
+
                 this.blocks = loaded.blocks;
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
-                this.USE_GPU_LIGHTING = loaded.USE_GPU_LIGHTING;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
+                this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
 
                 this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
                 this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;
@@ -69,6 +71,7 @@ public class ColorLightConfig {
                 this.VOXY_COMPAT_ENABLED = root.has("VOXY_COMPAT_ENABLED") ? loaded.VOXY_COMPAT_ENABLED : this.VOXY_COMPAT_ENABLED;
                 this.VOXY_FOLLOW_LOD_RENDER_DISTANCE = root.has("VOXY_FOLLOW_LOD_RENDER_DISTANCE") ? loaded.VOXY_FOLLOW_LOD_RENDER_DISTANCE : this.VOXY_FOLLOW_LOD_RENDER_DISTANCE;
                 this.VOXY_LIGHT_RANGE_BLOCKS = loaded.VOXY_LIGHT_RANGE_BLOCKS > 0 ? loaded.VOXY_LIGHT_RANGE_BLOCKS : this.VOXY_LIGHT_RANGE_BLOCKS;
+
 
             } catch (IOException e) {
                 e.printStackTrace();

@@ -36,12 +36,11 @@ If a mod adds features that differ from vanilla Minecraft, a separate compatibil
 <details>
 <summary>Known issues</summary>
 
-| Issue description                                                                  |                                          Why it happens                                         |                                                   How to fix                                                  |
-| :--------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------: |
-| "Description: Mod 'colorlight' failed while registering config options." with RRLS |   This happens because ColorLight does not have enough time to create its settings due to RRLS  | [Fix]([https://github.com/MrHikmen/ColorLight/issues/7]%28https://github.com/MrHikmen/ColorLight/issues/7%29) |
-| ColorLight settings are not applied                                                |                    The settings application was poorly implemented initially                    |                                        Wait for a fix in future updates                                       |
-| Strange triangles on version 1.21.11 or squares on version 26.2                    |                           This is an old version of Voxy compatibility                          |                      Disable "Enable Voxy compatibility" in the "Compatibility" settings                      |
-| Crashes when "Compute lighting on GPU" is enabled                                  | Your system or device is not compatible with OpenGL 4.3, and ColorLight was unable to detect it |                     Disable "Compute lighting on GPU" or wait for a fix in future updates                     |
+| Issue description                                                                  |                                        Why it happens                                        |                             How to fix                              |
+|:-----------------------------------------------------------------------------------|:--------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------:|
+| "Description: Mod 'colorlight' failed while registering config options." with RPLS | This happens because ColorLight does not have enough time to create its settings due to RPLS |      Launch Minecraft without RPLS, then restart it with RPLS       |
+| ColorLight settings are not applied                                                |                  The settings application was poorly implemented initially                   |         Restart Minecraft or wait for fixes in new updates          |
+| Strange triangles on version 1.21.11 or squares on version 26.2                    |                         This is an old version of Voxy compatibility                         | Disable "Enable Voxy compatibility" in the "Compatibility" settings |
 
 </details>
 
@@ -84,13 +83,11 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 <details>
 <summary>Известные ошибки</summary>
 
-| Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                                      Как исправить                                      |
-|:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------:|
-| "Description: Mod 'colorlight' failed while registering config options." с RRLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |             [Исправление](https://github.com/MrHikmen/ColorLight/issues/7)              |
-| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     |                        Дождаться исправление в новых обновлениях                        |
-| Непонятные треугольники на версии 1.21.11 или квадраты на версии 26.2           |                         Это старая версия совместимости с Voxy                          |           Отключить "Enable Voxy compatibility" в настройках "Compatibility"            |
-| Вылеты с включением "Compute lighting on GPU"                                   | Ваша система или устройство не совместимо с OpenGL 4.3, а ColorLight не смог это понять |    Выключить "Compute lighting on GPU" или дождаться исправление в новых обновлениях    |
-| Фризы в обычном мире                                                            |     Возникает из-за огромного количества источников света (более 10000 источников)      | Пока рекомендую избегать большого количества источников, исправлю это в ближайщие время |
+| Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                             Как исправить                             |
+|:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------:|
+| "Description: Mod 'colorlight' failed while registering config options." с RPLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |       Запустить Майнкрафт без RPLS, после перезапустить с RPLS        |
+| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     | Перезагрузить Майнкрафт или дождаться исправление в новых обновлениях |
+| Непонятные треугольники на версии 1.21.11 или квадраты на версии 26.2           |                         Это старая версия совместимости с Voxy                          |  Отключить "Enable Voxy compatibility" в настройках "Compatibility"   |
 </details>
 
 </details>

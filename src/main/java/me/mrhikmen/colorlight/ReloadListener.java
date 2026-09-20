@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight;
 
 import me.mrhikmen.colorlight.core.scanner.BlockScanner;
-import me.mrhikmen.colorlight.core.light.*;
+import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
 
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 

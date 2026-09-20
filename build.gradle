@@ -8,7 +8,7 @@ version = project.mod_version
 group = project.maven_group
 
 base {
-    archivesName = project.archives_base_name + "-" + project.minecraft_version
+    archivesName = /* "test-" + project.mod_test + "-" + */ project.archives_base_name + "-" + project.minecraft_version
 }
 
 repositories {
@@ -16,7 +16,6 @@ repositories {
         name = "CaffeineMC"
         url = "https://maven.caffeinemc.net/releases/"
     }
-
     maven {
         name = "TerraformersMC"
         url = "https://maven.terraformersmc.com/releases/"
@@ -59,52 +58,47 @@ dependencies {
 }
 
 processResources {
-    inputs.property "version", project.version
+    def version = project.version
+    inputs.property "version", version
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "loader_version", project.loader_version
     inputs.property "sodium_version", project.sodium_version
     inputs.property "fabric_version", project.fabric_version
-    filteringCharset "UTF-8"
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version,
-                "sodium_version": project.sodium_version,
-                "fabric_version": project.fabric_version
+        expand "version": version,
+        "minecraft_version": project.minecraft_version,
+        "loader_version": project.loader_version,
+        "sodium_version": project.sodium_version,
+        "fabric_version": project.fabric_version
     }
 }
 
-def targetJavaVersion = 21
 tasks.withType(JavaCompile).configureEach {
-    it.options.encoding = "UTF-8"
-    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
-        it.options.release.set(targetJavaVersion)
-    }
+    it.options.release = 25
 }
 
 java {
-    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
-    if (JavaVersion.current() < javaVersion) {
-        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
-    }
     withSourcesJar()
+
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
+    def projectName = project.name
+    inputs.property "projectName", projectName
+
     from("LICENSE") {
-        rename { "${it}_${project.archives_base_name}" }
+        rename { "${it}_$projectName"}
     }
 }
-
 publishing {
     publications {
         create("mavenJava", MavenPublication) {
-            artifactId = project.archives_base_name
             from components.java
         }
     }
-
     repositories {
     }
 }
