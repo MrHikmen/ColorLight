@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.config.BlockSettings;
+import me.mrhikmen.colorlight.core.scanner.model.ModelTextureResolver;
 import me.mrhikmen.colorlight.core.scanner.model.blockstate.MultipartParser;
 import me.mrhikmen.colorlight.core.scanner.model.blockstate.VariantParser;
 import me.mrhikmen.colorlight.core.scanner.texture.PixelData;
@@ -20,30 +21,42 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 public final class BlockScanner {
 
     public static void discoverNewBlocks() {
+        // texture/model results are only valid for one set of resources and scoring weights
+        SearchBestPixel.clearCache();
+        ModelTextureResolver.clearCache();
+
+        // one pass to index the config (it used to be scanned linearly, twice, for every block in the game)
+        Map<Identifier, BlockSettings> known = new HashMap<>();
+        for (BlockSettings entry : ColorLightClient.config.blocks) {
+            known.putIfAbsent(entry.getBlock(), entry); // first entry wins, like the old linear search
+        }
+
         for (Block block : BuiltInRegistries.BLOCK) {
             int maxLight = maxLightEmission(block);
             if (maxLight <= 0)
                 continue;
 
             Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-            int index = findIndex(id);
+            BlockSettings existing = known.get(id);
 
-            if (index >= 0) {
-                BlockSettings existing = ColorLightClient.config.blocks.get(index);
+            if (existing != null) {
                 if (!existing.edit) {
-                    scanColorFor(index);
+                    scanColorFor(existing);
                 }
                 continue;
             }
 
-            ColorLightClient.config.blocks.add(new BlockSettings(id, maxLight, true));
-            scanColorFor(ColorLightClient.config.blocks.size() - 1);
+            BlockSettings created = new BlockSettings(id, maxLight, true);
+            ColorLightClient.config.blocks.add(created);
+            known.put(id, created);
+            scanColorFor(created);
         }
     }
 
@@ -60,9 +73,11 @@ public final class BlockScanner {
         entry.b = 255;
         entry.edit = false;
 
-        int index = findIndex(id);
-        if (index >= 0)
-            scanColorFor(index);
+        // the scoring weights may have been changed in the GUI since the last scan
+        SearchBestPixel.clearCache();
+
+        if (ColorLightClient.config.blocks.contains(entry))
+            scanColorFor(entry);
     }
 
     private static int maxLightEmission(Block block) {
@@ -74,17 +89,8 @@ public final class BlockScanner {
         return maxLight;
     }
 
-    private static int findIndex(Identifier id) {
-        List<BlockSettings> blocks = ColorLightClient.config.blocks;
-        for (int i = 0; i < blocks.size(); i++) {
-            if (blocks.get(i).getBlock().equals(id))
-                return i;
-        }
-        return -1;
-    }
-
-    private static void scanColorFor(int index) {
-        Identifier block = ColorLightClient.config.blocks.get(index).getBlock();
+    private static void scanColorFor(BlockSettings entry) {
+        Identifier block = entry.getBlock();
 
         Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(
                 Identifier.fromNamespaceAndPath(block.getNamespace(), "blockstates/" + block.getPath() + ".json")
@@ -95,11 +101,11 @@ public final class BlockScanner {
                     JsonObject json = JsonParser.parseString(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
 
                     if (json.has("variants")) {
-                        new VariantParser(json, index);
+                        new VariantParser(json, entry);
                     } else if (json.has("multipart")) {
-                        new MultipartParser(json, index);
+                        new MultipartParser(json, entry);
                     } else {
-                        ColorLightClient.LOGGER.info("[ColorLight] Model not found; name: ");
+                        ColorLightClient.LOGGER.info("[ColorLight] Model not found; name: {}", block.getPath());
                     }
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -110,10 +116,9 @@ public final class BlockScanner {
                 PixelData best = SearchBestPixel.search(texture);
 
                 if (best != null) {
-                    BlockSettings data = ColorLightClient.config.blocks.get(index);
-                    data.r = best.r;
-                    data.g = best.g;
-                    data.b = best.b;
+                    entry.r = best.r;
+                    entry.g = best.g;
+                    entry.b = best.b;
                 }
             }
     }
