@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.core.light.engine;
 
+import me.mrhikmen.colorlight.core.light.propagation.ColorLightPropagationMode;
+
 import net.minecraft.client.multiplayer.ClientLevel;
 
 public final class ColorLightEngineHolder {

@@ -71,6 +71,7 @@ public final class BlockScanner {
         entry.r = 255;
         entry.g = 255;
         entry.b = 255;
+        entry.propagation = "";
         entry.edit = false;
 
         // the scoring weights may have been changed in the GUI since the last scan

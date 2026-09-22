@@ -7,7 +7,7 @@ import me.mrhikmen.colorlight.config.Translatable;
 import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.propagation.ColorLightPropagationMode;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;

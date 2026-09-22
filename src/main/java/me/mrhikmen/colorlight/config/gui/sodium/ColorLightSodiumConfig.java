@@ -10,7 +10,7 @@ import me.mrhikmen.colorlight.config.gui.screen.ColorLightBlockConfigScreen;
 import me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.propagation.ColorLightPropagationMode;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;

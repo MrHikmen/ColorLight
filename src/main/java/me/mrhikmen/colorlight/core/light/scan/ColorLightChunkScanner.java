@@ -195,7 +195,8 @@ public final class ColorLightChunkScanner {
                 // source is a cheap no-op.
 
                 // pos may be a reused mutable position: read the ints right away
-                found.add(pos.getX(), pos.getY(), pos.getZ(), entry.r, entry.g, entry.b, Math.min(entry.light, emission));
+                found.add(pos.getX(), pos.getY(), pos.getZ(), entry.r, entry.g, entry.b,
+                        Math.min(entry.light, emission), entry.getPropagationId());
             });
 
             if (!found.isEmpty()) {

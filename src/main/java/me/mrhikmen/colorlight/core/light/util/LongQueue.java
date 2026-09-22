@@ -1,15 +1,20 @@
-package me.mrhikmen.colorlight.core.light.engine;
+package me.mrhikmen.colorlight.core.light.util;
 
-public final class IntQueue {
+/**
+ * Primitive long ring buffer used as a BFS work queue for packed block-position
+ * keys. Same power-of-two/bitmask trick as {@link IntQueue}, since this is the
+ * queue every propagation and darkening pass drives.
+ */
+public final class LongQueue {
 
-    private int[] data;
+    private long[] data;
     private int mask;
     private int head;
     private int size;
 
-    public IntQueue(int initialCapacity) {
+    public LongQueue(int initialCapacity) {
         int capacity = QueueCapacity.nextPowerOfTwo(initialCapacity);
-        this.data = new int[capacity];
+        this.data = new long[capacity];
         this.mask = capacity - 1;
     }
 
@@ -17,6 +22,7 @@ public final class IntQueue {
         return size == 0;
     }
 
+    /** Empties the queue but keeps its backing array, so it can be reused between passes. */
     public void clear() {
         head = 0;
         size = 0;
@@ -26,15 +32,15 @@ public final class IntQueue {
         return size;
     }
 
-    public void add(int value) {
+    public void add(long value) {
         if (size == data.length)
             grow();
         data[(head + size) & mask] = value;
         size++;
     }
 
-    public int poll() {
-        int value = data[head];
+    public long poll() {
+        long value = data[head];
         head = (head + 1) & mask;
         size--;
         return value;
@@ -42,7 +48,7 @@ public final class IntQueue {
 
     private void grow() {
         int newCapacity = data.length << 1;
-        int[] newData = new int[newCapacity];
+        long[] newData = new long[newCapacity];
         for (int i = 0; i < size; i++) {
             newData[i] = data[(head + i) & mask];
         }

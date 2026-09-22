@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.light.engine;
+package me.mrhikmen.colorlight.core.light.propagation;
 
 import java.util.Locale;
 

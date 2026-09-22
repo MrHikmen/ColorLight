@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.config.gui.screen;
 
+import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
+import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.Translatable;
 import me.mrhikmen.colorlight.core.scanner.BlockScanner;
@@ -10,6 +12,10 @@ import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class ColorLightBlockConfigScreen extends Screen {
 
@@ -49,7 +55,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         int dividerX = leftX + LEFT_COLUMN_WIDTH + DIVIDER_GAP;
         int rightX = dividerX + DIVIDER_WIDTH + DIVIDER_GAP;
 
-        int contentBottom = topY + ROW_HEIGHT + ROW_HEIGHT + 16 + SQUARE_SIZE;
+        int contentBottom = topY + ROW_HEIGHT + ROW_HEIGHT + ROW_HEIGHT + 16 + SQUARE_SIZE;
         int dividerHeight = contentBottom - topY + ACTION_ROW_GAP + ACTION_BUTTON_HEIGHT + ACTION_ROW_GAP + ACTION_BUTTON_HEIGHT;
 
         int iconSize = 64;
@@ -82,7 +88,16 @@ public class ColorLightBlockConfigScreen extends Screen {
         LightRangeSlider lightSlider = new LightRangeSlider(rightX, sliderY, 260, 20, this.entry, this.onSave);
         this.addRenderableWidget(lightSlider);
 
-        int colorLabelY = sliderY + ROW_HEIGHT;
+        int propagationY = sliderY + ROW_HEIGHT;
+        Button propagationButton = Button.builder(propagationLabel(), button -> {
+            cyclePropagation();
+            button.setMessage(propagationLabel());
+            this.entry.edit = true;
+            this.onSave.run();
+        }).pos(rightX, propagationY).size(260, ACTION_BUTTON_HEIGHT).build();
+        this.addRenderableWidget(propagationButton);
+
+        int colorLabelY = propagationY + ROW_HEIGHT;
         StringWidget colorLabel = new StringWidget(
                 rightX, colorLabelY, 260, 16,
                 Translatable.COLORED_LIGHTING, this.font
@@ -134,6 +149,36 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.entry.b = rgb[2];
         this.entry.edit = true;
         this.onSave.run();
+    }
+
+    /** Every choice the propagation button can land on: "engine default" (null) followed by every registered method. */
+    private static List<Identifier> propagationChoices() {
+        List<Identifier> ids = new ArrayList<>();
+        ids.add(null);
+        for (PropagationMethod method : PropagationMethodRegistry.all()) {
+            ids.add(method.id());
+        }
+        return ids;
+    }
+
+    private Component propagationLabel() {
+        Identifier id = this.entry.getPropagationId();
+        Component value;
+        if (id == null) {
+            value = Translatable.BLOCK_PROPAGATION_DEFAULT;
+        } else {
+            PropagationMethod method = PropagationMethodRegistry.get(id);
+            value = Component.literal((method != null) ? method.displayName() : id.toString());
+        }
+        return Component.empty().append(Translatable.BLOCK_PROPAGATION).append(Component.literal(": ")).append(value);
+    }
+
+    /** Advances this block's propagation setting to the next registered method, wrapping back to "engine default". */
+    private void cyclePropagation() {
+        List<Identifier> choices = propagationChoices();
+        int index = choices.indexOf(this.entry.getPropagationId());
+        Identifier next = choices.get((index + 1) % choices.size());
+        this.entry.propagation = (next != null) ? next.toString() : "";
     }
 
     private void resetToDefault() {

@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight;
 
+import me.mrhikmen.colorlight.api.propagation.builtin.BuiltinPropagationMethods;
 import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.compat.lambdynlights.ColorLightLambDynLightsCompat;
 import me.mrhikmen.colorlight.compat.lod.LodColorLightCompat;
@@ -10,7 +11,7 @@ import me.mrhikmen.colorlight.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.core.light.runtime.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.core.light.runtime.ColorLightDirtyFlusher;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.engine.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.propagation.ColorLightPropagationMode;
 import me.mrhikmen.colorlight.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.core.render.ModelPlugin;
 
@@ -34,6 +35,12 @@ public class ColorLightClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // Registers ColorLight's own propagation methods (grid, smooth) through the same public API a
+        // third-party mod would use (see me.mrhikmen.colorlight.api.propagation). Must happen before
+        // anything resolves a propagation id, e.g. the config load and block registry below, and before
+        // any other mod's own init runs so its methods register right after these.
+        BuiltinPropagationMethods.registerAll();
+
         config.load();
 
         ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));

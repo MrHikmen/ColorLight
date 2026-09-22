@@ -3,8 +3,8 @@ package me.mrhikmen.colorlight.core.light.runtime;
 import me.mrhikmen.colorlight.ColorLightClient;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.core.light.engine.LongIntMap;
-import me.mrhikmen.colorlight.core.light.engine.PosKey;
+import me.mrhikmen.colorlight.core.light.util.LongIntMap;
+import me.mrhikmen.colorlight.core.light.util.PosKey;
 import me.mrhikmen.colorlight.core.util.ColorLightRenderUtil;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;

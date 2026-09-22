@@ -1,16 +1,30 @@
 package me.mrhikmen.colorlight.core.light.engine;
 
+import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
+import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.propagation.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.core.light.propagation.GridPropagator;
+import me.mrhikmen.colorlight.core.light.propagation.LightPropagator;
+import me.mrhikmen.colorlight.core.light.propagation.SmoothPropagator;
+import me.mrhikmen.colorlight.core.light.util.IntQueue;
+import me.mrhikmen.colorlight.core.light.util.LongIntMap;
+import me.mrhikmen.colorlight.core.light.util.LongQueue;
+import me.mrhikmen.colorlight.core.light.util.PassMap;
+import me.mrhikmen.colorlight.core.light.util.PosKey;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LightLayer;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static me.mrhikmen.colorlight.core.light.engine.PropagationTables.*;
+import static me.mrhikmen.colorlight.core.light.propagation.PropagationTables.*;
 
 /**
  * Coloured light field: a flood-fill engine for static sources (blocks) plus a separate layer for
@@ -36,15 +50,16 @@ import static me.mrhikmen.colorlight.core.light.engine.PropagationTables.*;
  */
 public class ColorLightEngine {
 
-    protected static final int VANILLA_MAX_OPACITY = 15;
+    protected static final int VANILLA_MAX_OPACITY = MAX_OPACITY;
 
-    static final int RGB_MASK = LightStorage.RGB_MASK;
     static final int FLAG_SOURCE = 1 << 24;
     static final int FLAG_SMOOTH = 1 << 25;
-    static final int FLAG_MASK = 0xFF000000;
-
-    /** 1 / 0.125 - the finest sub-unit step SMOOTH tracks internally. */
-    private static final int FIXED_POINT_SCALE = 8;
+    /**
+     * Set on a source cell that spreads with a propagation method other than the two built-in ones -
+     * which method exactly is looked up in {@link #customMethodByKey}, since an arbitrary number of
+     * third-party methods can't each get their own bit here.
+     */
+    static final int FLAG_CUSTOM = 1 << 26;
 
     /** How many sources are flooded per lock acquisition when adding a batch (keeps game-thread stalls short). */
     private static final int BATCH_GROUP_SIZE = 4;
@@ -56,9 +71,22 @@ public class ColorLightEngine {
     protected final float decayPerOpacityUnit;
     protected final LevelAccessor level;
     private final ColorLightPropagationMode propagationMode;
+    /** {@link #propagationMode} as an id ({@link PropagationMethodRegistry#GRID}/{@code SMOOTH}) - what a source without its own override actually spreads with. */
+    private final Identifier defaultMethodId;
 
-    private final int[] gridDecay;
-    private final int[][] smoothDecay;
+    /** The two built-in ways light spreads - see the {@code propagation} package. Kept as dedicated fields (rather than only living in the maps below) so the common case never pays for a map lookup. */
+    private final GridPropagator gridPropagator;
+    private final SmoothPropagator smoothPropagator;
+
+    /**
+     * Propagators/queues for any additional {@link PropagationMethod} a block config or another mod
+     * asked for (see {@link me.mrhikmen.colorlight.api.propagation}), created lazily the first time
+     * that method is actually used by this engine. Only touched while holding {@link #lock}.
+     */
+    private final Map<Identifier, LightPropagator> customPropagators = new HashMap<>();
+    private final Map<Identifier, LongQueue> customQueues = new HashMap<>();
+    /** key -> propagation method id, for sources whose method isn't one of the two built-ins. Guarded by {@link #lock}. */
+    private final Map<Long, Identifier> customMethodByKey = new HashMap<>();
 
     private final LightStorage data = new LightStorage();
     private final DynamicLightLayer dynamic;
@@ -78,9 +106,6 @@ public class ColorLightEngine {
     private final ReentrantLock lock = new ReentrantLock();
 
     // ---- scratch state, only touched while holding the lock ----
-    private final BlockPos.MutableBlockPos scratchPos = new BlockPos.MutableBlockPos();
-    private final PassMap opacityMemo = new PassMap(1 << 12);
-    private final PassMap eighthsMemo = new PassMap(1 << 12);
     private final PassMap seedSeen = new PassMap(1 << 10);
     private final LongQueue gridQueue = new LongQueue(1 << 10);
     private final LongQueue smoothQueue = new LongQueue(1 << 10);
@@ -119,8 +144,11 @@ public class ColorLightEngine {
         this.maxRangeBlocks = Math.max(1, maxRangeBlocks); // защита от 0/отрицательных значений из конфига
         this.decayPerOpacityUnit = ColorLightUtil.MAX / (float) this.maxRangeBlocks;
         this.propagationMode = (propagationMode != null) ? propagationMode : ColorLightPropagationMode.GRID;
-        this.gridDecay = buildGridDecay(decayPerOpacityUnit);
-        this.smoothDecay = buildSmoothDecay(decayPerOpacityUnit, FIXED_POINT_SCALE);
+        this.defaultMethodId = (this.propagationMode == ColorLightPropagationMode.SMOOTH)
+                ? PropagationMethodRegistry.SMOOTH : PropagationMethodRegistry.GRID;
+        this.gridPropagator = new GridPropagator(decayPerOpacityUnit);
+        this.smoothPropagator = new SmoothPropagator(decayPerOpacityUnit);
+        this.staticField = new WorldLightField(level, data, this::markDirty);
         this.dynamic = new DynamicLightLayer(this::markDirty);
     }
 
@@ -248,7 +276,7 @@ public class ColorLightEngine {
 
     /** Adds a source using the engine's default model (plain blocks). */
     public void addSource(BlockPos pos, int r, int g, int b, int strength) {
-        addSource(pos, r, g, b, strength, propagationMode);
+        addSource(pos, r, g, b, strength, (Identifier) null);
     }
 
     /**
@@ -257,7 +285,22 @@ public class ColorLightEngine {
      * removes the old one so stale light around it is cleaned up.
      */
     public void addSource(BlockPos pos, int r, int g, int b, int strength, ColorLightPropagationMode mode) {
-        ColorLightPropagationMode resolved = (mode != null) ? mode : propagationMode;
+        Identifier id = (mode == ColorLightPropagationMode.SMOOTH)
+                ? PropagationMethodRegistry.SMOOTH : PropagationMethodRegistry.GRID;
+        addSource(pos, r, g, b, strength, id);
+    }
+
+    /**
+     * Adds a source that spreads using the propagation method {@code methodId} identifies (see
+     * {@link PropagationMethodRegistry}, and {@link me.mrhikmen.colorlight.config.BlockSettings#propagation}
+     * for where a block's own choice usually comes from), independent of the engine's default.
+     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the mod
+     * providing it is missing) falls back to it too, so a stale config entry never breaks lighting.
+     * Re-adding an identical source is a no-op; re-adding it with a different colour/model first
+     * removes the old one so stale light around it is cleaned up.
+     */
+    public void addSource(BlockPos pos, int r, int g, int b, int strength, Identifier methodId) {
+        Identifier resolved = resolveMethod(methodId);
 
         float scale = ColorLightUtil.clamp01(strength / 15f);
         int packed = ColorLightUtil.pack(Math.round(r * scale), Math.round(g * scale), Math.round(b * scale));
@@ -270,9 +313,19 @@ public class ColorLightEngine {
         }
     }
 
+    /** {@code null} or an unregistered id both fall back to the engine's own default method. */
+    private Identifier resolveMethod(Identifier methodId) {
+        if (methodId == null)
+            return defaultMethodId;
+        return PropagationMethodRegistry.contains(methodId) ? methodId : defaultMethodId;
+    }
+
     /**
-     * Adds many sources of the engine's default model at once, e.g. everything found in a freshly
-     * loaded chunk. Sources are flooded together in one pass per group instead of one flood each.
+     * Adds many sources at once, e.g. everything found in a freshly loaded chunk - each with its own
+     * propagation method ({@link SourceBatch#add(int, int, int, int, int, int, int, Identifier)}, e.g.
+     * from that block's own {@code BlockSettings#getPropagationId()}), or the engine default where the
+     * batch entry didn't ask for one. Sources are flooded together in one pass per group instead of one
+     * flood each.
      *
      * @return true if the light field changed
      */
@@ -288,9 +341,11 @@ public class ColorLightEngine {
             try {
                 gridQueue.clear();
                 smoothQueue.clear();
+                clearCustomQueuesLocked();
                 for (int i = from; i < to; i++) {
                     long key = batch.key(i);
-                    changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), propagationMode);
+                    Identifier methodId = resolveMethod(batch.method(i));
+                    changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), methodId);
                 }
                 flushQueuesLocked();
             } finally {
@@ -300,21 +355,24 @@ public class ColorLightEngine {
         return changed;
     }
 
-    private void addSourceLocked(int x, int y, int z, int packed, ColorLightPropagationMode mode) {
+    private void addSourceLocked(int x, int y, int z, int packed, Identifier methodId) {
         gridQueue.clear();
         smoothQueue.clear();
-        placeSourceLocked(x, y, z, packed, mode);
+        clearCustomQueuesLocked();
+        placeSourceLocked(x, y, z, packed, methodId);
         flushQueuesLocked();
     }
 
     /** Writes the source cell and queues it as a seed; the caller floods afterwards. @return whether anything changed */
-    private boolean placeSourceLocked(int x, int y, int z, int packed, ColorLightPropagationMode mode) {
+    private boolean placeSourceLocked(int x, int y, int z, int packed, Identifier methodId) {
         long key = PosKey.pack(x, y, z);
-        int flags = FLAG_SOURCE | (mode == ColorLightPropagationMode.SMOOTH ? FLAG_SMOOTH : 0);
+        int flags = FLAG_SOURCE | methodFlags(methodId);
 
         int existing = data.get(x, y, z);
         if ((existing & FLAG_SOURCE) != 0) {
-            if ((existing & (FLAG_MASK)) == flags && sourceColors.get(key, -1) == packed)
+            boolean sameFlags = (existing & FLAG_MASK) == flags;
+            boolean sameMethod = sameFlags && ((flags & FLAG_CUSTOM) == 0 || methodId.equals(customMethodByKey.get(key)));
+            if (sameMethod && sourceColors.get(key, -1) == packed)
                 return false; // identical source already there
 
             // different colour/strength/model: clean up what the old one lit before adding the new one
@@ -324,13 +382,18 @@ public class ColorLightEngine {
         }
 
         sourceColors.put(key, packed);
+        if ((flags & FLAG_CUSTOM) != 0) {
+            customMethodByKey.put(key, methodId);
+        } else {
+            customMethodByKey.remove(key); // in case this position previously held a custom-method source
+        }
         sourceVersion++;
 
         int merged = ColorLightUtil.max(existing & RGB_MASK, packed);
         data.put(x, y, z, flags | merged);
         markDirty(x, y, z);
 
-        (mode == ColorLightPropagationMode.SMOOTH ? smoothQueue : gridQueue).add(key);
+        queueFor(methodId).add(key);
         return true;
     }
 
@@ -350,6 +413,7 @@ public class ColorLightEngine {
             return;
 
         sourceColors.remove(key);
+        customMethodByKey.remove(key);
         sourceVersion++;
 
         int old = cell & RGB_MASK;
@@ -386,13 +450,14 @@ public class ColorLightEngine {
 
             darkenAndCollectSeeds(key, old);
 
-            seedOnce(propagationMode, key);
+            seedOnce(defaultMethodId, key);
             for (int n = 0; n < SMOOTH_COUNT; n++) {
                 int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
                 int nCell = data.get(nx, ny, nz);
                 if ((nCell & RGB_MASK) == 0 && (nCell & FLAG_SOURCE) == 0)
                     continue; // nothing there that could spread into the changed cell
-                seedOnce(modeOf(nCell), PosKey.pack(nx, ny, nz));
+                long nKey = PosKey.pack(nx, ny, nz);
+                seedOnce(methodIdOf(nCell, nKey), nKey);
             }
 
             flushQueuesLocked();
@@ -430,6 +495,7 @@ public class ColorLightEngine {
             data.clear();
             dynamic.clear();
             sourceColors.clear();
+            customMethodByKey.clear();
             sourceVersion++;
         } finally {
             unlock();
@@ -479,6 +545,7 @@ public class ColorLightEngine {
 
             for (int i = 0; i < count[0]; i++) {
                 sourceColors.remove(holder[0][i]);
+                customMethodByKey.remove(holder[0][i]);
             }
             if (count[0] > 0)
                 sourceVersion++;
@@ -495,156 +562,75 @@ public class ColorLightEngine {
     // Flood fill
     // =====================================================================================
 
-    private ColorLightPropagationMode modeOf(int cell) {
-        if ((cell & FLAG_SOURCE) != 0)
-            return (cell & FLAG_SMOOTH) != 0 ? ColorLightPropagationMode.SMOOTH : ColorLightPropagationMode.GRID;
-        return propagationMode;
+    /** Which method's bit(s) to set on a source cell for {@code methodId} - see {@link #FLAG_CUSTOM}. */
+    private static int methodFlags(Identifier methodId) {
+        if (methodId == null || PropagationMethodRegistry.GRID.equals(methodId))
+            return 0;
+        if (PropagationMethodRegistry.SMOOTH.equals(methodId))
+            return FLAG_SMOOTH;
+        return FLAG_CUSTOM;
+    }
+
+    /** The propagation method a stored cell actually spreads with; {@code key} is only consulted for a custom (non-built-in) source. */
+    private Identifier methodIdOf(int cell, long key) {
+        if ((cell & FLAG_SOURCE) == 0)
+            return defaultMethodId; // an ordinary (non-source) cell always falls back to the engine default
+        if ((cell & FLAG_CUSTOM) != 0)
+            return customMethodByKey.getOrDefault(key, defaultMethodId);
+        return (cell & FLAG_SMOOTH) != 0 ? PropagationMethodRegistry.SMOOTH : PropagationMethodRegistry.GRID;
+    }
+
+    /** The propagator for {@code methodId}, creating and caching it on first use for anything beyond the two built-ins. Call only while holding {@link #lock}. */
+    private LightPropagator propagatorFor(Identifier methodId) {
+        if (methodId == null || PropagationMethodRegistry.GRID.equals(methodId))
+            return gridPropagator;
+        if (PropagationMethodRegistry.SMOOTH.equals(methodId))
+            return smoothPropagator;
+        return customPropagators.computeIfAbsent(methodId, id -> {
+            PropagationMethod method = PropagationMethodRegistry.get(id);
+            // the method was validated by resolveMethod()/methodFlags() already; this is only a
+            // last-resort guard against it having been unregistered in the meantime
+            return (method != null) ? method.create(decayPerOpacityUnit) : gridPropagator;
+        });
+    }
+
+    /** The seed queue for {@code methodId}, creating it on first use for anything beyond the two built-ins. Call only while holding {@link #lock}. */
+    private LongQueue queueFor(Identifier methodId) {
+        if (methodId == null || PropagationMethodRegistry.GRID.equals(methodId))
+            return gridQueue;
+        if (PropagationMethodRegistry.SMOOTH.equals(methodId))
+            return smoothQueue;
+        return customQueues.computeIfAbsent(methodId, id -> new LongQueue(1 << 8));
+    }
+
+    private void clearCustomQueuesLocked() {
+        if (!customQueues.isEmpty()) {
+            for (LongQueue queue : customQueues.values()) {
+                queue.clear();
+            }
+        }
     }
 
     private void flushQueuesLocked() {
         if (!gridQueue.isEmpty())
-            propagateGrid(gridQueue);
+            gridPropagator.propagate(gridQueue, staticField);
         if (!smoothQueue.isEmpty())
-            propagateSmooth(smoothQueue);
-    }
-
-    private int opacityAt(int x, int y, int z) {
-        long key = PosKey.pack(x, y, z);
-        long cached = opacityMemo.get(key, -1L);
-        if (cached >= 0)
-            return (int) cached;
-
-        scratchPos.set(x, y, z);
-        int opacity = level.getBlockState(scratchPos).getLightDampening();
-        opacity = Math.max(0, Math.min(VANILLA_MAX_OPACITY, opacity));
-        opacityMemo.put(key, opacity);
-        return opacity;
-    }
-
-    /** Strictly axis-aligned, whole-unit decay per hop. */
-    private void propagateGrid(LongQueue queue) {
-        opacityMemo.clear();
-
-        while (!queue.isEmpty()) {
-            long key = queue.poll();
-            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
-
-            int cur = data.get(x, y, z);
-            int r = cur & 0xFF, g = (cur >> 8) & 0xFF, b = (cur >> 16) & 0xFF;
-            if ((r | g | b) == 0)
-                continue;
-
-            for (int n = 0; n < 6; n++) {
-                int nx = x + GRID_DX[n], ny = y + GRID_DY[n], nz = z + GRID_DZ[n];
-
-                int opacity = opacityAt(nx, ny, nz);
-                if (opacity >= VANILLA_MAX_OPACITY)
-                    continue;
-
-                int decay = gridDecay[opacity];
-                int nr = r - decay; if (nr < 0) nr = 0;
-                int ng = g - decay; if (ng < 0) ng = 0;
-                int nb = b - decay; if (nb < 0) nb = 0;
-                if ((nr | ng | nb) == 0)
-                    continue;
-
-                int nCell = data.get(nx, ny, nz);
-                int cr = nCell & 0xFF, cg = (nCell >> 8) & 0xFF, cb = (nCell >> 16) & 0xFF;
-
-                boolean changed = false;
-                int fr = cr, fg = cg, fb = cb;
-                if (nr > cr) { fr = nr; changed = true; }
-                if (ng > cg) { fg = ng; changed = true; }
-                if (nb > cb) { fb = nb; changed = true; }
-
-                if (changed) {
-                    data.put(nx, ny, nz, (nCell & FLAG_MASK) | fr | (fg << 8) | (fb << 16));
-                    markDirty(nx, ny, nz);
-                    queue.add(PosKey.pack(nx, ny, nz));
-                }
+            smoothPropagator.propagate(smoothQueue, staticField);
+        if (!customQueues.isEmpty()) {
+            for (Map.Entry<Identifier, LongQueue> entry : customQueues.entrySet()) {
+                LongQueue queue = entry.getValue();
+                if (!queue.isEmpty())
+                    propagatorFor(entry.getKey()).propagate(queue, staticField);
             }
         }
-        opacityMemo.trim();
     }
 
     /**
-     * Hops through all 26 neighbours with decay scaled by real Euclidean distance. The running
-     * value is tracked in 1/8-unit fixed point for the duration of the pass and only rounded to whole
-     * units when written out, exactly as before.
+     * The world's static light as the propagators see it: values live in {@link #data}, opacity is read from the level
+     * once per cell per pass, and every stored change is recorded as dirty for the renderer.
+     * Only used while holding {@link #lock}.
      */
-    private void propagateSmooth(LongQueue queue) {
-        opacityMemo.clear();
-        eighthsMemo.clear();
-
-        while (!queue.isEmpty()) {
-            long key = queue.poll();
-            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
-
-            long curEighths = eighthsMemo.get(key, -1L);
-            if (curEighths < 0) {
-                curEighths = toEighths(data.get(x, y, z));
-                eighthsMemo.put(key, curEighths);
-            }
-
-            int r = eighthsR(curEighths), g = eighthsG(curEighths), b = eighthsB(curEighths);
-            if ((r | g | b) == 0)
-                continue;
-
-            for (int n = 0; n < SMOOTH_COUNT; n++) {
-                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
-
-                int opacity = opacityAt(nx, ny, nz);
-                if (opacity >= VANILLA_MAX_OPACITY)
-                    continue;
-
-                int decay = smoothDecay[n][opacity];
-                int nr = r - decay; if (nr < 0) nr = 0;
-                int ng = g - decay; if (ng < 0) ng = 0;
-                int nb = b - decay; if (nb < 0) nb = 0;
-                if ((nr | ng | nb) == 0)
-                    continue;
-
-                long nKey = PosKey.pack(nx, ny, nz);
-                int nCell = data.get(nx, ny, nz);
-
-                long nEighths = eighthsMemo.get(nKey, -1L);
-                if (nEighths < 0)
-                    nEighths = toEighths(nCell);
-
-                int cr = eighthsR(nEighths), cg = eighthsG(nEighths), cb = eighthsB(nEighths);
-
-                boolean changed = false;
-                int fr = cr, fg = cg, fb = cb;
-                if (nr > cr) { fr = nr; changed = true; }
-                if (ng > cg) { fg = ng; changed = true; }
-                if (nb > cb) { fb = nb; changed = true; }
-
-                if (changed) {
-                    eighthsMemo.put(nKey, packEighths(fr, fg, fb));
-
-                    int rounded = ColorLightUtil.pack(fromEighths(fr), fromEighths(fg), fromEighths(fb));
-                    if (rounded != (nCell & RGB_MASK)) {
-                        data.put(nx, ny, nz, (nCell & FLAG_MASK) | rounded);
-                        markDirty(nx, ny, nz);
-                    }
-                    queue.add(nKey);
-                }
-            }
-        }
-        opacityMemo.trim();
-        eighthsMemo.trim();
-    }
-
-    private static long toEighths(int packedByteColor) {
-        return packEighths(
-                (packedByteColor & 0xFF) * FIXED_POINT_SCALE,
-                ((packedByteColor >> 8) & 0xFF) * FIXED_POINT_SCALE,
-                ((packedByteColor >> 16) & 0xFF) * FIXED_POINT_SCALE);
-    }
-
-    private static int fromEighths(int eighthsValue) {
-        return ColorLightUtil.clamp(Math.round(eighthsValue / (float) FIXED_POINT_SCALE));
-    }
+    private final WorldLightField staticField;
 
     /**
      * Invalidates the region downstream of a removed/changed colour and queues the cells that
@@ -664,6 +650,7 @@ public class ColorLightEngine {
     private void darkenAndCollectSeeds(long startKey, int oldColorAtStart) {
         gridQueue.clear();
         smoothQueue.clear();
+        clearCustomQueuesLocked();
         darkenKeys.clear();
         darkenColors.clear();
         seedSeen.clear();
@@ -703,7 +690,7 @@ public class ColorLightEngine {
                         darkenKeys.add(nKey);
                         darkenColors.add(nr | (ng << 8) | (nb << 16));
                     }
-                    seedOnce(modeOf(nCell), nKey);
+                    seedOnce(methodIdOf(nCell, nKey), nKey);
                     continue;
                 }
 
@@ -727,17 +714,17 @@ public class ColorLightEngine {
 
                 // independent light in a channel the removed light carried -> must radiate again
                 if ((r > 0 && nr >= r) || (g > 0 && ng >= g) || (b > 0 && nb >= b)) {
-                    seedOnce(propagationMode, nKey);
+                    seedOnce(defaultMethodId, nKey);
                 }
             }
         }
     }
 
-    private void seedOnce(ColorLightPropagationMode mode, long key) {
+    private void seedOnce(Identifier methodId, long key) {
         if (seedSeen.contains(key))
             return;
         seedSeen.put(key, 1L);
-        (mode == ColorLightPropagationMode.SMOOTH ? smoothQueue : gridQueue).add(key);
+        queueFor(methodId).add(key);
     }
 
     // =====================================================================================

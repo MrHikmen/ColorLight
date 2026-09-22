@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.light.engine;
+package me.mrhikmen.colorlight.core.light.util;
 
 /**
  * Packs block coordinates into a single {@code long} using exactly the same layout as

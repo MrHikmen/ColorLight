@@ -66,7 +66,7 @@ public abstract class LevelChunkMixin {
 
             if (source != null) {
                 // re-adding an identical source is a no-op, a changed one is cleaned up and re-flooded
-                engine.addSource(changed, source.r, source.g, source.b, strength);
+                engine.addSource(changed, source.r, source.g, source.b, strength, source.getPropagationId());
             } else if (engine.hasSource(changed)) {
                 engine.removeSource(changed);
             } else {

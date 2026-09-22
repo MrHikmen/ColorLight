@@ -1,63 +1,55 @@
 package me.mrhikmen.colorlight.core.light.engine;
 
 import me.mrhikmen.colorlight.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.core.light.propagation.SmoothPropagator;
+import me.mrhikmen.colorlight.core.light.util.LongQueue;
+import me.mrhikmen.colorlight.core.light.util.PosKey;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.LevelAccessor;
 
 import java.util.Arrays;
 
-import static me.mrhikmen.colorlight.core.light.engine.PropagationTables.*;
+import static me.mrhikmen.colorlight.core.light.propagation.PropagationTables.*;
 
 /**
  * Computes the {@link DynamicFootprint} of one moving light source.
  * <p>
- * It is a self-contained smooth (26-neighbour, 1/8-unit precision) flood-fill over a private scratch
- * map - it reads block opacity from the level but never touches the engine's static light data or
- * lock. That means it can run on a background thread while the game thread keeps editing blocks
- * and static lights. All up-to-4 sub-block seed corners are flooded in <b>one</b> pass (the old code
- * ran a separate full flood for each).
+ * It spreads the light with the same {@link SmoothPropagator} (circle) that SMOOTH block light uses, but over a
+ * private, empty field: it reads block opacity from the level and never touches the engine's static light data
+ * or lock. That means it can run on a background thread while the game thread keeps editing blocks and static
+ * lights. All up-to-4 sub-block seed corners are flooded in <b>one</b> pass.
  * <p>
  * Instances are single-threaded: give every worker thread its own.
  */
 final class DynamicFlood {
 
-    private static final int FIXED_POINT_SCALE = 8;
     private static final int POSITION_SUBDIVISIONS = 8;
     private static final int MAX_EIGHTHS = 255 * FIXED_POINT_SCALE;
 
     private final LevelAccessor level;
     private final float decayPerOpacityUnit;
-    private final int[][] smoothDecay;
+    private final SmoothPropagator smooth;
 
-    private final PassMap opacityMemo = new PassMap(1 << 11);
-    private final PassMap field = new PassMap(1 << 11);
     private final LongQueue queue = new LongQueue(1 << 10);
-    private final BlockPos.MutableBlockPos scratchPos = new BlockPos.MutableBlockPos();
+
+    /**
+     * A light that starts from nothing: no pre-existing values, and nothing is stored while spreading - the
+     * result is read back from the propagator's working values, which keep the full 1/8-unit precision.
+     * (Same class as the engine's static field, just without storage - see {@link WorldLightField}.)
+     */
+    private final WorldLightField emptyField;
 
     DynamicFlood(LevelAccessor level, float decayPerOpacityUnit) {
         this.level = level;
         this.decayPerOpacityUnit = decayPerOpacityUnit;
-        this.smoothDecay = buildSmoothDecay(decayPerOpacityUnit, FIXED_POINT_SCALE);
-    }
-
-    private int opacityAt(int x, int y, int z) {
-        long key = PosKey.pack(x, y, z);
-        long cached = opacityMemo.get(key, -1L);
-        if (cached >= 0)
-            return (int) cached;
-
-        scratchPos.set(x, y, z);
-        int opacity = level.getBlockState(scratchPos).getLightDampening();
-        opacity = Math.max(0, Math.min(ColorLightEngine.VANILLA_MAX_OPACITY, opacity));
-        opacityMemo.put(key, opacity);
-        return opacity;
+        this.smooth = new SmoothPropagator(decayPerOpacityUnit);
+        this.emptyField = new WorldLightField(level, null, null);
     }
 
     /** @return the footprint, or {@code null} if the light is too dim to reach any cell. */
     DynamicFootprint compute(double x, double y, double z, int r, int g, int b, int strength) {
-        opacityMemo.clear();
-        field.clear();
+        emptyField.beginPass();
+        smooth.beginPass();
         queue.clear();
 
         float scale = ColorLightUtil.clamp01(strength / 15f);
@@ -96,11 +88,11 @@ final class DynamicFlood {
                     continue;
 
                 long key = PosKey.pack((int) cornerX, iy, (int) cornerZ);
-                long existing = field.get(key, 0L);
+                long existing = smooth.eighthsAt(key);
                 int mr = Math.max(er, eighthsR(existing));
                 int mg = Math.max(eg, eighthsG(existing));
                 int mb = Math.max(eb, eighthsB(existing));
-                field.put(key, packEighths(mr, mg, mb));
+                smooth.seed(key, packEighths(mr, mg, mb));
                 queue.add(key);
             }
         }
@@ -108,11 +100,11 @@ final class DynamicFlood {
         if (queue.isEmpty())
             return null;
 
-        flood();
+        smooth.run(queue, emptyField);
         DynamicFootprint result = buildFootprint();
 
-        opacityMemo.trim();
-        field.trim();
+        emptyField.endPass();
+        smooth.trim();
         return result;
     }
 
@@ -120,56 +112,13 @@ final class DynamicFlood {
         return v < 0 ? 0 : Math.min(v, MAX_EIGHTHS);
     }
 
-    private void flood() {
-        while (!queue.isEmpty()) {
-            long key = queue.poll();
-            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
-
-            long cur = field.get(key, 0L);
-            int r = eighthsR(cur), g = eighthsG(cur), b = eighthsB(cur);
-            if (r == 0 && g == 0 && b == 0)
-                continue;
-
-            for (int n = 0; n < SMOOTH_COUNT; n++) {
-                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
-
-                int opacity = opacityAt(nx, ny, nz);
-                if (opacity >= ColorLightEngine.VANILLA_MAX_OPACITY)
-                    continue;
-
-                int decay = smoothDecay[n][opacity];
-                int nr = r - decay; if (nr < 0) nr = 0;
-                int ng = g - decay; if (ng < 0) ng = 0;
-                int nb = b - decay; if (nb < 0) nb = 0;
-                if (nr == 0 && ng == 0 && nb == 0)
-                    continue;
-
-                long nKey = PosKey.pack(nx, ny, nz);
-                long nCur = field.get(nKey, 0L);
-                int cr = eighthsR(nCur), cg = eighthsG(nCur), cb = eighthsB(nCur);
-
-                boolean changed = false;
-                int fr = cr, fg = cg, fb = cb;
-                if (nr > cr) { fr = nr; changed = true; }
-                if (ng > cg) { fg = ng; changed = true; }
-                if (nb > cb) { fb = nb; changed = true; }
-
-                if (changed) {
-                    field.put(nKey, packEighths(fr, fg, fb));
-                    queue.add(nKey);
-                }
-            }
-        }
-    }
-
     private DynamicFootprint buildFootprint() {
-        long[] keys = new long[field.size()];
-        int n = field.collectKeys(keys);
+        long[] keys = new long[smooth.cellCount()];
+        int n = smooth.collectKeys(keys);
 
         int kept = 0;
         for (int i = 0; i < n; i++) {
-            long v = field.get(keys[i], 0L);
-            if (toRgb(v) != 0)
+            if (toRgb(smooth.eighthsAt(keys[i])) != 0)
                 keys[kept++] = keys[i];
         }
         if (kept == 0)
@@ -180,7 +129,7 @@ final class DynamicFlood {
 
         int[] colors = new int[kept];
         for (int i = 0; i < kept; i++) {
-            colors[i] = toRgb(field.get(sorted[i], 0L));
+            colors[i] = toRgb(smooth.eighthsAt(sorted[i]));
         }
         return new DynamicFootprint(sorted, colors);
     }

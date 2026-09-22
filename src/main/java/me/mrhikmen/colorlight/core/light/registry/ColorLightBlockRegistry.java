@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.core.light.registry;
 
+import me.mrhikmen.colorlight.api.block.BlockLightDefinition;
+import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
 import me.mrhikmen.colorlight.config.BlockSettings;
 import me.mrhikmen.colorlight.config.ColorLightConfig;
 
@@ -15,6 +17,19 @@ public final class ColorLightBlockRegistry {
 
     public static void load(ColorLightConfig config) {
         Map<Block, BlockSettings> map = new HashMap<>();
+
+        // Addon-provided defaults (ColorLightBlockAPI) go in first, so a player's own config entry for
+        // the same block - loaded right after - always overrides it.
+        for (BlockLightDefinition definition : ColorLightBlockAPI.snapshot()) {
+            try {
+                Block block = BuiltInRegistries.BLOCK.getValue(definition.block());
+                if (block != null) {
+                    map.put(block, definition.toBlockSettings());
+                }
+            } catch (Exception e) {
+            }
+        }
+
         for (BlockSettings entry : config.blocks) {
             if (!entry.enable)
                 continue;

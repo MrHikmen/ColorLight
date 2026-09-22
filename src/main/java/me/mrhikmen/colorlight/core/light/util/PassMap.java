@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.light.engine;
+package me.mrhikmen.colorlight.core.light.util;
 
 import java.util.Arrays;
 
@@ -8,7 +8,7 @@ import java.util.Arrays;
  * of a single propagation pass, so neither has to be re-fetched/boxed for every one of a cell's
  * 6 or 26 neighbours. NOT thread-safe.
  */
-final class PassMap {
+public final class PassMap {
 
     private static final long PHI = 0x9E3779B97F4A7C15L;
     private static final int TRIM_ABOVE = 1 << 17;
@@ -22,7 +22,7 @@ final class PassMap {
     private int mask;
     private int shift;
 
-    PassMap(int initialCapacity) {
+    public PassMap(int initialCapacity) {
         allocate(Math.max(16, Integer.highestOneBit(Math.max(2, initialCapacity) - 1) << 1));
     }
 
@@ -40,11 +40,11 @@ final class PassMap {
         return (int) ((key * PHI) >>> shift);
     }
 
-    int size() {
+    public int size() {
         return size;
     }
 
-    long get(long key, long def) {
+    public long get(long key, long def) {
         int i = slot(key);
         while (stamps[i] == gen) {
             if (keys[i] == key)
@@ -54,7 +54,7 @@ final class PassMap {
         return def;
     }
 
-    boolean contains(long key) {
+    public boolean contains(long key) {
         int i = slot(key);
         while (stamps[i] == gen) {
             if (keys[i] == key)
@@ -64,7 +64,7 @@ final class PassMap {
         return false;
     }
 
-    void put(long key, long value) {
+    public void put(long key, long value) {
         int i = slot(key);
         while (stamps[i] == gen) {
             if (keys[i] == key) {
@@ -81,7 +81,7 @@ final class PassMap {
     }
 
     /** Copies every live key into {@code out} (which must hold at least {@link #size()} entries). */
-    int collectKeys(long[] out) {
+    public int collectKeys(long[] out) {
         int n = 0;
         for (int i = 0; i < keys.length; i++) {
             if (stamps[i] == gen)
@@ -90,7 +90,7 @@ final class PassMap {
         return n;
     }
 
-    void clear() {
+    public void clear() {
         size = 0;
         if (++gen == Integer.MAX_VALUE) {
             Arrays.fill(stamps, 0);
@@ -99,7 +99,7 @@ final class PassMap {
     }
 
     /** Drops an oversized backing array after a pathological flood so it doesn't stay pinned. */
-    void trim() {
+    public void trim() {
         if (keys.length > TRIM_ABOVE)
             allocate(TRIM_TO);
     }

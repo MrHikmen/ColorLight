@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.core.light.engine;
 
+import me.mrhikmen.colorlight.core.light.util.PosKey;
+
 import java.util.Arrays;
 
 /**

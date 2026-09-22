@@ -77,4 +77,6 @@ public class Translatable {
     public static Component SHADE = Component.translatable("me.colorlight.block.shade");
     public static Component RESET_TO_DEFAULT = Component.translatable("me.colorlight.block.reset_to_default");
     public static Component APPLY = Component.translatable("me.colorlight.block.apply");
+    public static Component BLOCK_PROPAGATION = Component.translatable("me.colorlight.block.propagation");
+    public static Component BLOCK_PROPAGATION_DEFAULT = Component.translatable("me.colorlight.block.propagation.default");
 }

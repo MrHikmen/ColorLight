@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.core.light.engine;
+package me.mrhikmen.colorlight.core.light.util;
 
 import java.util.Arrays;
 import java.util.function.LongConsumer;
