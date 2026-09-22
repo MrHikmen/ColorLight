@@ -17,13 +17,13 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.function.Predicate;
 
 public class TintedBakedModel implements BlockStateModel {
 
-    /** One scratch sampler per mesh worker thread: chunk meshing must not allocate per vertex. */
-    private static final ThreadLocal<Sampler> SAMPLERS = ThreadLocal.withInitial(Sampler::new);
+    private static final ThreadLocal<ArrayDeque<Sampler>> SAMPLER_POOL = ThreadLocal.withInitial(ArrayDeque::new);
 
     private final BlockStateModel wrapped;
 
@@ -58,7 +58,9 @@ public class TintedBakedModel implements BlockStateModel {
             return;
         }
 
-        final Sampler sampler = SAMPLERS.get();
+        final ArrayDeque<Sampler> pool = SAMPLER_POOL.get();
+        final Sampler pooled = pool.pollLast();
+        final Sampler sampler = pooled != null ? pooled : new Sampler();
         sampler.begin(engine, blockView, pos);
 
         final boolean smooth = ColorLightClient.config.SMOOTH_LIGHTING;
@@ -102,10 +104,13 @@ public class TintedBakedModel implements BlockStateModel {
             return true;
         });
 
-        wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
-
-        emitter.popTransform();
-        sampler.end();
+        try {
+            wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
+        } finally {
+            emitter.popTransform();
+            sampler.end();
+            pool.addLast(sampler);
+        }
     }
 
     /**
