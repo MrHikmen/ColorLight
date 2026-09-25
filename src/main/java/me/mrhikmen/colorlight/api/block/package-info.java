@@ -3,7 +3,7 @@
  * block, what RGB colour, how strong, and (optionally) which
  * {@link me.mrhikmen.colorlight.api.propagation.PropagationMethod} it spreads with - the same three
  * things a player fills in by hand in ColorLight's block config/GUI
- * ({@link me.mrhikmen.colorlight.config.BlockSettings}), but supplied programmatically so players don't
+ * ({@link me.mrhikmen.colorlight.client.config.BlockSettings}), but supplied programmatically so players don't
  * have to.
  * <p>
  * Build a {@link me.mrhikmen.colorlight.api.block.BlockLightDefinition} and hand it to

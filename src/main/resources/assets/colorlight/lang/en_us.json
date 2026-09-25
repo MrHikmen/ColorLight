@@ -4,9 +4,11 @@
   "me.colorlight.command.look_at_block": "Look at a block",
   "me.colorlight.command.light_add": "Light source added",
   "me.colorlight.command.light_del": "Light source removed",
+
   "me.colorlight.general": "General",
   "me.colorlight.block": "Block",
   "me.colorlight.compatibility": "Compatibility",
+
   "me.colorlight.general.enable": "Enable mod",
   "me.colorlight.general.enable.tooltip": "Enable or disable automatic colored block lighting.",
   "me.colorlight.general.light_range": "Light range",
@@ -17,6 +19,9 @@
   "me.colorlight.general.propagation_mode.grid": "Rhomboid",
   "me.colorlight.general.propagation_mode.smooth": "Circular",
   "me.colorlight.general.propagation_mode.tooltip": "Changes how light spreads from standard blocks.\nExplanation of these methods:\n - rhomboid: light spreads like vanilla block light (diamond-shaped falloff).\n - circular: light spreads in a circle, with a precision of 1/8 of a block. This setting affects only light from blocks; dynamic entity lighting (e.g., from LambDynamicLights) always uses the circular model, regardless of this toggle. Existing light is recalculated when the setting is changed.",
+  "me.colorlight.general.tint_gamma": "Tint vividness",
+  "me.colorlight.general.tint_gamma.tooltip": "Curves how strongly a block's colour shows up before it's fully lit. 100% is linear (a block needs to be almost fully lit before the colour is clearly visible). Lower values make the colour stand out sooner, even in dimmer spots; higher values keep it subtle until a block is nearly saturated.",
+
   "me.colorlight.general.weight": "Scanner parameters",
   "me.colorlight.general.brightness_weight": "Brightness weight",
   "me.colorlight.general.local_weight": "Local terrain influence",
@@ -27,6 +32,7 @@
   "me.colorlight.general.glowcolorscore_weight": "Glow strength",
   "me.colorlight.general.whitepenalty_weight": "White clipping strength",
   "me.colorlight.general.weight.tooltip": "Configure the texture scanner parameters.",
+
   "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
   "me.colorlight.compatibility.entity_tracking_enabled": "Enable LDL compatibility",
   "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Master switch for scanning entities for glowing blocks LDL. Disable it to turn this feature off completely.",
@@ -34,6 +40,7 @@
   "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Uses the client's render distance, in chunks, as the radius for scanning entities for glowing blocks LDL. Disable this to use a fixed radius.",
   "me.colorlight.compatibility.entity_check_radius_chunks": "Tracking radius",
   "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Radius, in chunks, used to scan entities for glowing blocks LDL. Only used when “Follow render distance” is disabled.",
+
   "me.colorlight.compatibility.voxy": "EXPERIMENTAL: Voxy (LOD terrain)",
   "me.colorlight.compatibility.voxy_compat_enabled": "Enable Voxy compatibility",
   "me.colorlight.compatibility.voxy_compat_enabled.tooltip": "Master switch for the colored-light glow overlay on Voxy's LOD terrain. Disable it to turn this feature off completely.",
@@ -41,14 +48,18 @@
   "me.colorlight.compatibility.voxy_follow_lod_distance.tooltip": "Uses Voxy's configured LOD render distance as the range for displaying colored-light glow overlays on LOD terrain. Disable this to use a fixed range.",
   "me.colorlight.compatibility.voxy_light_range": "Colored light range on LOD",
   "me.colorlight.compatibility.voxy_light_range.tooltip": "Distance, in blocks, from the camera within which colored-light sources receive a glow overlay on Voxy's LOD terrain. Only used when “Follow Voxy's LOD render distance” is disabled.",
+
   "me.colorlight.block_value.1": "%s block",
   "me.colorlight.block_value.1-5": "%s blocks",
   "me.colorlight.block_value": "%s blocks",
+
   "me.colorlight.chunks_value.1": "%s chunk",
   "me.colorlight.chunks_value.1-5": "%s chunks",
   "me.colorlight.chunks_value": "%s chunks",
+
   "me.colorlight.value.0": "Off",
   "me.colorlight.value": "%s%%",
+
   "me.colorlight.block.block.tooltip": "Configure this block.",
   "me.colorlight.block.colored_lighting": "Lighting color: ",
   "me.colorlight.block.colored_lighting_2": "Lighting color",

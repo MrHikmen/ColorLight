@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.api.block;
 
-import me.mrhikmen.colorlight.config.BlockSettings;
+import me.mrhikmen.colorlight.client.config.BlockSettings;
 
 import net.minecraft.resources.Identifier;
 

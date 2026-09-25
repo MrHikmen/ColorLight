@@ -1,13 +1,13 @@
 package me.mrhikmen.colorlight.api.propagation;
 
-import me.mrhikmen.colorlight.core.light.propagation.LightField;
-import me.mrhikmen.colorlight.core.light.propagation.LightPropagator;
+import me.mrhikmen.colorlight.client.core.light.propagation.LightField;
+import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
 
 import net.minecraft.resources.Identifier;
 
 /**
  * A pluggable model for how coloured light spreads outward from a source, registered with
- * {@link PropagationMethodRegistry} so it can be picked per block (see {@link me.mrhikmen.colorlight.config.BlockSettings#propagation})
+ * {@link PropagationMethodRegistry} so it can be picked per block (see {@link me.mrhikmen.colorlight.client.config.BlockSettings#propagation})
  * or by another mod through {@link me.mrhikmen.colorlight.api.block.ColorLightBlockAPI}.
  * <p>
  * This is a thin descriptor: {@link #id()} is what configs and other mods reference, and
@@ -15,11 +15,11 @@ import net.minecraft.resources.Identifier;
  * one engine instance. The engine creates one propagator per method it actually needs and reuses it
  * for every source that asks for that method, so implementations only need to be stateless apart from
  * scratch memory that is safe to share across sources (exactly like the built-in
- * {@link me.mrhikmen.colorlight.core.light.propagation.GridPropagator GridPropagator} and
- * {@link me.mrhikmen.colorlight.core.light.propagation.SmoothPropagator SmoothPropagator} already do).
+ * {@link me.mrhikmen.colorlight.client.core.light.propagation.GridPropagator GridPropagator} and
+ * {@link me.mrhikmen.colorlight.client.core.light.propagation.SmoothPropagator SmoothPropagator} already do).
  *
  * <h2>Writing your own method</h2>
- * Implement {@link LightPropagator#propagate(me.mrhikmen.colorlight.core.light.util.LongQueue, LightField)}:
+ * Implement {@link LightPropagator#propagate(me.mrhikmen.colorlight.client.core.light.util.LongQueue, LightField)}:
  * poll seed positions from the queue, look up neighbours through the given {@link LightField} (which
  * hides whether the light lives in the world's static field or a moving light's private one), and write
  * back cells that ended up brighter, re-queuing them so the flood continues. See

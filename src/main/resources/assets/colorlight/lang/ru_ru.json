@@ -1,13 +1,16 @@
 {
   "modmenu.descriptionTranslation.colorlight": "ColorLight — мод, который заменяет стандартное освещение блоков цветным освещением, соответствующим цветам их текстур.",
+
   "me.colorlight.command.clean_all": "Все источники света очищены",
   "me.colorlight.command.engine_off": "Движок ещё не инициализирован",
   "me.colorlight.command.look_at_block": "Посмотрите на блок",
   "me.colorlight.command.light_add": "Источник света добавлен",
   "me.colorlight.command.light_del": "Источник света удалён",
+
   "me.colorlight.general": "Основное",
   "me.colorlight.block": "Блоки",
   "me.colorlight.compatibility": "Совместимости",
+
   "me.colorlight.general.enable": "Включить мод",
   "me.colorlight.general.enable.tooltip": "Включает или отключает автоматическое цветное освещение блоков.",
   "me.colorlight.general.light_range": "Дальность света",
@@ -18,6 +21,9 @@
   "me.colorlight.general.propagation_mode.grid": "Ромбовидный",
   "me.colorlight.general.propagation_mode.smooth": "Кругообразный",
   "me.colorlight.general.propagation_mode.tooltip": "Меняет способ распространения света от обычных блоков между ними.\nОбъяснение этих способов:\n - ромбовидный: свет распространяется, как ванильный свет блоков (ромбовидное затухание).\n - кругообразный: свет распространяется по кругу, с точностью до 1/8 блока. Настройка влияет только на источники света от блоков — динамическая подсветка сущностей (например, от LambDynamicLights) всегда распространяется по круглой модели независимо от этого переключателя. При изменении настройки существующий свет пересчитывается.",
+  "me.colorlight.general.tint_gamma": "Насыщенность подсветки",
+  "me.colorlight.general.tint_gamma.tooltip": "Кривая, по которой цвет блока проявляется до того, как он полностью освещён. 100% — линейно (блок должен быть почти полностью освещён, прежде чем цвет станет отчётливо виден). Меньшие значения заставляют цвет проявляться раньше, даже в тускло освещённых местах; большие значения оставляют цвет сдержанным, пока блок почти не насыщен светом.",
+
   "me.colorlight.general.weight": "Параметры сканера",
   "me.colorlight.general.brightness_weight": "Вес яркости",
   "me.colorlight.general.local_weight": "Влияние ближайшей местности",
@@ -28,6 +34,7 @@
   "me.colorlight.general.glowcolorscore_weight": "Сила свечения",
   "me.colorlight.general.whitepenalty_weight": "Сила подавления белого",
   "me.colorlight.general.weight.tooltip": "Настраивает параметры сканера текстур.",
+
   "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
   "me.colorlight.compatibility.entity_tracking_enabled": "Включить совместимость с LDL",
   "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Основной переключатель для поиска у сущностей светящихся блоков LDL. Отключите его, чтобы полностью выключить эту функцию.",
@@ -35,6 +42,7 @@
   "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Использует дальность прорисовки клиента в чанках как радиус поиска светящихся блоков LDL. Отключите, чтобы задать фиксированный радиус.",
   "me.colorlight.compatibility.entity_check_radius_chunks": "Радиус отслеживания",
   "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Радиус в чанках, в пределах которого выполняется поиск светящихся блоков LDL. Используется только при отключённой настройке «Использовать дальность прорисовки».",
+
   "me.colorlight.compatibility.voxy": "ЭКСПЕРИМЕНТАЛЬНО: Voxy (LOD-террейн)",
   "me.colorlight.compatibility.voxy_compat_enabled": "Включить совместимость с Voxy",
   "me.colorlight.compatibility.voxy_compat_enabled.tooltip": "Основной переключатель свечения цветного света поверх LOD-террейна Voxy. Отключите его, чтобы полностью выключить эту функцию.",
@@ -42,14 +50,18 @@
   "me.colorlight.compatibility.voxy_follow_lod_distance.tooltip": "Использует настроенную в Voxy дальность прорисовки LOD как радиус для отображения свечения источников цветного света на LOD-террейне. Отключите, чтобы задать фиксированную дальность.",
   "me.colorlight.compatibility.voxy_light_range": "Дальность цветного света на LOD",
   "me.colorlight.compatibility.voxy_light_range.tooltip": "Расстояние в блоках от камеры, в пределах которого источники цветного света получают свечение на LOD-террейне Voxy. Используется только при отключённой настройке «Использовать дальность LOD из Voxy».",
+
   "me.colorlight.block_value.1": "%s блок",
   "me.colorlight.block_value.1-5": "%s блока",
   "me.colorlight.block_value": "%s блоков",
+
   "me.colorlight.chunks_value.1": "%s чанк",
   "me.colorlight.chunks_value.1-5": "%s чанка",
   "me.colorlight.chunks_value": "%s чанков",
+
   "me.colorlight.value.0": "Выкл.",
   "me.colorlight.value": "%s%%",
+
   "me.colorlight.block.block.tooltip": "Настроить этот блок.",
   "me.colorlight.block.colored_lighting": "Цвет освещения: ",
   "me.colorlight.block.colored_lighting_2": "Цвет освещения",

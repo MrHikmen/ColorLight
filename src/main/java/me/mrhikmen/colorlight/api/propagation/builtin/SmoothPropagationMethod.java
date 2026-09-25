@@ -2,8 +2,8 @@ package me.mrhikmen.colorlight.api.propagation.builtin;
 
 import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
 import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
-import me.mrhikmen.colorlight.core.light.propagation.LightPropagator;
-import me.mrhikmen.colorlight.core.light.propagation.SmoothPropagator;
+import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
+import me.mrhikmen.colorlight.client.core.light.propagation.SmoothPropagator;
 
 import net.minecraft.resources.Identifier;
 

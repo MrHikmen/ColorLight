@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * spreads with - without touching ColorLight's JSON config.
  * <p>
  * Call {@link #register} once during your mod's init, before
- * {@link me.mrhikmen.colorlight.core.light.registry.ColorLightBlockRegistry#load} runs (i.e. before or
+ * {@link me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry#load} runs (i.e. before or
  * from {@code ClientModInitializer.onInitializeClient}). A player's own config entry for the same block
  * always takes priority over an API-provided one, so a definition registered here is a <i>default</i>:
  * players can still override colour, strength, enable/disable or propagation for it from ColorLight's
