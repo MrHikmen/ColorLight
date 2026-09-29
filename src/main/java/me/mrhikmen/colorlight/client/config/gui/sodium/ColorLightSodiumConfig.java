@@ -2,7 +2,6 @@ package me.mrhikmen.colorlight.client.config.gui.sodium;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
-import me.mrhikmen.colorlight.client.compat.lod.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
@@ -32,15 +31,14 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     public void registerConfigLate(ConfigBuilder builder) {
         config.load();
         boolean ldl = ColorLightLambDynLightsCompat.isPresent();
-        boolean voxy = ColorLightVoxyCompat.isPresent();
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(Identifier.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl || voxy) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy));
+        if (ldl) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -201,12 +199,10 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return page;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl) {
         Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
         Identifier entityFollowId = Identifier.parse("colorlight:entity_follow_render_distance");
-        Identifier voxyEnabledId = Identifier.parse("colorlight:voxy_compat_enabled");
-        Identifier voxyFollowId = Identifier.parse("colorlight:voxy_follow_lod_distance");
-        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}.", ldl, voxy);
+        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}.", ldl);
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.COMPATIBILITY);
         if (ldl) {
             page.addOptionGroup(builder.createOptionGroup()
@@ -240,38 +236,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                     )
             );
         }
-//        if (voxy) {
-//            page.addOptionGroup(builder.createOptionGroup()
-//                    .setName(Translatable.VOXY)
-//                    .addOption(builder.createBooleanOption(voxyEnabledId)
-//                            .setName(Translatable.VOXY_COMPAT_ENABLED)
-//                            .setTooltip(Translatable.VOXY_COMPAT_ENABLED_Tooltip)
-//                            .setImpact(OptionImpact.HIGH)
-//                            .setStorageHandler(this::save)
-//                            .setBinding(value -> config.VOXY_COMPAT_ENABLED = value, () -> config.VOXY_COMPAT_ENABLED)
-//                            .setDefaultValue(config.VOXY_COMPAT_ENABLED)
-//                    )
-//                    .addOption(builder.createBooleanOption(voxyFollowId)
-//                            .setName(Translatable.VOXY_FOLLOW_LOD_DISTANCE)
-//                            .setTooltip(Translatable.VOXY_FOLLOW_LOD_DISTANCE_Tooltip)
-//                            .setEnabledProvider(state -> state.readBooleanOption(voxyEnabledId), voxyEnabledId)
-//                            .setStorageHandler(this::save)
-//                            .setBinding(value -> config.VOXY_FOLLOW_LOD_RENDER_DISTANCE = value, () -> config.VOXY_FOLLOW_LOD_RENDER_DISTANCE)
-//                            .setDefaultValue(config.VOXY_FOLLOW_LOD_RENDER_DISTANCE)
-//                    )
-//                    .addOption(builder.createIntegerOption(Identifier.parse("colorlight:voxy_light_range"))
-//                            .setName(Translatable.VOXY_LIGHT_RANGE)
-//                            .setTooltip(Translatable.VOXY_LIGHT_RANGE_Tooltip)
-//                            .setImpact(OptionImpact.HIGH)
-//                            .setEnabledProvider(state -> state.readBooleanOption(voxyEnabledId) && !state.readBooleanOption(voxyFollowId), voxyEnabledId, voxyFollowId)
-//                            .setRange(16, 512, 16)
-//                            .setValueFormatter(value -> Translatable.BLOCKS_Value(value))
-//                            .setStorageHandler(this::save)
-//                            .setBinding(value -> config.VOXY_LIGHT_RANGE_BLOCKS = value, () -> config.VOXY_LIGHT_RANGE_BLOCKS)
-//                            .setDefaultValue(config.VOXY_LIGHT_RANGE_BLOCKS)
-//                    )
-//            );
-//        }
         return page;
     }
     private static final long SAVE_DEBOUNCE_MS = 150L;

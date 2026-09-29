@@ -93,6 +93,11 @@ public final class SmoothPropagator implements LightPropagator {
             if ((r | g | b) == 0)
                 continue;
 
+            // Same fix as GridPropagator: scale every channel against the strongest one instead of subtracting
+            // the same loss from each independently, so a light's colour ratio - its hue - holds all the way to
+            // its edge instead of the weaker channels bottoming out first and leaving a tinted tail behind.
+            int peak = Math.max(r, Math.max(g, b));
+
             for (int n = 0; n < SMOOTH_COUNT; n++) {
                 int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
 
@@ -101,9 +106,15 @@ public final class SmoothPropagator implements LightPropagator {
                     continue;
 
                 int loss = decay[n][opacity];
-                int nr = r - loss; if (nr < 0) nr = 0;
-                int ng = g - loss; if (ng < 0) ng = 0;
-                int nb = b - loss; if (nb < 0) nb = 0;
+                int newPeak = peak - loss; if (newPeak < 0) newPeak = 0;
+                int nr, ng, nb;
+                if (newPeak == 0) {
+                    nr = ng = nb = 0;
+                } else {
+                    nr = (r * newPeak) / peak;
+                    ng = (g * newPeak) / peak;
+                    nb = (b * newPeak) / peak;
+                }
                 if ((nr | ng | nb) == 0)
                     continue;
 

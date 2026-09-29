@@ -84,10 +84,6 @@ public final class ColorLightChunkScanner {
         });
 
         ClientChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> {
-            // Voxy's LOD glow is drawn from sources of chunks that are no longer loaded, so keep them there.
-            if (ColorLightClient.config.VOXY_COMPAT_ENABLED)
-                return;
-
             ChunkPos pos = chunk.getPos();
             queueUnload(pos.x(), pos.z());
         });

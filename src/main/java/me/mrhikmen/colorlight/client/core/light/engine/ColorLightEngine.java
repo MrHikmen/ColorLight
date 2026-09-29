@@ -752,7 +752,7 @@ public class ColorLightEngine {
          * the result to the dynamic layer under the lock, changing only the cells that differ.
          */
         public void update(int id, double x, double y, double z, int r, int g, int b, int strength) {
-            DynamicFootprint footprint = flood.compute(x, y, z, r, g, b, strength);
+            DynamicFootprint footprint = flood.compute(x-0.5, y, z-0.5, r, g, b, strength);
             lock.lock();
             try {
                 dynamic.replace(id, footprint);

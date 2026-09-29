@@ -26,12 +26,16 @@ public class ColorLightLambDynLightsInitializer implements DynamicLightsInitiali
                 if (item == net.minecraft.world.item.Items.AIR)
                     continue;
 
-                // LambDynamicLights takes the maximum over all sources, so registering a light here would override
-                // a resource pack that deliberately set this item to luminance 0. Leave such items alone.
-                if (LdlItemLuminanceOverrides.isDisabled(new net.minecraft.world.item.ItemStack(item)))
-                    continue;
+                // LambDynamicLights takes the maximum over every registered source. Rather than skip registering
+                // and hope its own file-loading also applied the pack's value (that assumption is what silently
+                // broke intermediate overrides before), register the resolved value directly: the pack's own
+                // number - 0, 15, or anything in between - when one is given, ColorLight's configured strength
+                // otherwise. Because it's the same value the pack asked for, max(pack's value, ours) never changes
+                // it, so this works whether or not LambDynamicLights also applies the file itself.
+                net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(item);
+                int resolvedLight = LdlItemLuminanceOverrides.resolve(stack, entry.light);
 
-                registerContext.register(item, Math.min(15, entry.light));
+                registerContext.register(item, Math.min(15, resolvedLight));
             }
         });
     }

@@ -46,14 +46,6 @@ public class Translatable {
     public static Component ENTITY_CHECK_RADIUS_CHUNKS = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS_Tooltip = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks.tooltip");
 
-    public static Component VOXY = Component.translatable("me.colorlight.compatibility.voxy");
-    public static Component VOXY_COMPAT_ENABLED = Component.translatable("me.colorlight.compatibility.voxy_compat_enabled");
-    public static Component VOXY_COMPAT_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_compat_enabled.tooltip");
-    public static Component VOXY_FOLLOW_LOD_DISTANCE = Component.translatable("me.colorlight.compatibility.voxy_follow_lod_distance");
-    public static Component VOXY_FOLLOW_LOD_DISTANCE_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_follow_lod_distance.tooltip");
-    public static Component VOXY_LIGHT_RANGE = Component.translatable("me.colorlight.compatibility.voxy_light_range");
-    public static Component VOXY_LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_light_range.tooltip");
-
     public static Component BLOCKS_Value(int value) {
         if (value == 1) return Component.translatable("me.colorlight.block_value.1", value);
         if (value % 10 > 1 && value % 10 < 5 && !(value % 100 >= 12 && value % 100 <= 14))

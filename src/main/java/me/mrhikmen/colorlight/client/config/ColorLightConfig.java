@@ -38,10 +38,6 @@ public class ColorLightConfig {
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
-    public boolean VOXY_COMPAT_ENABLED = false;
-    public boolean VOXY_FOLLOW_LOD_RENDER_DISTANCE = true;
-    public int VOXY_LIGHT_RANGE_BLOCKS = 64;
-
     public LinkedList<BlockSettings> blocks = new LinkedList<>();
 
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("colorlight.json");
@@ -61,7 +57,7 @@ public class ColorLightConfig {
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
-                this.TINT_GAMMA = loaded.TINT_GAMMA > 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
+                this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
 
                 this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
                 this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;
@@ -75,12 +71,6 @@ public class ColorLightConfig {
                 this.ENTITY_TRACKING_ENABLED = root.has("ENTITY_TRACKING_ENABLED") ? loaded.ENTITY_TRACKING_ENABLED : this.ENTITY_TRACKING_ENABLED;
                 this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
                 this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
-
-                this.VOXY_COMPAT_ENABLED = root.has("VOXY_COMPAT_ENABLED") ? loaded.VOXY_COMPAT_ENABLED : this.VOXY_COMPAT_ENABLED;
-                this.VOXY_FOLLOW_LOD_RENDER_DISTANCE = root.has("VOXY_FOLLOW_LOD_RENDER_DISTANCE") ? loaded.VOXY_FOLLOW_LOD_RENDER_DISTANCE : this.VOXY_FOLLOW_LOD_RENDER_DISTANCE;
-                this.VOXY_LIGHT_RANGE_BLOCKS = loaded.VOXY_LIGHT_RANGE_BLOCKS > 0 ? loaded.VOXY_LIGHT_RANGE_BLOCKS : this.VOXY_LIGHT_RANGE_BLOCKS;
-
-
             } catch (IOException e) {
                 e.printStackTrace();
             }

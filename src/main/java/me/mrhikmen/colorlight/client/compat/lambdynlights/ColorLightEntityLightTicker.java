@@ -39,9 +39,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class ColorLightEntityLightTicker {
 
-    /** Same ceiling the old implementation used for entity light. */
-    private static final int MAX_ENTITY_STRENGTH = 7;
-
     /** Light is only recomputed after the entity moved at least this fraction of a block (1/8). */
     private static final double POSITION_STEPS_PER_BLOCK = 8.0;
 
@@ -203,14 +200,15 @@ public final class ColorLightEntityLightTicker {
     }
 
     /** The strength ColorLight should actually emit at: whatever a resource pack says via LambDynamicLights for
-     *  this exact stack, if it says anything, otherwise the block's own configured strength. */
+     *  this exact stack - 0, 15, or anything in between - if it says anything, otherwise the block's own
+     *  configured strength. No ceiling is applied here: {@link me.mrhikmen.colorlight.client.core.light.engine.DynamicFlood}
+     *  already normalises whatever strength it's given against the real 0-15 scale, so clamping it a second time
+     *  to some smaller, ColorLight-specific number would just quietly cut off the top of the range a resource pack
+     *  is explicitly asking for. */
     private static int effectiveStrength(BlockSettings settings, ItemStack stack) {
-        if (!stack.isEmpty()) {
-            int overrideLuminance = LdlItemLuminanceOverrides.matchedLuminance(stack);
-            if (overrideLuminance >= 0)
-                return Math.min(MAX_ENTITY_STRENGTH, overrideLuminance);
-        }
-        return Math.min(MAX_ENTITY_STRENGTH, settings.light);
+        return stack.isEmpty()
+                ? settings.light
+                : LdlItemLuminanceOverrides.resolve(stack, settings.light);
     }
 
     // ---- item / block -> light settings (registry lookup, no config scans) ----
@@ -259,17 +257,11 @@ public final class ColorLightEntityLightTicker {
         if (!(stack.getItem() instanceof BlockItem blockItem))
             return null;
 
-        BlockSettings settings = ColorLightBlockRegistry.get(blockItem.getBlock());
-        if (settings == null)
-            return null;
-
-        // A resource pack set this item to "luminance": 0 for LambDynamicLights: it is not a light source, so
-        // ColorLight doesn't light it either. Only stacks that would otherwise glow get here, so this is cheap.
-        // Any other explicit luminance is applied later, in effectiveStrength().
-        if (LdlItemLuminanceOverrides.isDisabled(stack))
-            return null;
-
-        return settings;
+        // Whether a resource pack turned this item's light off, dimmed it, or left it alone is decided later, in
+        // effectiveStrength() - a single place instead of two, using the same LdlItemLuminanceOverrides.resolve()
+        // for both. A pack that explicitly sets 0 naturally ends up with no visible light there (the propagator
+        // has nothing to spread), with no separate "is it disabled" check needed here.
+        return ColorLightBlockRegistry.get(blockItem.getBlock());
     }
 
     private static BlockSettings settingsOf(BlockState state) {
@@ -326,7 +318,7 @@ public final class ColorLightEntityLightTicker {
             worker.remove(request.id());
         } else {
             worker.update(request.id(), request.x(), request.y(), request.z(),
-                    request.r(), request.g(), request.b(), request.strength());
+                    request.r(), request.g(), request.b(), request.strength()/2);
         }
     }
 

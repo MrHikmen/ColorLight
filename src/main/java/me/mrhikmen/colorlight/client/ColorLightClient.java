@@ -1,10 +1,9 @@
 package me.mrhikmen.colorlight.client;
 
+import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
 import me.mrhikmen.colorlight.api.propagation.builtin.BuiltinPropagationMethods;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
-import me.mrhikmen.colorlight.client.compat.lod.LodColorLightCompat;
-import me.mrhikmen.colorlight.client.compat.lod.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
@@ -21,6 +20,7 @@ import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,11 +57,6 @@ public class ColorLightClient implements ClientModInitializer {
 
         ColorLightChunkScanner.register();
         ColorLightCommand.register();
-
-        if (ColorLightVoxyCompat.isPresent()) {
-            LodColorLightCompat.register();
-            ColorLightClient.LOGGER.info("[ColorLight] Voxy initialized");
-        }
 
         if (ColorLightLambDynLightsCompat.isPresent()) {
             ColorLightEntityLightTicker.register();

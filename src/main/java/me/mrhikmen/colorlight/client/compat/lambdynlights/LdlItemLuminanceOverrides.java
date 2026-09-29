@@ -68,9 +68,6 @@ public final class LdlItemLuminanceOverrides {
                     JsonObject json = raw.getAsJsonObject();
                     json.remove(SILENCE_ERROR_KEY);
 
-//                    if (!conditionsAllow(ops, registries, json))
-//                        continue;
-
                     ItemLightSource.CODEC.parse(ops, json).result().ifPresent(loaded::add);
                 } catch (IOException | RuntimeException e) {
                     // A broken file: LambDynamicLights reports it. If it cannot be read it cannot switch anything off.
@@ -84,19 +81,6 @@ public final class LdlItemLuminanceOverrides {
 
         packSources = List.copyOf(loaded);
     }
-
-    /** Same rule as LambDynamicLights: a file whose Fabric load conditions fail isn't applied at all. */
-//    private static boolean conditionsAllow(RegistryOps<JsonElement> ops, HolderLookup.Provider registries, JsonObject json) {
-//        if (!json.has(ResourceConditions.CONDITIONS_KEY))
-//            return true;
-//
-//        var conditions = ResourceCondition.CONDITION_CODEC.parse(ops, json.get(ResourceConditions.CONDITIONS_KEY));
-//        if (conditions.isSuccess())
-//            return conditions.getOrThrow().test(registries);
-//
-//        // unparseable conditions: LambDynamicLights logs it and applies the file anyway
-//        return true;
-//    }
 
     /**
      * The highest luminance a resource pack / mod gives this stack via LambDynamicLights' item light files, or
@@ -121,14 +105,14 @@ public final class LdlItemLuminanceOverrides {
     }
 
     /**
-     * True if a resource pack (or mod) explicitly gives this stack a luminance of 0 in LambDynamicLights and nothing
-     * else gives it more - i.e. the item is meant to emit no dynamic light, so ColorLight must not treat it as one.
-     * <p>
-     * Items no file mentions are <b>not</b> disabled, whatever their block's light. If several files match, the
-     * highest luminance wins, exactly like in LambDynamicLights.
+     * The luminance ColorLight should treat this stack as having: the resource pack's own value if any file
+     * matches (0-15, whatever it is), otherwise {@code fallback}. Centralises the "pack opinion wins, whatever it
+     * is" rule so every caller - not just a hardcoded {@code 0}/disabled case - honours intermediate values without
+     * needing to know or special-case any particular number itself.
      */
-    public static boolean isDisabled(ItemStack stack) {
-        return matchedLuminance(stack) == 0;
+    public static int resolve(ItemStack stack, int fallback) {
+        int matched = matchedLuminance(stack);
+        return matched >= 0 ? matched : fallback;
     }
 
     private LdlItemLuminanceOverrides() {

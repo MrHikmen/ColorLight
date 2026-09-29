@@ -34,6 +34,12 @@ public final class GridPropagator implements LightPropagator {
             if ((r | g | b) == 0)
                 continue;
 
+            // The strongest channel anchors how far this light still reaches; every other channel is scaled
+            // against it below so the colour's ratio - its hue - stays the same the whole way out instead of each
+            // channel hitting zero at its own distance (which is what painted a pure-red tail on, say, a warm
+            // 255/216/0 torch colour once green ran out before red did).
+            int peak = Math.max(r, Math.max(g, b));
+
             for (int n = 0; n < 6; n++) {
                 int nx = x + GRID_DX[n], ny = y + GRID_DY[n], nz = z + GRID_DZ[n];
 
@@ -42,9 +48,15 @@ public final class GridPropagator implements LightPropagator {
                     continue;
 
                 int loss = decay[opacity];
-                int nr = r - loss; if (nr < 0) nr = 0;
-                int ng = g - loss; if (ng < 0) ng = 0;
-                int nb = b - loss; if (nb < 0) nb = 0;
+                int newPeak = peak - loss; if (newPeak < 0) newPeak = 0;
+                int nr, ng, nb;
+                if (newPeak == 0) {
+                    nr = ng = nb = 0;
+                } else {
+                    nr = (r * newPeak) / peak;
+                    ng = (g * newPeak) / peak;
+                    nb = (b * newPeak) / peak;
+                }
                 if ((nr | ng | nb) == 0)
                     continue;
 

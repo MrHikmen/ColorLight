@@ -17,7 +17,8 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
  * It spreads the light with the same {@link SmoothPropagator} (circle) that SMOOTH block light uses, but over a
  * private, empty field: it reads block opacity from the level and never touches the engine's static light data
  * or lock. That means it can run on a background thread while the game thread keeps editing blocks and static
- * lights. All up-to-8 sub-block seed corners (interpolated on X, Y and Z alike) are flooded in <b>one</b> pass.
+ * lights. All up-to-27 sub-block seed corners (a 3x3x3 neighbourhood, interpolated on X, Y and Z alike) are
+ * flooded in <b>one</b> pass.
  * <p>
  * Instances are single-threaded: give every worker thread its own.
  */
@@ -57,30 +58,40 @@ final class DynamicFlood {
         float baseG = g * scale;
         float baseB = b * scale;
 
-        long ex = Math.round((x - 0.5) * POSITION_SUBDIVISIONS);
+        long ex = Math.round(x * POSITION_SUBDIVISIONS);
         long ey = Math.round(y * POSITION_SUBDIVISIONS);
-        long ez = Math.round((z - 0.5) * POSITION_SUBDIVISIONS);
-        long ix = Math.floorDiv(ex, POSITION_SUBDIVISIONS);
-        long iy = Math.floorDiv(ey, POSITION_SUBDIVISIONS);
-        long iz = Math.floorDiv(ez, POSITION_SUBDIVISIONS);
-        int fx = (int) (ex - ix * POSITION_SUBDIVISIONS);
-        int fy = (int) (ey - iy * POSITION_SUBDIVISIONS);
-        int fz = (int) (ez - iz * POSITION_SUBDIVISIONS);
+        long ez = Math.round(z * POSITION_SUBDIVISIONS);
+        // Nearest whole-block corner to the light, not floor(x)/floor(y)/floor(z): floor always put the light
+        // against the "low" edge of the corner grid (it only ever sits between ix and ix+1), so the extra corner
+        // added below for the 3x3x3 neighbourhood ended up almost entirely on one side of it. Rounding to the
+        // nearest corner instead means the light sits in the middle cell of the 3x3x3 block, with one full layer
+        // of corners on every side of it, however it happens to be positioned within its own block.
+        long cx = Math.floorDiv(ex + POSITION_SUBDIVISIONS / 2, POSITION_SUBDIVISIONS);
+        long cy = Math.floorDiv(ey + POSITION_SUBDIVISIONS / 2, POSITION_SUBDIVISIONS);
+        long cz = Math.floorDiv(ez + POSITION_SUBDIVISIONS / 2, POSITION_SUBDIVISIONS);
+        int fx = (int) (ex - cx * POSITION_SUBDIVISIONS);
+        int fy = (int) (ey - cy * POSITION_SUBDIVISIONS);
+        int fz = (int) (ez - cz * POSITION_SUBDIVISIONS);
 
-        for (int dx = 0; dx <= 1; dx++) {
-            if (dx == 1 && fx == 0)
+        // 3x3x3 neighbourhood of corners centred on the light instead of the old 2x2x2 (just the lower and upper
+        // corner on each axis, floor-anchored): seeding one more corner on every side gives the near-field falloff
+        // an extra directly-computed, exact-distance layer before the coarser hop-based SmoothPropagator takes
+        // over further out, which is what actually removes the popping/stepping otherwise visible while a light
+        // crosses a sub-block boundary.
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx != 0 && fx == 0)
                 continue;
-            long cornerX = ix + dx;
+            long cornerX = cx + dx;
 
-            for (int dy = 0; dy <= 1; dy++) {
-                if (dy == 1 && fy == 0)
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dy != 0 && fy == 0)
                     continue;
-                long cornerY = iy + dy;
+                long cornerY = cy + dy;
 
-                for (int dz = 0; dz <= 1; dz++) {
-                    if (dz == 1 && fz == 0)
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dz != 0 && fz == 0)
                         continue;
-                    long cornerZ = iz + dz;
+                    long cornerZ = cz + dz;
 
                     double ddx = x - cornerX;
                     double ddy = y - cornerY;
