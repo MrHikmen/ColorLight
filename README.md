@@ -25,11 +25,11 @@ Many optimization mods are supported because the mod only colors the block rathe
 
 If a mod adds features that differ from vanilla Minecraft, a separate compatibility layer will have to be written for it. The following are such mods:
 
-| Mod                 |     Support    |                                     How it works                                    |
-| :------------------ | :------------: | :---------------------------------------------------------------------------------: |
-| - LambDynamicLights |       Yes      |               A lighting marker is placed at the entity's coordinates               |
-| - Voxy              |  Experimental  | When a chunk is loaded, a square is placed in the color of the light-emitting block |
-| - Distant Horizon   | In development |                              Currently being developed                              |
+| Mod                 |     Support     |                                     How it works                                    |
+| :------------------ |:---------------:| :---------------------------------------------------------------------------------: |
+| - LambDynamicLights |       Yes       |               A lighting marker is placed at the entity's coordinates               |
+| - Voxy              | In development  | When a chunk is loaded, a square is placed in the color of the light-emitting block |
+| - Distant Horizon   | In development  |                              Currently being developed                              |
 
 </details>
 

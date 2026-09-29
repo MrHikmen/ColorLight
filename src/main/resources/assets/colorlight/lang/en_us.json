@@ -11,7 +11,6 @@
 
   "me.colorlight.general.enable": "Enable mod",
   "me.colorlight.general.enable.tooltip": "Enable or disable automatic colored block lighting.",
-
   "me.colorlight.general.light_range": "Light range",
   "me.colorlight.general.light_range.tooltip": "Maximum distance that colored light can spread.",
   "me.colorlight.general.smooth_lighting": "Smooth colored lighting",
@@ -20,6 +19,8 @@
   "me.colorlight.general.propagation_mode.grid": "Rhomboid",
   "me.colorlight.general.propagation_mode.smooth": "Circular",
   "me.colorlight.general.propagation_mode.tooltip": "Changes how light spreads from standard blocks.\nExplanation of these methods:\n - rhomboid: light spreads like vanilla block light (diamond-shaped falloff).\n - circular: light spreads in a circle, with a precision of 1/8 of a block. This setting affects only light from blocks; dynamic entity lighting (e.g., from LambDynamicLights) always uses the circular model, regardless of this toggle. Existing light is recalculated when the setting is changed.",
+  "me.colorlight.general.tint_gamma": "Tint vividness",
+  "me.colorlight.general.tint_gamma.tooltip": "Curves how strongly a block's colour shows up before it's fully lit. 100% is linear (a block needs to be almost fully lit before the colour is clearly visible). Lower values make the colour stand out sooner, even in dimmer spots; higher values keep it subtle until a block is nearly saturated.",
 
   "me.colorlight.general.weight": "Scanner parameters",
   "me.colorlight.general.brightness_weight": "Brightness weight",
@@ -64,5 +65,7 @@
   "me.colorlight.block.colored_lighting_2": "Lighting color",
   "me.colorlight.block.shade": "Tint",
   "me.colorlight.block.reset_to_default": "Reset to default",
-  "me.colorlight.block.apply": "Apply"
+  "me.colorlight.block.apply": "Apply",
+  "me.colorlight.block.propagation": "Propagation",
+  "me.colorlight.block.propagation.default": "Engine default"
 }
