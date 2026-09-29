@@ -13,7 +13,6 @@
 
   "me.colorlight.general.enable": "Включить мод",
   "me.colorlight.general.enable.tooltip": "Включает или отключает автоматическое цветное освещение блоков.",
-
   "me.colorlight.general.light_range": "Дальность света",
   "me.colorlight.general.light_range.tooltip": "Максимальная дальность распространения цветного света.",
   "me.colorlight.general.smooth_lighting": "Сглаживание цветного света",
@@ -22,6 +21,8 @@
   "me.colorlight.general.propagation_mode.grid": "Ромбовидный",
   "me.colorlight.general.propagation_mode.smooth": "Кругообразный",
   "me.colorlight.general.propagation_mode.tooltip": "Меняет способ распространения света от обычных блоков между ними.\nОбъяснение этих способов:\n - ромбовидный: свет распространяется, как ванильный свет блоков (ромбовидное затухание).\n - кругообразный: свет распространяется по кругу, с точностью до 1/8 блока. Настройка влияет только на источники света от блоков — динамическая подсветка сущностей (например, от LambDynamicLights) всегда распространяется по круглой модели независимо от этого переключателя. При изменении настройки существующий свет пересчитывается.",
+  "me.colorlight.general.tint_gamma": "Насыщенность подсветки",
+  "me.colorlight.general.tint_gamma.tooltip": "Кривая, по которой цвет блока проявляется до того, как он полностью освещён. 100% — линейно (блок должен быть почти полностью освещён, прежде чем цвет станет отчётливо виден). Меньшие значения заставляют цвет проявляться раньше, даже в тускло освещённых местах; большие значения оставляют цвет сдержанным, пока блок почти не насыщен светом.",
 
   "me.colorlight.general.weight": "Параметры сканера",
   "me.colorlight.general.brightness_weight": "Вес яркости",
@@ -66,5 +67,7 @@
   "me.colorlight.block.colored_lighting_2": "Цвет освещения",
   "me.colorlight.block.shade": "Оттенок",
   "me.colorlight.block.reset_to_default": "Сбросить",
-  "me.colorlight.block.apply": "Применить"
+  "me.colorlight.block.apply": "Применить",
+  "me.colorlight.block.propagation": "Распространение",
+  "me.colorlight.block.propagation.default": "Как в настройках мода"
 }
