@@ -1,10 +1,12 @@
 package me.mrhikmen.colorlight.client.core.light.propagation;
 
 /**
- * Constants and lookup tables shared by both propagation models and by the engine's darkening pass: neighbour
- * offsets, per-opacity decay tables and the 1/8-unit fixed-point helpers. The tables are computed with the exact same float expressions the old
- * inline code used, so results are bit-for-bit identical - they just aren't recomputed for every
- * edge of every flood any more.
+ * Constants shared by the propagation kernels and by the engine's darkening pass, plus the packing helpers for
+ * fixed-point working values (three 16-bit channels in one long). The neighbour offsets and decay tables are not
+ * here any more: they come from the resource pack's Lua propagation scripts.
+ *
+ * <p>The engine's darkening pass and re-seeding always walk the full 26-neighbourhood, {@link #NEIGHBOR_COUNT}
+ * offsets below - which is why a propagation script may only hop to cells within that neighbourhood.
  */
 public final class PropagationTables {
 
@@ -16,21 +18,13 @@ public final class PropagationTables {
     /** Top byte of a cell value: owner flags (see the engine), preserved by the propagators. */
     public static final int FLAG_MASK = 0xFF000000;
 
-    /** SMOOTH tracks light in 1/8 units while spreading and rounds when storing. */
-    public static final int FIXED_POINT_SCALE = 8;
+    /** Number of opacity levels a decay table covers (0..15). */
+    public static final int OPACITY_LEVELS = 16;
 
-    static final int OPACITY_LEVELS = 16;
-
-    /** Same order as {@code Direction.values()}: DOWN, UP, NORTH, SOUTH, WEST, EAST. */
-    public static final int[] GRID_DX = {0, 0, 0, 0, -1, 1};
-    public static final int[] GRID_DY = {-1, 1, 0, 0, 0, 0};
-    public static final int[] GRID_DZ = {0, 0, -1, 1, 0, 0};
-
-    public static final int SMOOTH_COUNT = 26;
-    public static final int[] SMOOTH_DX = new int[SMOOTH_COUNT];
-    public static final int[] SMOOTH_DY = new int[SMOOTH_COUNT];
-    public static final int[] SMOOTH_DZ = new int[SMOOTH_COUNT];
-    public static final float[] SMOOTH_DIST = new float[SMOOTH_COUNT];
+    public static final int NEIGHBOR_COUNT = 26;
+    public static final int[] NEIGHBOR_DX = new int[NEIGHBOR_COUNT];
+    public static final int[] NEIGHBOR_DY = new int[NEIGHBOR_COUNT];
+    public static final int[] NEIGHBOR_DZ = new int[NEIGHBOR_COUNT];
 
     static {
         int n = 0;
@@ -39,34 +33,13 @@ public final class PropagationTables {
                 for (int dz = -1; dz <= 1; dz++) {
                     if (dx == 0 && dy == 0 && dz == 0)
                         continue;
-                    SMOOTH_DX[n] = dx;
-                    SMOOTH_DY[n] = dy;
-                    SMOOTH_DZ[n] = dz;
-                    SMOOTH_DIST[n] = (float) Math.sqrt((double) dx * dx + (double) dy * dy + (double) dz * dz);
+                    NEIGHBOR_DX[n] = dx;
+                    NEIGHBOR_DY[n] = dy;
+                    NEIGHBOR_DZ[n] = dz;
                     n++;
                 }
             }
         }
-    }
-
-    /** decay (in whole light units) of one axis-aligned hop into a block of the given opacity. */
-    public static int[] buildGridDecay(float decayPerOpacityUnit) {
-        int[] table = new int[OPACITY_LEVELS];
-        for (int opacity = 0; opacity < OPACITY_LEVELS; opacity++) {
-            table[opacity] = Math.round((1 + opacity) * decayPerOpacityUnit);
-        }
-        return table;
-    }
-
-    /** decay (in 1/8 light units) of a hop to smooth-neighbour {@code n} into a block of the given opacity; never below 1. */
-    public static int[][] buildSmoothDecay(float decayPerOpacityUnit, int fixedPointScale) {
-        int[][] table = new int[SMOOTH_COUNT][OPACITY_LEVELS];
-        for (int n = 0; n < SMOOTH_COUNT; n++) {
-            for (int opacity = 0; opacity < OPACITY_LEVELS; opacity++) {
-                table[n][opacity] = Math.max(1, Math.round(SMOOTH_DIST[n] * (1 + opacity) * decayPerOpacityUnit * fixedPointScale));
-            }
-        }
-        return table;
     }
 
     public static long packEighths(int r, int g, int b) {

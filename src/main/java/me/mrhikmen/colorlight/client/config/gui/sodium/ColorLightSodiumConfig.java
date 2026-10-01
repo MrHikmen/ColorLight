@@ -6,10 +6,12 @@ import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.config.gui.screen.ColorLightBlockConfigScreen;
+import me.mrhikmen.colorlight.client.config.gui.screen.PropagationPickerScreen;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.light.propagation.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.ColorLightApply;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
@@ -71,21 +73,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setBinding(value -> config.SMOOTH_LIGHTING = value, () -> config.SMOOTH_LIGHTING)
                                 .setDefaultValue(config.SMOOTH_LIGHTING)
                         )
-                        .addOption(builder.createEnumOption(Identifier.parse("colorlight:propagation_mode"), ColorLightPropagationMode.class)
-                                .setName(Translatable.PROPAGATION_MODE)
-                                .setTooltip(Translatable.PROPAGATION_MODE_Tooltip)
-                                .setElementNameProvider(mode -> switch (mode) {
-                                    case GRID -> Translatable.PROPAGATION_MODE_GRID;
-                                    case SMOOTH -> Translatable.PROPAGATION_MODE_SMOOTH;
-                                })
-                                .setStorageHandler(this::save)
-                                .setImpact(OptionImpact.VARIES)
-                                .setBinding(
-                                        value -> config.PROPAGATION_MODE = value.name(),
-                                        () -> ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE)
-                                )
-                                .setDefaultValue(ColorLightPropagationMode.GRID)
-                        )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:tint_gamma"))
                                 .setName(Translatable.TINT_GAMMA)
                                 .setTooltip(Translatable.TINT_GAMMA_Tooltip)
@@ -97,6 +84,14 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         () -> Math.round(config.TINT_GAMMA * 100f)
                                 )
                                 .setDefaultValue(Math.round(config.TINT_GAMMA * 100f))
+                        )
+                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:propagation_mode"))
+                                .setName(Translatable.PROPAGATION_MODE)
+                                .setTooltip(Translatable.PROPAGATION_MODE_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
+                                        parentScreen, Translatable.PROPAGATION_MODE,
+                                        () -> config.PROPAGATION_MODE, value -> config.PROPAGATION_MODE = value,
+                                        this::applyImmediately, method -> true, PropagationMethodRegistry.GRID)))
                         )
                 )
                 .addOptionGroup(builder.createOptionGroup()
@@ -193,11 +188,19 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + block.getPath()))
                                     .setName(Component.translatable("block." + block.toLanguageKey()))
                                     .setTooltip(Translatable.BLOCK_Tooltip)
-                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, entry, this::save, this::applyImmediately)))
+                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, liveEntry(entry), this::save, this::applyImmediately)))
                             )
             );
         }
         return page;
+    }
+    /** The entry the config holds for this block right now (a reload may have replaced the one this page was built with). */
+    private static BlockSettings liveEntry(BlockSettings built) {
+        for (BlockSettings e : ColorLightClient.config.blocks) {
+            if (e.block.equals(built.block))
+                return e;
+        }
+        return built;
     }
     private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl) {
         Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
@@ -223,6 +226,14 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setBinding(value -> config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = value, () -> config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
                             .setDefaultValue(config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
                     )
+                    .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:dynamic_propagation"))
+                                .setName(Translatable.DYNAMIC_PROPAGATION)
+                                .setTooltip(Translatable.DYNAMIC_PROPAGATION_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
+                                        parentScreen, Translatable.DYNAMIC_PROPAGATION,
+                                        () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
+                                        this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
+                        )
                     .addOption(builder.createIntegerOption(Identifier.parse("colorlight:entity_check_radius_chunks"))
                             .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
@@ -261,21 +272,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         this.applySaveNow();
     }
     private void applySaveNow() {
-        config.save();
-        ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));
-        ColorLightBlockRegistry.load(config);
-        var client = net.minecraft.client.Minecraft.getInstance();
-        if (client.level != null) {
-            var oldEngine = ColorLightEngineHolder.get();
-            ColorLightEngineHolder.set(client.level);
-            var newEngine = ColorLightEngineHolder.get();
-            // the old engine's light is gone: rebuild exactly the sections it had lit (no whole-render-distance rebuild)
-            if (newEngine != null && oldEngine != null) {
-                newEngine.inheritDirtyFrom(oldEngine);
-            }
-            if (config.ENABLE) {
-                ColorLightChunkScanner.rescanAll(client.level);
-            }
-        }
+        ColorLightApply.everything(true);
     }
 }

@@ -1,7 +1,6 @@
 package me.mrhikmen.colorlight.client;
 
 import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
-import me.mrhikmen.colorlight.api.propagation.builtin.BuiltinPropagationMethods;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
@@ -10,12 +9,13 @@ import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDirtyFlusher;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.light.propagation.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.client.script.ScriptRuntime;
 import me.mrhikmen.colorlight.client.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.client.core.render.ModelPlugin;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
@@ -35,15 +35,13 @@ public class ColorLightClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // Registers ColorLight's own propagation methods (grid, smooth) through the same public API a
-        // third-party mod would use (see me.mrhikmen.colorlight.api.propagation). Must happen before
-        // anything resolves a propagation id, e.g. the config load and block registry below, and before
-        // any other mod's own init runs so its methods register right after these.
-        BuiltinPropagationMethods.registerAll();
+        // The propagation methods themselves come from Lua files in resource packs (assets/colorlight/propagation).
+        // Until the first resource reload has run them, the two Java fallbacks keep "grid" and "smooth" resolvable.
+        ScriptRuntime.registerFallbacks();
 
         config.load();
 
-        ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));
+        ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
         ColorLightBlockRegistry.load(config);
         ColorLightDaylightRefresher.register();
         ColorLightDirtyFlusher.register();
@@ -51,6 +49,12 @@ public class ColorLightClient implements ClientModInitializer {
         ModelLoadingPlugin.register(new ModelPlugin());
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> ColorLightEngineHolder.set(client.level));
+        // Block tags (used by colorlight.tag / "#minecraft:candles" in block scripts) only exist once the server has
+        // sent them, which is after the resource reload - so rebuild the block rules when they arrive.
+        CommonLifecycleEvents.TAGS_LOADED.register((registries, isClient) -> {
+            if (isClient)
+                ColorLightBlockRegistry.load(config);
+        });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ColorLightEngineHolder.set(null));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> ColorLightEngineHolder.tick());

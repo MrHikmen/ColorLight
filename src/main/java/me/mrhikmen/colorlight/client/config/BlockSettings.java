@@ -34,6 +34,17 @@ public class BlockSettings {
         this.enable = enable;
     }
 
+    /** A detached copy (the cached parse results are not copied), so scripts can adjust it without touching the config. */
+    public BlockSettings copy() {
+        BlockSettings c = new BlockSettings(getBlock(), light, enable);
+        c.r = r;
+        c.g = g;
+        c.b = b;
+        c.edit = edit;
+        c.propagation = propagation;
+        return c;
+    }
+
     /** Parsing an Identifier on every call used to dominate config-wide scans; parse once per string value. */
     public Identifier getBlock() {
         String current = block;

@@ -1,0 +1,7 @@
+{
+  "_comment": "Block colours, strengths and propagation methods. Every .json file in assets/colorlight/block/ of every enabled resource pack is read, in alphabetical order of file name (a pack with a file of the same name replaces a lower pack's file). Later entries override earlier ones field by field. Entries here beat the texture scan and other mods' defaults, but never a block the player set by hand in ColorLight's GUI. Keys starting with an underscore are ignored.",
+  "_keys": "A block id (\"minecraft:\" may be left out), a block tag (\"#minecraft:candles\"), or a pattern with * and ? (\"minecraft:*_lantern\").",
+  "_color": "Any ONE of: \"color\": \"#ff8800\" | [255, 136, 0] | {\"r\":255,\"g\":136,\"b\":0};  \"hex\": \"#ff8800\";  \"rgb\": [255,136,0] or {\"r\":..,\"g\":..,\"b\":..};  or plain \"r\", \"g\", \"b\" fields. Channels are 0..255.",
+  "_other": "\"light\": 1..15 (cap on the emitted level), \"propagation\": \"colorlight:smooth\" (how this block's light spreads), \"enabled\": false (no coloured light for the block). Everything is optional; what you leave out stays as it was.",
+  "_example": "Example entry (delete the leading underscore of a key to use it): \"_minecraft:torch\": { \"color\": [255, 150, 60], \"light\": 14 }"
+}

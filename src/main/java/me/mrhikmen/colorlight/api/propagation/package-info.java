@@ -1,21 +1,15 @@
 /**
- * Public API for adding new light-spreading shapes to ColorLight.
+ * Public API for light-spreading shapes.
  * <p>
- * A propagation method is anything implementing
- * {@link me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator} (how the flood-fill works)
- * described by a {@link me.mrhikmen.colorlight.api.propagation.PropagationMethod} (its id and how to
- * build it) and made known to the mod via {@link me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry}.
- * <p>
- * ColorLight's own two shapes - diamond ("grid") and circle ("smooth") - are implemented in
- * {@link me.mrhikmen.colorlight.api.propagation.builtin} using this exact same API, so they double as
- * a worked example: read {@code GridPropagationMethod}/{@code SmoothPropagationMethod} alongside
- * {@link me.mrhikmen.colorlight.api.propagation.PropagationMethod}'s Javadoc to see the whole shape of
- * an integration, then register your own the same way, from your mod's init:
+ * The primary way to add one is a Lua file in a resource pack
+ * ({@code assets/colorlight/propagation/<name>.lua}, see {@code docs/LUA_API.md}) - that is also how ColorLight's
+ * own diamond ("grid") and circle ("smooth") are defined. From Java, implement
+ * {@link me.mrhikmen.colorlight.api.propagation.PropagationMethod} and make it known via
+ * {@link me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry}:
  * <pre>{@code
  * PropagationMethodRegistry.register(new MyPropagationMethod());
  * }</pre>
- * Once registered, a block can be made to use it either by a player/pack author naming its id in the
- * block's config entry ({@link me.mrhikmen.colorlight.client.config.BlockSettings#propagation}), or by your
- * own mod registering that block through {@link me.mrhikmen.colorlight.api.block.ColorLightBlockAPI}.
+ * Either way the method is referred to by its id: a block script sets {@code propagation = "colorlight:beam"}, a player names
+ * it in the config, or your mod passes it to {@link me.mrhikmen.colorlight.api.block.ColorLightBlockAPI}.
  */
 package me.mrhikmen.colorlight.api.propagation;

@@ -1,5 +1,8 @@
 package me.mrhikmen.colorlight.api.propagation;
 
+import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
+import me.mrhikmen.colorlight.client.lua.ScriptedPropagationMethod;
+
 import net.minecraft.resources.Identifier;
 
 import java.util.Collection;
@@ -9,21 +12,17 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Where {@link PropagationMethod}s live. ColorLight's own two shapes (grid/diamond and
- * smooth/circle - see {@link me.mrhikmen.colorlight.api.propagation.builtin.BuiltinPropagationMethods})
- * are registered here exactly the way a third-party mod would register its own, so this registry is
- * the single place the engine, the config and any addon agree on what "grid", "smooth" or
- * "mymod:column" mean.
+ * Where {@link PropagationMethod}s live: the single place the engine, the config, the GUI and every addon agree on what
+ * {@code "colorlight:grid"}, {@code "colorlight:smooth"} or {@code "colorlight:beam"} mean.
  * <p>
- * Registration must happen during mod init, before the world (and with it the engine) is created -
- * call {@link #register(PropagationMethod)} from your {@code ClientModInitializer}, the same place
- * {@code BuiltinPropagationMethods.registerAll()} is called from ColorLight's own init.
+ * Most entries come from Lua files in resource packs and are (re)filled on every resource reload
+ * ({@link #clearScripted()} + {@link #register}); methods a mod registered from Java are kept across reloads.
  */
 public final class PropagationMethodRegistry {
 
-    /** Id of the built-in diamond-shaped method (see {@code GridPropagator}). */
+    /** Id of the diamond-shaped method. Its definition is {@code assets/colorlight/propagation/grid.lua} in the mod's own pack. */
     public static final Identifier GRID = Identifier.fromNamespaceAndPath("colorlight", "grid");
-    /** Id of the built-in round method (see {@code SmoothPropagator}). */
+    /** Id of the round method. Its definition is {@code assets/colorlight/propagation/smooth.lua} in the mod's own pack. */
     public static final Identifier SMOOTH = Identifier.fromNamespaceAndPath("colorlight", "smooth");
 
     /** Insertion-ordered so a GUI listing methods gets a stable, predictable order. */
@@ -40,6 +39,11 @@ public final class PropagationMethodRegistry {
             METHODS.remove(id);
     }
 
+    /** Drops every method that came from a Lua file (or the built-in fallback); Java-registered ones stay. */
+    public static synchronized void clearScripted() {
+        METHODS.values().removeIf(m -> m instanceof ScriptedPropagationMethod);
+    }
+
     public static synchronized PropagationMethod get(Identifier id) {
         return (id != null) ? METHODS.get(id) : null;
     }
@@ -54,11 +58,28 @@ public final class PropagationMethodRegistry {
     }
 
     /**
+     * The table-driven kernel of method {@code id} for the given decay, or - when {@code id} is unknown or not
+     * table-driven - of {@code fallback}, then of {@link #SMOOTH}, then of {@link #GRID}. {@code null} only if
+     * nothing at all is registered.
+     */
+    public static TablePropagator tableFor(Identifier id, Identifier fallback, float decayPerOpacityUnit) {
+        for (Identifier candidate : new Identifier[]{id, fallback, SMOOTH, GRID}) {
+            PropagationMethod method = get(candidate);
+            if (method == null)
+                continue;
+            TablePropagator table = method.createTable(decayPerOpacityUnit);
+            if (table != null)
+                return table;
+        }
+        return null;
+    }
+
+    /**
      * Parses a config or API value into an id. Accepts a full {@code namespace:path} id (e.g.
-     * {@code "mymod:column"}) and, for configs written before methods had ids at all, the bare legacy
+     * {@code "colorlight:beam"}) and, for configs written before methods had ids at all, the bare legacy
      * tokens {@code GRID}/{@code SMOOTH} (case-insensitive). Does <b>not</b> check the id is actually
-     * registered - callers resolve that separately so a config written with an addon's method still
-     * parses cleanly if that addon is temporarily missing.
+     * registered - callers resolve that separately so a config written with a pack's method still
+     * parses cleanly if that pack is temporarily disabled.
      *
      * @return the parsed id, or {@code null} for a blank value (meaning "use the engine default")
      */

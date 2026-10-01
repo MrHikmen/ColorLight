@@ -8,7 +8,7 @@ version = project.mod_version
 group = project.maven_group
 
 base {
-    archivesName =/* "test-" + project.mod_test + "-" + */ project.archives_base_name + "-" + project.minecraft_version
+    archivesName = "test-" + project.mod_test + "-" + project.archives_base_name + "-" + project.minecraft_version
 }
 
 repositories {
@@ -63,7 +63,9 @@ dependencies {
     //dh compat
     compileOnly "maven.modrinth:uCdwusMi:gBf0SaV1"
 
-    compileOnly files("deps/poks-colored-light-0.1.0-SNAPSHOT.jar")
+    // Lua for resource-pack scripts (assets/colorlight/propagation, block, settings.lua). Pure Java, bundled into the mod jar.
+    implementation "org.luaj:luaj-jse:${project.luaj_version}"
+    include "org.luaj:luaj-jse:${project.luaj_version}"
 }
 
 processResources {

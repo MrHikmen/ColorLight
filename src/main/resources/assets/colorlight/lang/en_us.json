@@ -15,12 +15,10 @@
   "me.colorlight.general.light_range.tooltip": "Maximum distance that colored light can spread.",
   "me.colorlight.general.smooth_lighting": "Smooth colored lighting",
   "me.colorlight.general.smooth_lighting.tooltip": "Blends colored light between neighboring blocks at each vertex for a softer appearance. When disabled, each face uses a single sample instead, which is cheaper.",
-  "me.colorlight.general.propagation_mode": "Method of light propagation",
-  "me.colorlight.general.propagation_mode.grid": "Rhomboid",
-  "me.colorlight.general.propagation_mode.smooth": "Circular",
-  "me.colorlight.general.propagation_mode.tooltip": "Changes how light spreads from standard blocks.\nExplanation of these methods:\n - rhomboid: light spreads like vanilla block light (diamond-shaped falloff).\n - circular: light spreads in a circle, with a precision of 1/8 of a block. This setting affects only light from blocks; dynamic entity lighting (e.g., from LambDynamicLights) always uses the circular model, regardless of this toggle. Existing light is recalculated when the setting is changed.",
   "me.colorlight.general.tint_gamma": "Tint vividness",
   "me.colorlight.general.tint_gamma.tooltip": "Curves how strongly a block's colour shows up before it's fully lit. 100% is linear (a block needs to be almost fully lit before the colour is clearly visible). Lower values make the colour stand out sooner, even in dimmer spots; higher values keep it subtle until a block is nearly saturated.",
+  "me.colorlight.general.propagation_mode": "Method of light propagation",
+  "me.colorlight.general.propagation_mode.tooltip": "Changes how light spreads from standard blocks.\nThe list comes from Lua files in resource packs (assets/colorlight/propagation); ColorLight ships two: Grid (diamond, vanilla-like, cheapest) and Smooth (circle, 1/8-block precision, costlier). Blocks can name their own method in a block script. Existing light is recalculated when the setting is changed.\nA resource pack may supply its own default for this setting; once you change it here, your choice is kept.",
 
   "me.colorlight.general.weight": "Scanner parameters",
   "me.colorlight.general.brightness_weight": "Brightness weight",
@@ -67,5 +65,7 @@
   "me.colorlight.block.reset_to_default": "Reset to default",
   "me.colorlight.block.apply": "Apply",
   "me.colorlight.block.propagation": "Propagation",
-  "me.colorlight.block.propagation.default": "Engine default"
+  "me.colorlight.block.propagation.default": "Engine default",
+  "me.colorlight.compatibility.dynamic_propagation": "Moving light method",
+  "me.colorlight.compatibility.dynamic_propagation.tooltip": "How the light of moving sources (e.g. entities with LambDynamicLights) spreads. Only methods defined by a table (not a custom propagate function) can be used; otherwise Smooth is used."
 }

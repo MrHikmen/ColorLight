@@ -14,7 +14,10 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
 
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,9 +35,8 @@ public final class ColorLightChunkScanner {
      * Background workers must not fight the game thread and Sodium's mesh workers for CPU while chunks
      * stream in: few threads, slightly lower priority.
      */
-    private static final ExecutorService SCAN_EXECUTOR = Executors.newFixedThreadPool(
-            Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() / 4)),
-            runnable -> backgroundThread(runnable, "ColorLight Chunk Scanner"));
+    private static final NearestFirstPool SCAN_EXECUTOR = new NearestFirstPool(
+            Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() / 4)));
 
     private static final ExecutorService APPLY_EXECUTOR = Executors.newSingleThreadExecutor(
             runnable -> backgroundThread(runnable, "ColorLight Source Apply"));
@@ -80,7 +82,7 @@ public final class ColorLightChunkScanner {
             if (ColorLightBlockRegistry.isEmpty())
                 return;
 
-            SCAN_EXECUTOR.execute(() -> scanChunk(level, chunk));
+            SCAN_EXECUTOR.execute(chunk.getPos().x(), chunk.getPos().z(), () -> scanChunk(level, chunk));
         });
 
         ClientChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> {
@@ -160,7 +162,7 @@ public final class ColorLightChunkScanner {
 
                 if (level.hasChunk(x, z)) {
                     LevelChunk chunk = level.getChunk(x, z);
-                    SCAN_EXECUTOR.execute(() -> scanChunk(level, chunk));
+                    SCAN_EXECUTOR.execute(chunk.getPos().x(), chunk.getPos().z(), () -> scanChunk(level, chunk));
                 }
             }
         }
@@ -196,6 +198,9 @@ public final class ColorLightChunkScanner {
             });
 
             if (!found.isEmpty()) {
+                var player = Minecraft.getInstance().player;
+                if (player != null)
+                    found.sortByDistance(player.getBlockX(), player.getBlockY(), player.getBlockZ());
                 ChunkPos chunkPos = chunk.getPos();
                 submitApply(() -> applyFound(level, chunkPos, engine, found));
             }
@@ -213,6 +218,83 @@ public final class ColorLightChunkScanner {
             engine.addSources(found);
         } catch (Throwable t) {
             ColorLightClient.LOGGER.warn("[ColorLight] Failed to apply light sources of chunk {}", chunkPos, t);
+        }
+    }
+
+    /**
+     * A small worker pool that always takes the waiting chunk closest to the player next. The distance is
+     * measured when a worker picks a task, not when it was queued, so it follows the player while they move.
+     * Scan results are applied in the order they finish, so light shows up around the player first.
+     */
+    private static final class NearestFirstPool {
+        private record Task(int chunkX, int chunkZ, Runnable run) {
+        }
+
+        private final ArrayList<Task> waiting = new ArrayList<>();
+        private final ReentrantLock lock = new ReentrantLock();
+        private final Condition available = lock.newCondition();
+
+        NearestFirstPool(int threads) {
+            for (int i = 0; i < threads; i++)
+                backgroundThread(this::work, "ColorLight Chunk Scanner").start();
+        }
+
+        void execute(int chunkX, int chunkZ, Runnable run) {
+            lock.lock();
+            try {
+                waiting.add(new Task(chunkX, chunkZ, run));
+                available.signal();
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private void work() {
+            while (true) {
+                Task task;
+                lock.lock();
+                try {
+                    while (waiting.isEmpty())
+                        available.awaitUninterruptibly();
+                    task = takeNearest();
+                } finally {
+                    lock.unlock();
+                }
+
+                try {
+                    task.run().run();
+                } catch (Throwable t) {
+                    ColorLightClient.LOGGER.warn("[ColorLight] Chunk scan task failed", t);
+                }
+            }
+        }
+
+        /** Call with the lock held and {@code waiting} non-empty. */
+        private Task takeNearest() {
+            int centerX = 0, centerZ = 0;
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                centerX = player.getBlockX() >> 4;
+                centerZ = player.getBlockZ() >> 4;
+            }
+
+            int best = 0;
+            long bestDist = Long.MAX_VALUE;
+            for (int i = 0, n = waiting.size(); i < n; i++) {
+                Task t = waiting.get(i);
+                long dx = t.chunkX - centerX, dz = t.chunkZ - centerZ;
+                long dist = dx * dx + dz * dz;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = i;
+                }
+            }
+
+            int last = waiting.size() - 1;
+            Task chosen = waiting.get(best);
+            waiting.set(best, waiting.get(last)); // swap-remove: order of the rest doesn't matter
+            waiting.remove(last);
+            return chosen;
         }
     }
 

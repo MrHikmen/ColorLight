@@ -4,7 +4,9 @@ import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
 import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.Translatable;
+import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.scanner.BlockScanner;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
@@ -20,7 +22,10 @@ import java.util.List;
 public class ColorLightBlockConfigScreen extends Screen {
 
     private final Screen parent;
-    private final BlockSettings entry;
+    /** The entry in the config - what gets saved. Only written when the player changes something. */
+    private final BlockSettings target;
+    /** What the widgets show and edit: the final values (scan, resource pack, ...) unless the player already edited the block. */
+    private BlockSettings entry;
     private final Runnable onSave;
     private final Runnable onApply;
 
@@ -41,10 +46,42 @@ public class ColorLightBlockConfigScreen extends Screen {
     public ColorLightBlockConfigScreen(Screen parent, BlockSettings entry, Runnable onSave, Runnable onApply) {
         super(Component.translatable("block." + entry.getBlock().toLanguageKey()));
         this.parent = parent;
-        this.entry = entry;
+        this.target = entry;
+        this.entry = displayValues(entry);
         this.onSave = onSave;
         this.onApply = onApply;
-        this.colorMath = new ColorPickerMath(entry.r, entry.g, entry.b);
+        this.colorMath = new ColorPickerMath(this.entry.r, this.entry.g, this.entry.b);
+    }
+
+    /**
+     * What to show for a block: the player's own settings if they edited it; otherwise what is actually in effect
+     * (so a colour a resource pack sets is shown instead of the scanned one). A copy - looking at a pack's value must
+     * not turn it into the player's own.
+     */
+    private static BlockSettings displayValues(BlockSettings configEntry) {
+        if (!configEntry.edit) {
+            net.minecraft.world.level.block.Block block = BuiltInRegistries.BLOCK.getValue(configEntry.getBlock());
+            BlockSettings effective = (block != null) ? ColorLightBlockRegistry.get(block) : null;
+            if (effective != null) {
+                BlockSettings view = effective.copy();
+                view.edit = false;
+                return view;
+            }
+        }
+        return configEntry.copy();
+    }
+
+    /** The player changed something: the values on screen become their own entry, which wins over scan and packs. */
+    private void commit() {
+        this.target.r = this.entry.r;
+        this.target.g = this.entry.g;
+        this.target.b = this.entry.b;
+        this.target.light = this.entry.light;
+        this.target.propagation = this.entry.propagation;
+        this.target.enable = this.entry.enable;
+        this.target.edit = true;
+        this.entry.edit = true;
+        this.onSave.run();
     }
 
     @Override
@@ -78,22 +115,20 @@ public class ColorLightBlockConfigScreen extends Screen {
                 .selected(this.entry.enable)
                 .onValueChange((checkbox, value) -> {
                     this.entry.enable = value;
-                    this.entry.edit = true;
-                    this.onSave.run();
+                    this.commit();
                 })
                 .build();
         this.addRenderableWidget(enableCheckbox);
 
         int sliderY = topY + ROW_HEIGHT;
-        LightRangeSlider lightSlider = new LightRangeSlider(rightX, sliderY, 260, 20, this.entry, this.onSave);
+        LightRangeSlider lightSlider = new LightRangeSlider(rightX, sliderY, 260, 20, this.entry, this::commit);
         this.addRenderableWidget(lightSlider);
 
         int propagationY = sliderY + ROW_HEIGHT;
         Button propagationButton = Button.builder(propagationLabel(), button -> {
             cyclePropagation();
             button.setMessage(propagationLabel());
-            this.entry.edit = true;
-            this.onSave.run();
+            this.commit();
         }).pos(rightX, propagationY).size(260, ACTION_BUTTON_HEIGHT).build();
         this.addRenderableWidget(propagationButton);
 
@@ -147,8 +182,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.entry.r = rgb[0];
         this.entry.g = rgb[1];
         this.entry.b = rgb[2];
-        this.entry.edit = true;
-        this.onSave.run();
+        this.commit();
     }
 
     /** Every choice the propagation button can land on: "engine default" (null) followed by every registered method. */
@@ -182,13 +216,13 @@ public class ColorLightBlockConfigScreen extends Screen {
     }
 
     private void resetToDefault() {
-        BlockScanner.resetToDefault(this.entry);
+        BlockScanner.resetToDefault(this.target);
+        this.onApply.run();
 
+        this.entry = displayValues(this.target);
         this.colorMath = new ColorPickerMath(this.entry.r, this.entry.g, this.entry.b);
         this.clearWidgets();
         this.init();
-
-        this.onSave.run();
     }
 
     @Override

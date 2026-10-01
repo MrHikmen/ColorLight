@@ -5,8 +5,8 @@ import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 /**
  * A model for how light spreads outwards from cells that already hold light.
  *
- * @see GridPropagator diamond-shaped spread
- * @see SmoothPropagator circle-shaped spread
+ * @see TablePropagator the data-driven kernel behind the grid / smooth Lua methods
+ * @see ScriptPropagator a propagator written entirely in Lua
  */
 public interface LightPropagator {
 

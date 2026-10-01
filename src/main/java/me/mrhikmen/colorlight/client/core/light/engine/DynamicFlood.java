@@ -1,10 +1,12 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
-import me.mrhikmen.colorlight.client.core.light.propagation.SmoothPropagator;
+import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
 import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.LevelAccessor;
 
 import java.util.Arrays;
@@ -14,7 +16,8 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
 /**
  * Computes the {@link DynamicFootprint} of one moving light source.
  * <p>
- * It spreads the light with the same {@link SmoothPropagator} (circle) that SMOOTH block light uses, but over a
+ * It spreads the light with a table-driven propagation method from the resource packs (setting
+ * {@code dynamic_propagation}, by default the circular {@code colorlight:smooth}), but over a
  * private, empty field: it reads block opacity from the level and never touches the engine's static light data
  * or lock. That means it can run on a background thread while the game thread keeps editing blocks and static
  * lights. All up-to-27 sub-block seed corners (a 3x3x3 neighbourhood, interpolated on X, Y and Z alike) are
@@ -25,11 +28,13 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
 final class DynamicFlood {
 
     private static final int POSITION_SUBDIVISIONS = 8;
-    private static final int MAX_EIGHTHS = 255 * FIXED_POINT_SCALE;
 
     private final LevelAccessor level;
     private final float decayPerOpacityUnit;
-    private final SmoothPropagator smooth;
+    private final TablePropagator smooth;
+    /** Working-value units per light unit of the chosen method (the method's {@code scale}). */
+    private final int scale;
+    private final int maxWorking;
 
     private final LongQueue queue = new LongQueue(1 << 10);
 
@@ -40,10 +45,15 @@ final class DynamicFlood {
      */
     private final WorldLightField emptyField;
 
-    DynamicFlood(LevelAccessor level, float decayPerOpacityUnit) {
+    DynamicFlood(LevelAccessor level, float decayPerOpacityUnit, Identifier methodId, Identifier fallbackId) {
         this.level = level;
         this.decayPerOpacityUnit = decayPerOpacityUnit;
-        this.smooth = new SmoothPropagator(decayPerOpacityUnit);
+        TablePropagator table = PropagationMethodRegistry.tableFor(methodId, fallbackId, decayPerOpacityUnit);
+        if (table == null)
+            throw new IllegalStateException("no table-driven propagation method is registered");
+        this.smooth = table;
+        this.scale = table.scale();
+        this.maxWorking = 255 * scale;
         this.emptyField = new WorldLightField(level, null, null);
     }
 
@@ -75,7 +85,7 @@ final class DynamicFlood {
 
         // 3x3x3 neighbourhood of corners centred on the light instead of the old 2x2x2 (just the lower and upper
         // corner on each axis, floor-anchored): seeding one more corner on every side gives the near-field falloff
-        // an extra directly-computed, exact-distance layer before the coarser hop-based SmoothPropagator takes
+        // an extra directly-computed, exact-distance layer before the coarser hop-based propagator takes
         // over further out, which is what actually removes the popping/stepping otherwise visible while a light
         // crosses a sub-block boundary.
         for (int dx = -1; dx <= 1; dx++) {
@@ -98,14 +108,14 @@ final class DynamicFlood {
                     double ddz = z - cornerZ;
                     float decay = (float) Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz) * decayPerOpacityUnit;
 
-                    int er = clampEighths(Math.round((baseR - decay) * FIXED_POINT_SCALE));
-                    int eg = clampEighths(Math.round((baseG - decay) * FIXED_POINT_SCALE));
-                    int eb = clampEighths(Math.round((baseB - decay) * FIXED_POINT_SCALE));
+                    int er = clampEighths(Math.round((baseR - decay) * scale));
+                    int eg = clampEighths(Math.round((baseG - decay) * scale));
+                    int eb = clampEighths(Math.round((baseB - decay) * scale));
                     if (er == 0 && eg == 0 && eb == 0)
                         continue;
 
                     long key = PosKey.pack((int) cornerX, (int) cornerY, (int) cornerZ);
-                    long existing = smooth.eighthsAt(key);
+                    long existing = smooth.workingAt(key);
                     int mr = Math.max(er, eighthsR(existing));
                     int mg = Math.max(eg, eighthsG(existing));
                     int mb = Math.max(eb, eighthsB(existing));
@@ -126,8 +136,8 @@ final class DynamicFlood {
         return result;
     }
 
-    private static int clampEighths(int v) {
-        return v < 0 ? 0 : Math.min(v, MAX_EIGHTHS);
+    private int clampEighths(int v) {
+        return v < 0 ? 0 : Math.min(v, maxWorking);
     }
 
     private DynamicFootprint buildFootprint() {
@@ -136,7 +146,7 @@ final class DynamicFlood {
 
         int kept = 0;
         for (int i = 0; i < n; i++) {
-            if (toRgb(smooth.eighthsAt(keys[i])) != 0)
+            if (toRgb(smooth.workingAt(keys[i])) != 0)
                 keys[kept++] = keys[i];
         }
         if (kept == 0)
@@ -147,15 +157,15 @@ final class DynamicFlood {
 
         int[] colors = new int[kept];
         for (int i = 0; i < kept; i++) {
-            colors[i] = toRgb(smooth.eighthsAt(sorted[i]));
+            colors[i] = toRgb(smooth.workingAt(sorted[i]));
         }
         return new DynamicFootprint(sorted, colors);
     }
 
-    private static int toRgb(long eighths) {
-        int r = Math.round(eighthsR(eighths) / (float) FIXED_POINT_SCALE);
-        int g = Math.round(eighthsG(eighths) / (float) FIXED_POINT_SCALE);
-        int b = Math.round(eighthsB(eighths) / (float) FIXED_POINT_SCALE);
+    private int toRgb(long eighths) {
+        int r = Math.round(eighthsR(eighths) / (float) scale);
+        int g = Math.round(eighthsG(eighths) / (float) scale);
+        int b = Math.round(eighthsB(eighths) / (float) scale);
         return ColorLightUtil.pack(r, g, b);
     }
 }

@@ -1,0 +1,27 @@
+-- Default settings shipped by a resource pack.
+--
+-- Everything here is a DEFAULT: a setting the player has changed themselves in ColorLight's settings keeps the player's
+-- value; every other setting takes the value from the highest-priority resource pack that lists it. Leave a line out to
+-- leave that setting alone. This built-in file lists nothing, so the mod's own defaults apply.
+--
+-- Available settings (name = type, range):
+--   enable                        = true | false
+--   light_range                   = 1..32        light reach in blocks
+--   smooth_lighting               = true | false
+--   propagation                   = "colorlight:grid"   method blocks use unless they name their own
+--   dynamic_propagation           = "colorlight:smooth" method moving (entity) lights use; must be a table-driven method
+--   tint_gamma                    = 0..2         how early the colour tint shows (lower = earlier)
+--   brightness_weight, local_weight, region_weight, alpha_weight, anomaly_weight,
+--   saturation_weight, glowcolorscore_weight, whitepenalty_weight = 0..100   texture scanner weights
+--   entity_tracking               = true | false
+--   entity_follow_render_distance = true | false
+--   entity_radius_chunks          = 2..32
+--
+-- Example:
+--   return {
+--       light_range = 12,
+--       propagation = "colorlight:smooth",
+--       tint_gamma  = 0.7,
+--   }
+
+return {}

@@ -1,0 +1,9 @@
+{
+  "minecraft:torch":      { "color": [255, 150, 60] },
+  "minecraft:soul_torch": { "color": "#3fd0ff" },
+  "minecraft:beacon":     { "hex": "c8f0ff", "propagation": "colorlight:beam" },
+  "minecraft:lantern":    { "rgb": { "r": 255, "g": 200, "b": 120 }, "light": 15 },
+  "minecraft:*_candle":   { "light": 12 },
+  "#minecraft:candles":   { "light": 12 },
+  "minecraft:lava":       { "enabled": false }
+}

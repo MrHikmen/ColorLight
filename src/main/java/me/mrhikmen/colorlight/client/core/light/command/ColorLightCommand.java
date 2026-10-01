@@ -7,7 +7,12 @@ import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.light.propagation.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
+import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.script.ScriptRuntime;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -34,10 +39,15 @@ public final class ColorLightCommand {
                                             .then(ClientCommands.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                     .then(ClientCommands.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                             .then(ClientCommands.argument("strength", IntegerArgumentType.integer(1, 32))
-                                                                    .then(ClientCommands.literal("grid")
-                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.GRID)))
-                                                                    .then(ClientCommands.literal("smooth")
-                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.SMOOTH))))))))
+                                                                    // light method: any registered id (grid / smooth / mypack:name); optional
+                                                                    .executes(ctx -> addAtTarget(ctx, null))
+                                                                    .then(ClientCommands.argument("method", StringArgumentType.word())
+                                                                            .suggests((ctx, builder) -> {
+                                                                                for (PropagationMethod method : PropagationMethodRegistry.all())
+                                                                                    builder.suggest(method.id().toString());
+                                                                                return builder.buildFuture();
+                                                                            })
+                                                                            .executes(ctx -> addAtTarget(ctx, StringArgumentType.getString(ctx, "method")))))))))
 
                             .then(ClientCommands.literal("reset")
                                     .executes(ColorLightCommand::removeAtTarget))
@@ -45,6 +55,9 @@ public final class ColorLightCommand {
 
                     .then(ClientCommands.literal("clear")
                             .executes(ColorLightCommand::clearAll))
+
+                    .then(ClientCommands.literal("scripts")
+                            .executes(ColorLightCommand::listScripts))
             );
         });
     }
@@ -81,7 +94,20 @@ public final class ColorLightCommand {
         return 1;
     }
 
-    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx, ColorLightPropagationMode mode) {
+    /** Lists the propagation methods and any script problems, so pack authors see what loaded. */
+    private static int listScripts(CommandContext<FabricClientCommandSource> ctx) {
+        for (PropagationMethod method : PropagationMethodRegistry.all()) {
+            String source = (method instanceof me.mrhikmen.colorlight.client.lua.ScriptedPropagationMethod scripted) ? scripted.source() : "mod (Java)";
+            ctx.getSource().sendFeedback(Component.literal(method.id() + " - " + method.displayName() + "  [" + source + "]"));
+        }
+        for (String problem : ScriptRuntime.problems())
+            ctx.getSource().sendError(Component.literal(problem));
+        if (ScriptRuntime.problems().isEmpty())
+            ctx.getSource().sendFeedback(Component.literal("No script problems."));
+        return 1;
+    }
+
+    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx, String methodName) {
 
         ColorLightCommand.removeAtTarget(ctx);
 
@@ -102,7 +128,12 @@ public final class ColorLightCommand {
         int b = IntegerArgumentType.getInteger(ctx, "b");
         int strength = IntegerArgumentType.getInteger(ctx, "strength");
 
-        engine.addSource(pos, r, g, b, strength, mode);
+        Identifier method = PropagationMethodRegistry.parse(methodName);
+        if (methodName != null && !PropagationMethodRegistry.contains(method)) {
+            ctx.getSource().sendError(Component.literal("Unknown propagation method '" + methodName + "'. Try /colorlight scripts"));
+            return 0;
+        }
+        engine.addSource(pos, r, g, b, strength, method);
 
         ctx.getSource().sendFeedback(Translatable.LIGHT_ADD);
         return 1;
