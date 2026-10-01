@@ -20,7 +20,6 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
@@ -33,18 +32,16 @@ public final class ColorLightCommand {
                             .executes(ColorLightCommand::debugDaylight))
 
                     .then(ClientCommands.literal("target")
-
                             .then(ClientCommands.literal("set")
                                     .then(ClientCommands.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                             .then(ClientCommands.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                     .then(ClientCommands.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                             .then(ClientCommands.argument("strength", IntegerArgumentType.integer(1, 32))
-                                                                    // light method: any registered id (grid / smooth / mypack:name); optional
                                                                     .executes(ctx -> addAtTarget(ctx, null))
-                                                                    .then(ClientCommands.argument("method", StringArgumentType.word())
+                                                                    .then(ClientCommands.argument("method", StringArgumentType.greedyString())
                                                                             .suggests((ctx, builder) -> {
                                                                                 for (PropagationMethod method : PropagationMethodRegistry.all())
-                                                                                    builder.suggest(method.id().toString());
+                                                                                    builder.suggest(method.id().getPath());
                                                                                 return builder.buildFuture();
                                                                             })
                                                                             .executes(ctx -> addAtTarget(ctx, StringArgumentType.getString(ctx, "method")))))))))
@@ -129,6 +126,11 @@ public final class ColorLightCommand {
         int strength = IntegerArgumentType.getInteger(ctx, "strength");
 
         Identifier method = PropagationMethodRegistry.parse(methodName);
+        if (methodName != null && !methodName.contains(":") && !PropagationMethodRegistry.contains(method)) {
+            Identifier own = PropagationMethodRegistry.parse("colorlight:" + methodName.trim());
+            if (own != null)
+                method = own;
+        }
         if (methodName != null && !PropagationMethodRegistry.contains(method)) {
             ctx.getSource().sendError(Component.literal("Unknown propagation method '" + methodName + "'. Try /colorlight scripts"));
             return 0;

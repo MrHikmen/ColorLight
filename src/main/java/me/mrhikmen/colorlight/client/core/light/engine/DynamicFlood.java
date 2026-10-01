@@ -63,10 +63,12 @@ final class DynamicFlood {
         smooth.beginPass();
         queue.clear();
 
-        float scale = ColorLightUtil.clamp01(strength / 15f);
-        float baseR = r * scale;
-        float baseG = g * scale;
-        float baseB = b * scale;
+        // (not named "scale": that would hide the method's fixed-point scale field used below, seeding the light
+        // 1/scale too weak - for smooth, scale 8, it then barely spread and showed as a small cube)
+        float strengthFraction = ColorLightUtil.clamp01(strength / 15f);
+        float baseR = r * strengthFraction;
+        float baseG = g * strengthFraction;
+        float baseB = b * strengthFraction;
 
         long ex = Math.round(x * POSITION_SUBDIVISIONS);
         long ey = Math.round(y * POSITION_SUBDIVISIONS);

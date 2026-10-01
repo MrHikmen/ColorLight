@@ -1,6 +1,5 @@
 package me.mrhikmen.colorlight.client;
 
-import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
