@@ -6,13 +6,13 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 <summary>Versions</summary>
 
 | Version | Further support |
-|:--------| :-------------: |
-| 1.20.x  |        No       |
-| 1.21.x  |        No       |
+|:--------|:---------------:|
+| 1.20.x  |       No        |
+| 1.21.x  |       Yes       |
 | 1.21.11 |       Yes       |
 | 26.x    |       Yes       |
 
-Older Minecraft versions are personally difficult for me to maintain, as sometimes I have to completely rewrite all the added code. ColorLight versions for 1.21.1 will therefore remain at 0.2.0 forever.
+Older Minecraft versions are personally difficult for me to maintain, as sometimes I have to completely rewrite all the added code.
 
 </details>
 
@@ -25,11 +25,11 @@ Many optimization mods are supported because the mod only colors the block rathe
 
 If a mod adds features that differ from vanilla Minecraft, a separate compatibility layer will have to be written for it. The following are such mods:
 
-| Mod                 |     Support     |                                     How it works                                    |
-| :------------------ |:---------------:| :---------------------------------------------------------------------------------: |
-| - LambDynamicLights |       Yes       |               A lighting marker is placed at the entity's coordinates               |
-| - Voxy              | In development  | When a chunk is loaded, a square is placed in the color of the light-emitting block |
-| - Distant Horizon   | In development  |                              Currently being developed                              |
+| Mod                 |    Support     |                      How it works                       |
+| :------------------ |:--------------:|:-------------------------------------------------------:|
+| - LambDynamicLights |      Yes       | A lighting marker is placed at the entity's coordinates |
+| - Voxy              | In development |                Currently being developed                |
+| - Distant Horizon   | In development |                Currently being developed                |
 
 </details>
 
@@ -39,9 +39,6 @@ If a mod adds features that differ from vanilla Minecraft, a separate compatibil
 | Issue description                                                                  |                                        Why it happens                                        |                             How to fix                              |
 |:-----------------------------------------------------------------------------------|:--------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------:|
 | "Description: Mod 'colorlight' failed while registering config options." with RPLS | This happens because ColorLight does not have enough time to create its settings due to RPLS |      Launch Minecraft without RPLS, then restart it with RPLS       |
-| ColorLight settings are not applied                                                |                  The settings application was poorly implemented initially                   |         Restart Minecraft or wait for fixes in new updates          |
-| Strange triangles on version 1.21.11 or squares on version 26.2                    |                         This is an old version of Voxy compatibility                         | Disable "Enable Voxy compatibility" in the "Compatibility" settings |
-
 </details>
 
 <details>
@@ -49,7 +46,7 @@ If a mod adds features that differ from vanilla Minecraft, a separate compatibil
 
 **Вся актуальная информация о ColorLight хранится на [Modrint](https://modrinth.com/mod/colorlight), здесь лишь записи, которые могут прояснить некоторые моменты мода, сообшающие о том, что будет или не будет в моде.**
 
-ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
+ColorLight — это мод, который автоматически определяет, как должен светиться блок, и на основе этого генерирует цветное освещение.
 
 <details>
 <summary>Версии</summary>
@@ -57,11 +54,12 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 | Версия  | Дальнейшая поддержка |
 |:--------|:--------------------:|
 | 1.20.x  |       Не будет       |
+| 1.21.1  |        Будет         |
 | 1.21.x  |       Не будет       |
 | 1.21.11 |        Будет         |
 | 26.x    |        Будет         |
 
-Старые версии майнкрафта мне лично трудно поддерживать, так как иногда приходиться полнустью переписывать весь добавленный код. Версии ColorLight для 1.21.1 так и остануться навсегда 0.2.0
+Старые версии майнкрафта мне лично трудно поддерживать, так как иногда приходиться полнустью переписывать весь добавленный код.
 </details>
 
 <details>
@@ -73,11 +71,11 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 
 Если мод добавляет специфические особенности отличные от ванильного Майнкрафта, то под него придётся писать отдельный слой совместимостей. Вот подобные моды:
 
-| Мод                 |    Поддержка     |                         Как работает                          |
-|:--------------------|:----------------:|:-------------------------------------------------------------:|
-| - LambDynamicLights |       Есть       |        Метка освещение ставиться на координатах энтити        |
-| - Voxy              | Экспериментально | При загрузки чанка ставиться квадрад в цвет светящегося блока |
-| - Distant Horizon   |   В разработке   |                     Пока разрабатывается                      |
+| Мод                 |  Поддержка   |                  Как работает                   |
+|:--------------------|:------------:|:-----------------------------------------------:|
+| - LambDynamicLights |     Есть     | Метка освещение ставиться на координатах энтити |
+| - Voxy              | В разработке |              Пока разрабатывается               |
+| - Distant Horizon   | В разработке |              Пока разрабатывается               |
 </details>
 
 <details>
@@ -86,8 +84,6 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 | Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                             Как исправить                             |
 |:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------:|
 | "Description: Mod 'colorlight' failed while registering config options." с RPLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |       Запустить Майнкрафт без RPLS, после перезапустить с RPLS        |
-| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     | Перезагрузить Майнкрафт или дождаться исправление в новых обновлениях |
-| Непонятные треугольники на версии 1.21.11 или квадраты на версии 26.2           |                         Это старая версия совместимости с Voxy                          |  Отключить "Enable Voxy compatibility" в настройках "Compatibility"   |
 </details>
 
 </details>
