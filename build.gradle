@@ -54,12 +54,6 @@ dependencies {
     modImplementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 
     modCompileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
-
-
-    include(modApi("dev.ryanhcode.sable-companion:sable-companion-fabric-${project.minecraft_version}:${project.sable_companion_version}"))
-    compileOnly("dev.ryanhcode.sable:sable-neoforge-${project.minecraft_version}:${project.sable_version}") {
-        transitive = false
-    }
 }
 
 processResources {
