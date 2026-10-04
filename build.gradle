@@ -25,21 +25,6 @@ repositories {
         name = "Gegy"
         url = "https://maven.gegy.dev"
     }
-    exclusiveContent {
-        // Sable + Sable Companion — используется только для compile-only совместимости.
-        // На проде реальный Sable (Fabric ИЛИ NeoForge, если мод запущен через Sinytra Connector)
-        // подтягивается из установленных модов, мы его не bundling'уем.
-        forRepository {
-            maven {
-                name = "RyanHCode"
-                url = "https://maven.ryanhcode.dev/releases"
-            }
-        }
-        filter {
-            includeGroup("dev.ryanhcode.sable")
-            includeGroup("dev.ryanhcode.sable-companion")
-        }
-    }
 }
 
 dependencies {
@@ -54,6 +39,7 @@ dependencies {
     modImplementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 
     modCompileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
+
 }
 
 processResources {
