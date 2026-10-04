@@ -1,0 +1,20 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "me.mrhikmen.colorlight.client.mixin.sodium",
+  "plugin": "me.mrhikmen.colorlight.client.mixin.ColorLightMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+    "DefaultChunkRendererMixin",
+    "ShaderChunkRendererMixin",
+    "SodiumWorldRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

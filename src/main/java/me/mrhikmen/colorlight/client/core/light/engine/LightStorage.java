@@ -1,6 +1,9 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
+import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
+
+import java.util.Arrays;
 
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.LongConsumer;
@@ -112,6 +115,42 @@ public final class LightStorage {
         boolean isLit = (value & RGB_MASK) != 0;
         if (wasLit != isLit)
             s.nonEmpty += isLit ? 1 : -1;
+    }
+
+    /**
+     * Copies a section's colours (flags stripped) into {@code out}, indexed {@code (y << 8) | (z << 4) | x}.
+     *
+     * @return true if the section holds any light; {@code out} is zero-filled otherwise
+     */
+    public boolean copySection(int sx, int sy, int sz, int[] out) {
+        Section s = sectionOrNull(sx, sy, sz);
+        if (s == null || s.nonEmpty <= 0) {
+            Arrays.fill(out, 0, SECTION_VOLUME, 0);
+            return false;
+        }
+        int[] cells = s.cells;
+        for (int i = 0; i < SECTION_VOLUME; i++)
+            out[i] = cells[i] & RGB_MASK;
+        return true;
+    }
+
+    /**
+     * Raises {@code out} to the per-channel maximum of itself and this section's colours (same indexing as
+     * {@link #copySection}).
+     *
+     * @return true if the section held any light
+     */
+    public boolean mergeMaxInto(int sx, int sy, int sz, int[] out) {
+        Section s = sectionOrNull(sx, sy, sz);
+        if (s == null || s.nonEmpty <= 0)
+            return false;
+        int[] cells = s.cells;
+        for (int i = 0; i < SECTION_VOLUME; i++) {
+            int v = cells[i] & RGB_MASK;
+            if (v != 0)
+                out[i] = ColorLightUtil.max(out[i], v);
+        }
+        return true;
     }
 
     /** True if the section holds no lit cell at all (also true if it was never allocated). */

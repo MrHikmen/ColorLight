@@ -20,6 +20,13 @@ public class Translatable {
     public static Component LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.general.light_range.tooltip");
     public static Component SMOOTH_LIGHTING = Component.translatable("me.colorlight.general.smooth_lighting");
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
+    public static Component GPU_PIPELINE = Component.translatable("me.colorlight.general.gpu_pipeline");
+    public static Component GPU_PIPELINE_Tooltip = Component.translatable("me.colorlight.general.gpu_pipeline.tooltip");
+    public static Component GPU_LIGHT_SECTIONS = Component.translatable("me.colorlight.general.gpu_light_sections");
+    public static Component GPU_LIGHT_SECTIONS_Tooltip = Component.translatable("me.colorlight.general.gpu_light_sections.tooltip");
+    public static Component SECTIONS_Value(int value) {
+        return Component.translatable("me.colorlight.general.gpu_light_sections.value", value, String.format("%.1f", value * 16 / 1024.0));
+    }
     public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
     public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
     public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");

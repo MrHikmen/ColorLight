@@ -5,6 +5,7 @@ import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLight
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
+import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.config.gui.screen.ColorLightBlockConfigScreen;
 import me.mrhikmen.colorlight.client.config.gui.screen.PropagationPickerScreen;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
@@ -72,6 +73,22 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setImpact(OptionImpact.MEDIUM)
                                 .setBinding(value -> config.SMOOTH_LIGHTING = value, () -> config.SMOOTH_LIGHTING)
                                 .setDefaultValue(config.SMOOTH_LIGHTING)
+                        )
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:gpu_pipeline"))
+                                .setName(Translatable.GPU_PIPELINE)
+                                .setTooltip(Translatable.GPU_PIPELINE_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.GPU_PIPELINE = value, () -> config.GPU_PIPELINE)
+                                .setDefaultValue(config.GPU_PIPELINE)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:gpu_light_sections"))
+                                .setName(Translatable.GPU_LIGHT_SECTIONS)
+                                .setTooltip(Translatable.GPU_LIGHT_SECTIONS_Tooltip)
+                                .setRange(64, 4096, 64)
+                                .setValueFormatter(value -> Translatable.SECTIONS_Value(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.GPU_LIGHT_SECTIONS = value, () -> config.GPU_LIGHT_SECTIONS)
+                                .setDefaultValue(config.GPU_LIGHT_SECTIONS)
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:tint_gamma"))
                                 .setName(Translatable.TINT_GAMMA)

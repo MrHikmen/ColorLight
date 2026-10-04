@@ -4,6 +4,7 @@ import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.engine.SourceSnapshot;
+import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -36,6 +37,13 @@ public final class ColorLightDaylightRefresher {
             ClientLevel level = client.level;
             if (level == null || client.player == null)
                 return;
+
+            // The shader mixes daylight in per pixel; nothing needs re-meshing when the time of day changes.
+            if (ColorLightGpu.isActive()) {
+                pending = null;
+                pendingEngine = null;
+                return;
+            }
 
             if (pending != null) {
                 processBatch(level);

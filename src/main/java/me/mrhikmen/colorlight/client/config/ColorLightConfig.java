@@ -34,18 +34,27 @@ public class ColorLightConfig {
 
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
+
+    /**
+     * Light the terrain per pixel in a shader (a copy of Sodium's terrain shader that reads a GPU light volume)
+     * instead of baking colours into the chunk meshes. Only works with a Sodium version ColorLight was written
+     * against, otherwise vertex colours are used. Switchable while playing; ignored while a shader pack is on.
+     */
+    public boolean GPU_PIPELINE = true;
+    /** How many 16x16x16 light sections the GPU light volume can hold at once (16 KiB each). 64..4096. */
+    public int GPU_LIGHT_SECTIONS = 4096;
     /** Id of the propagation method blocks use by default, e.g. {@code colorlight:grid}. Legacy values GRID / SMOOTH still work. */
     public String PROPAGATION_MODE = "colorlight:grid";
-    /** Id of the propagation method moving (entity) lights use. */
-    public String DYNAMIC_PROPAGATION = "colorlight:smooth";
-
     /**
      * Curve applied to how far a channel is from the light's own colour before it's blended onto the texture.
      * 1 = old linear behaviour (a cell needs to be almost fully lit before the tint reads as clearly coloured).
      * Less than 1 makes the colour stand out sooner, even in dimmer cells; greater than 1 keeps it subtle
      * until a cell is nearly saturated. Must stay above 0.
      */
-    public float TINT_GAMMA = 0.55f;
+    public float TINT_GAMMA = 0.0f;
+
+    /** Id of the propagation method moving (entity) lights use. */
+    public String DYNAMIC_PROPAGATION = "colorlight:smooth";
 
     public int BRIGHTNESS_WEIGHT     = 100;
     public int LOCAL_WEIGHT          = 100;
@@ -89,6 +98,8 @@ public class ColorLightConfig {
                 mergeBlocks(loaded.blocks);
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
+                this.GPU_PIPELINE = root.has("GPU_PIPELINE") ? loaded.GPU_PIPELINE : this.GPU_PIPELINE;
+                this.GPU_LIGHT_SECTIONS = loaded.GPU_LIGHT_SECTIONS >= 64 ? Math.min(4096, loaded.GPU_LIGHT_SECTIONS) : this.GPU_LIGHT_SECTIONS;
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
                 this.DYNAMIC_PROPAGATION = root.has("DYNAMIC_PROPAGATION") && loaded.DYNAMIC_PROPAGATION != null ? loaded.DYNAMIC_PROPAGATION : this.DYNAMIC_PROPAGATION;
                 this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;

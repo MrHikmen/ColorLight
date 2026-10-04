@@ -1,95 +1,120 @@
-**All up-to-date information about ColorLight is stored on [Modrinth](https://modrinth.com/mod/colorlight]%28https://modrinth.com/mod/colorlight%29); this page only contains notes that may clarify some aspects of the mod, explaining what will or will not be included in the mod.**
+# ColorLight — GPU Lighting Mode
 
-ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
+ColorLight's colored light is applied on the graphics card: a Sodium shader looks up the light for every pixel instead of baking colour into chunk vertices. The light is smoother, and chunks are not rebuilt when it changes.
 
-**Resource-pack driven:** how light spreads (`assets/colorlight/propagation/*.lua`) and default settings (`assets/colorlight/settings.lua`) are Lua scripts; block colours (`assets/colorlight/block/*.json`) are plain JSON with hex or rgb colours. The mod's own grid/smooth shapes are two such files. See [API.md](examples/API.md) and `examples/resourcepack`.
+Light propagation is still computed on the CPU (the Lua methods `grid` and `smooth`). Only the application of light to pixels has been moved to the GPU.
 
-<details>
-<summary>Versions</summary>
+---
 
-| Version | Further support |
-|:--------| :-------------: |
-| 1.20.x  |        No       |
-| 1.21.x  |        No       |
-| 1.21.11 |       Yes       |
-| 26.x    |       Yes       |
+## How it works
 
-Older Minecraft versions are personally difficult for me to maintain, as sometimes I have to completely rewrite all the added code. ColorLight versions for 1.21.1 will therefore remain at 0.2.0 forever.
+**Light volume on the GPU.** The light lives in a sparse volume around the camera, stored in two texel buffers (`GpuLightVolume`):
 
-</details>
+- **data**: a header (camera, flags, tint settings) and a list of sections, each holding a slot number or `-1`;
+- **pool**: slots of 4096 cells (16 KiB each); only a section that holds light gets a slot. A cell stores the light colour `0x00BBGGRR` and a "solid block" bit.
 
-<details>
-<summary>Other mods</summary>
+Sections are addressed in a ring, so the window follows the camera without moving any data. The shader window is 31 sections horizontally and 15 vertically. A light change rewrites only a few KiB of video memory.
 
-Mods that simply add a light-emitting block through vanilla registries are supported, but if a mod takes a different approach, ColorLight may simply skip it.
+**Shader.** A copy of Sodium's terrain shader (`colored_terrain.vsh/.fsh`) with a shared include, `colorlight_data.glsl`. For every pixel it:
 
-Many optimization mods are supported because the mod only colors the block rather than changing vanilla lighting.
+1. determines the face normal from screen-space derivatives;
+2. reads the light colour and level from the volume (with smooth interpolation);
+3. builds the final colour: vanilla lighting in which the part added by block light is recoloured to the source's colour.
 
-If a mod adds features that differ from vanilla Minecraft, a separate compatibility layer will have to be written for it. The following are such mods:
+Sky light is left untouched, so the tint washes out by day and is fully visible at night. Fully emissive faces (glowing models) stay vanilla.
 
-| Mod                 |    Support     |                      How it works                       |
-| :------------------ |:--------------:|:-------------------------------------------------------:|
-| - LambDynamicLights |      Yes       | A lighting marker is placed at the entity's coordinates |
-| - Voxy              | In development |                Currently being developed                |
-| - Distant Horizon   | In development |                Currently being developed                |
+**Sodium integration.** Three small mixins (`mixin/sodium`):
 
-</details>
+| Mixin | What it does |
+|---|---|
+| `ShaderChunkRendererMixin` | Adds the volume buffers and swaps the terrain shaders for ours |
+| `SodiumWorldRendererMixin` | Passes the camera position to the volume once per frame |
+| `DefaultChunkRendererMixin` | Binds the buffers for every terrain draw |
 
-<details>
-<summary>Known issues</summary>
+**Fallback.** The GPU mode turns on only if all three mixins applied (they are skipped for unverified Sodium versions). If anything goes wrong, the mod switches back to the vertex-colour mode on its own and re-meshes. The GPU mode is not used with Iris shader packs.
 
-| Issue description                                                                  |                                        Why it happens                                        |                             How to fix                              |
-|:-----------------------------------------------------------------------------------|:--------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------:|
-| "Description: Mod 'colorlight' failed while registering config options." with RPLS | This happens because ColorLight does not have enough time to create its settings due to RPLS |      Launch Minecraft without RPLS, then restart it with RPLS       |
-| ColorLight settings are not applied                                                |                  The settings application was poorly implemented initially                   |         Restart Minecraft or wait for fixes in new updates          |
+---
 
-</details>
+## Settings
+
+| Setting | What it does |
+|---|---|
+| Shader lighting (GPU) | Turns the mode on; applies immediately; unavailable while a shader pack is enabled |
+| GPU light memory | How many 16×16×16 sections of light are kept on the graphics card (default 768, from 64 to 4096) |
+| Tint vividness | How early the colour shows up and how far from the source it lasts |
+
+**Tint vividness** (`tint_gamma`, 0–200%):
+
+| Value | Behaviour |
+|---|---|
+| 0–20% | The colour is vivid and saturated all the way to the edge of the light; only the brightness falls off |
+| 55% (default) | The colour lasts noticeably farther and weakens toward the edge |
+| 100% and above | The colour fades together with the light; above 100% it stays subtle until a block is almost fully lit |
+
+If the colour lasts too far or not far enough by default, change the line `float retention = clamp(1.0 - tintGamma, 0.0, 1.0);` in `colored_terrain.fsh`. The steepness of the whole slider is set by the `* 3.0` factor in the `exponent` line.
+
+---
 
 <details>
 <summary>Rus</summary>
 
-**Вся актуальная информация о ColorLight хранится на [Modrint](https://modrinth.com/mod/colorlight), здесь лишь записи, которые могут прояснить некоторые моменты мода, сообшающие о том, что будет или не будет в моде.**
+---
 
-ColorLight — это мод, который автоматически определяет, как должен светиться блок, и на основе этого генерирует цветное освещение.
+# ColorLight — GPU-режим освещения
 
-**Работа на основе ресурс-паков:** параметры распространения света (`assets/colorlight/propagation/*.lua`) и настройки по умолчанию (`assets/colorlight/settings.lua`) задаются Lua-скриптами, а цвета блоков (`assets/colorlight/block/*.json`) описываются в формате JSON с использованием цветов в виде hex-кодов или RGB-значений. Встроенные в мод формы (сеточные или сглаженные) также определяются подобными файлами. Подробности см. в [API.md](examples/API.md) и папке `examples/resourcepack`.
+Цветной свет ColorLight применяется на видеокарте: шейдер Sodium ищет свет для каждого пикселя, а не запекает цвет в вершины чанка. Свет получается плавнее, а при его изменении чанки не пересобираются.
 
-<details>
-<summary>Версии</summary>
+Распространение света по-прежнему считается на CPU (Lua-методы `grid` и `smooth`). На GPU вынесено только применение света к пикселям.
 
-| Версия  | Дальнейшая поддержка |
-|:--------|:--------------------:|
-| 1.20.x  |       Не будет       |
-| 1.21.x  |       Не будет       |
-| 1.21.11 |        Будет         |
-| 26.x    |        Будет         |
+---
 
-Старые версии майнкрафта мне лично трудно поддерживать, так как иногда приходиться полнустью переписывать весь добавленный код. Версии ColorLight для 1.21.1 так и остануться навсегда 0.2.0
+## Как это работает
+
+**Объём света на GPU.** Свет лежит в разреженном объёме вокруг камеры, в двух texel-буферах (`GpuLightVolume`):
+
+- **data** — заголовок (камера, флаги, настройки тинта) и список секций, у каждой номер слота или `-1`;
+- **pool** — слоты по 4096 ячеек (16 КиБ), слот есть только у секции со светом. Ячейка хранит цвет света `0x00BBGGRR` и бит «твёрдый блок».
+
+Секции адресуются по кругу, поэтому окно следует за камерой, а данные не переносятся. Окно в шейдере: 31 секция по горизонтали и 15 по вертикали. Изменение света переписывает несколько КиБ видеопамяти.
+
+**Шейдер.** Копия терраин-шейдера Sodium (`colored_terrain.vsh/.fsh`) с общим инклюдом `colorlight_data.glsl`. Для каждого пикселя он:
+
+1. определяет нормаль грани по производным экранных координат;
+2. берёт цвет и уровень света из объёма (с плавной интерполяцией);
+3. строит итоговый цвет: ванильное освещение, в котором часть, добавленная блочным светом, перекрашена в цвет источника.
+
+Небесный свет не трогается, поэтому днём тинт смывается, а ночью виден полностью. Полностью светящиеся грани (эмиссивные модели) остаются ванильными.
+
+**Подключение к Sodium.** Три небольших миксина (`mixin/sodium`):
+
+| Миксин | Что делает |
+|---|---|
+| `ShaderChunkRendererMixin` | Добавляет буферы объёма и подменяет терраин-шейдеры на наши |
+| `SodiumWorldRendererMixin` | Раз за кадр передаёт позицию камеры в объём |
+| `DefaultChunkRendererMixin` | Привязывает буферы на каждый draw терраина |
+
+**Запасной вариант.** GPU-режим включается, только если применились все три миксина (для непроверенных версий Sodium они пропускаются). При любой неполадке мод сам возвращается к режиму вершинных цветов и пересобирает меши. С шейдерпаками Iris GPU-режим не используется.
+
+---
+
+## Настройки
+
+| Настройка | Что делает |
+|---|---|
+| Шейдерное освещение (GPU) | Включает режим; применяется сразу; недоступна при включённом шейдерпаке |
+| Память света GPU | Сколько секций 16×16×16 света хранится на видеокарте (по умолчанию 768, от 64 до 4096) |
+| Насыщенность оттенка | Как рано проявляется цвет и как далеко он держится от источника |
+
+**Насыщенность оттенка** (`tint_gamma`, 0–200%):
+
+| Значение | Поведение |
+|---|---|
+| 0–20% | Цвет яркий и насыщенный до самого края света, затухает только яркость |
+| 55% (по умолчанию) | Цвет держится заметно дальше, к краю слабеет |
+| 100% и выше | Цвет угасает вместе со светом; выше 100% он неброский, пока блок почти не освещён полностью |
+
+Если по умолчанию цвет держится слишком далеко или недостаточно, меняется строка `float retention = clamp(1.0 - tintGamma, 0.0, 1.0);` в `colored_terrain.fsh`, а крутизну всего слайдера задаёт коэффициент `* 3.0` в строке `exponent`.
+
 </details>
 
-<details>
-<summary>Другие моды</summary>
-
-Поддержка модов которые просто добавляют светящийся блок через ванильные реестры поддерживаются, но если мод пошёл другим путём ColorLight его может просто пропустить.
-
-Многие моды на оптимизацию поддерживаются из-за того, что мод просто красит блок, а не меняет ванильное освещение.
-
-Если мод добавляет специфические особенности отличные от ванильного Майнкрафта, то под него придётся писать отдельный слой совместимостей. Вот подобные моды:
-
-| Мод                 |  Поддержка   |                  Как работает                   |
-|:--------------------|:------------:|:-----------------------------------------------:|
-| - LambDynamicLights |     Есть     | Метка освещение ставиться на координатах энтити |
-| - Voxy              | В разработке |              Пока разрабатывается               |
-| - Distant Horizon   | В разработке |              Пока разрабатывается               |
-</details>
-
-<details>
-<summary>Известные ошибки</summary>
-
-| Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                             Как исправить                             |
-|:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------:|
-| "Description: Mod 'colorlight' failed while registering config options." с RPLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |       Запустить Майнкрафт без RPLS, после перезапустить с RPLS        |
-| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     | Перезагрузить Майнкрафт или дождаться исправление в новых обновлениях |
-</details>
-
-</details>
+---

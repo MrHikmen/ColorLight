@@ -4,6 +4,7 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
 
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
 
@@ -48,6 +49,12 @@ public class TintedBakedModel implements BlockStateModel {
 
     @Override
     public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state, RandomSource random, Predicate<Direction> cullTest) {
+
+        // The GPU pipeline lights the terrain per pixel in the shader: meshes must stay uncoloured.
+        if (ColorLightGpu.isActive()) {
+            wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
+            return;
+        }
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 

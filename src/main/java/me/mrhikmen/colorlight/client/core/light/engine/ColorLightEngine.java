@@ -818,6 +818,44 @@ public class ColorLightEngine {
         }
     }
 
+    /** Calls {@code consumer} with a packed {@link PosKey} for every section that holds light (static or moving). */
+    public void forEachLitSection(java.util.function.LongConsumer consumer) {
+        data.forEachLitSection(consumer);
+        if (dynamic.isActive())
+            dynamic.storage().forEachLitSection(consumer);
+    }
+
+    /**
+     * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the colours of one section as the
+     * renderer sees them: static and moving light merged, flags stripped. Lock-free.
+     *
+     * @return false if the section holds no light at all
+     */
+    public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
+        boolean lit = data.copySection(sx, sy, sz, out);
+        if (dynamic.isActive())
+            lit |= dynamic.storage().mergeMaxInto(sx, sy, sz, out);
+        return lit;
+    }
+
+    /** Hands every section that holds light, and its neighbours, to the mesh-rebuild queue. Never waits for a flood. */
+    public void markEverythingDirty() {
+        List<Long> keys = new java.util.ArrayList<>();
+        forEachLitSection(keys::add);
+        synchronized (externalDirty) {
+            for (long key : keys) {
+                int sx = PosKey.x(key), sy = PosKey.y(key), sz = PosKey.z(key);
+                for (int a = sx - 1; a <= sx + 1; a++) {
+                    for (int b = sy - 1; b <= sy + 1; b++) {
+                        for (int c = sz - 1; c <= sz + 1; c++) {
+                            externalDirty.put(PosKey.pack(a, b, c), 1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Returns and clears the packed section coordinates ({@link PosKey}) that need a mesh rebuild.
      * Only touches {@link #externalDirty}'s own monitor, so it never waits for a flood.

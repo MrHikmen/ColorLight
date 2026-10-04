@@ -6,6 +6,7 @@ import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 import me.mrhikmen.colorlight.client.core.util.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -51,13 +52,29 @@ public final class ColorLightDirtyFlusher {
                 lastEngine = engine;
             }
 
-            for (long key : engine.drainDirtySections()) {
+            long[] drained = engine.drainDirtySections();
+
+            // GPU pipeline: the shader reads light straight from the light volume, so no mesh depends on it
+            // (except right after the pipeline switched on or off, when every mesh has to be built again).
+            boolean gpu = ColorLightGpu.isActive();
+            if (gpu && drained.length > 0)
+                ColorLightGpu.onSectionsChanged(drained);
+            if (gpu && !ColorLightGpu.meshRebuildPending()) {
+                PENDING.clear();
+                return;
+            }
+
+            for (long key : drained) {
                 PENDING.put(key, 1);
             }
-            if (PENDING.isEmpty())
+            if (PENDING.isEmpty()) {
+                ColorLightGpu.meshRebuildDone();
                 return;
+            }
 
             flush(level, client.player.blockPosition());
+            if (PENDING.isEmpty())
+                ColorLightGpu.meshRebuildDone();
         });
     }
 

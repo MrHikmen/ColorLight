@@ -40,8 +40,12 @@
     ]
   },
   "mixins" : [
-    "colorlighting.mixins.json"
-    ],
+    "colorlighting.mixins.json",
+    {
+      "config": "colorlight.sodium.mixins.json",
+      "environment": "client"
+    }
+  ],
   "depends": {
     "fabricloader": "*",
     "fabric-api": "*",
