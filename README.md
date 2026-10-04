@@ -8,9 +8,10 @@ ColorLight is a mod that automatically determines how a block should glow and ge
 <summary>Versions</summary>
 
 | Version | Further support |
-|:--------| :-------------: |
-| 1.20.x  |        No       |
-| 1.21.x  |        No       |
+|:--------|:---------------:|
+| 1.20.x  |       No        |
+| 1.21.1  |       Yes       |
+| 1.21.x  |       No        |
 | 1.21.11 |       Yes       |
 | 26.x    |       Yes       |
 
@@ -41,7 +42,6 @@ If a mod adds features that differ from vanilla Minecraft, a separate compatibil
 | Issue description                                                                  |                                        Why it happens                                        |                             How to fix                              |
 |:-----------------------------------------------------------------------------------|:--------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------:|
 | "Description: Mod 'colorlight' failed while registering config options." with RPLS | This happens because ColorLight does not have enough time to create its settings due to RPLS |      Launch Minecraft without RPLS, then restart it with RPLS       |
-| ColorLight settings are not applied                                                |                  The settings application was poorly implemented initially                   |         Restart Minecraft or wait for fixes in new updates          |
 
 </details>
 
@@ -60,6 +60,7 @@ ColorLight — это мод, который автоматически опре
 | Версия  | Дальнейшая поддержка |
 |:--------|:--------------------:|
 | 1.20.x  |       Не будет       |
+| 1.21.1  |        Будет         |
 | 1.21.x  |       Не будет       |
 | 1.21.11 |        Будет         |
 | 26.x    |        Будет         |
@@ -89,7 +90,7 @@ ColorLight — это мод, который автоматически опре
 | Описание ошибки                                                                 |                                  Из-за чего происходит                                  |                             Как исправить                             |
 |:--------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------:|:---------------------------------------------------------------------:|
 | "Description: Mod 'colorlight' failed while registering config options." с RPLS |   Происходит из-за того что ColorLight не успевает создать свои настройки из-за RRLS    |       Запустить Майнкрафт без RPLS, после перезапустить с RPLS        |
-| Не применяются настройки ColorLight                                             |                     Изначально криво написанное применение настроек                     | Перезагрузить Майнкрафт или дождаться исправление в новых обновлениях |
+
 </details>
 
 </details>
