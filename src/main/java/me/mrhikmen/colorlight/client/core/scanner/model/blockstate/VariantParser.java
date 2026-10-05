@@ -17,23 +17,7 @@ public class VariantParser {
         List<Identifier> models = new ArrayList<>();
 
         for (Map.Entry<String, JsonElement> entry : variants.entrySet()) {
-
-            JsonElement variant = entry.getValue();
-
-            if (variant.isJsonObject()) {
-
-                JsonObject model = variant.getAsJsonObject();
-                models.add(Identifier.parse(model.get("model").getAsString()));
-
-            } else if (variant.isJsonArray()) {
-
-                for (JsonElement element : variant.getAsJsonArray()) {
-
-                    JsonObject model = element.getAsJsonObject();
-                    models.add(Identifier.parse(model.get("model").getAsString()));
-
-                }
-            }
+            ModelListJson.collectModels(entry.getValue(), models);
         }
 
         ModelTextureResolver.resolve(models, settings);

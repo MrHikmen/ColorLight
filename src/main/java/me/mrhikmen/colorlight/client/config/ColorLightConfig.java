@@ -32,10 +32,8 @@ import java.util.Objects;
 public class ColorLightConfig {
 
     public boolean ENABLE = true;
-
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
-
     /**
      * Light the terrain per pixel in a shader (a copy of Sodium's terrain shader that reads a GPU light volume)
      * instead of baking colours into the chunk meshes. Only works with a Sodium version ColorLight was written

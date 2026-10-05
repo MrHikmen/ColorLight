@@ -81,7 +81,9 @@ vec4 cl_getLighting(uint lighting) {
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
     float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) : 1.0;
-    float daylight = smoothstep(0.0, 0.5, blockShare);
+    // See colored_terrain.fsh: stretched from (0.0, 0.5) so dusk/dawn fade the tint in and out gradually across
+    // most of the sky-light fade instead of snapping partway through it, kept in sync with that shader.
+    float daylight = smoothstep(0.0, 0.85, blockShare);
 
     const float GAMMA_DEFAULT = 0.55;
     float exponent = max(0.0, GAMMA_DEFAULT + (tintGamma - GAMMA_DEFAULT) * 3.0);

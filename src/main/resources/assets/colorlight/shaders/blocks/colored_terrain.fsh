@@ -144,7 +144,12 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
     float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) : 1.0;
-    float daylight = smoothstep(0.0, 0.5, blockShare);
+    // Stretched from (0.0, 0.5): under full open sky blockShare is still exactly 0, so the tint is still fully
+    // gone at high noon, but the ramp up to full tint now spans almost the whole blockShare range instead of
+    // just its lower half. Dusk and dawn move through this range gradually (vanilla's own sky-light fade is not
+    // instant either), so the tint now fades in and out over most of that fade instead of snapping on/off
+    // partway through it, and it starts appearing/lingering earlier/later at the dim end of the sky fade.
+    float daylight = smoothstep(0.0, 0.85, blockShare);
 
     // tint only what the volume contributes; a full-bright quad without volume light stays vanilla white
     float coverage = clamp(lvl / max(blockLevel, 0.0001), 0.0, 1.0);

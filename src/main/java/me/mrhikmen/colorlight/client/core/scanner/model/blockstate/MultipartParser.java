@@ -25,29 +25,10 @@ public class MultipartParser {
             if (!part.has("apply"))
                 continue;
 
-            JsonElement apply = part.get("apply");
-
-            if (apply.isJsonObject()) {
-                addModel(apply.getAsJsonObject(), models);
-
-            } else if (apply.isJsonArray()) {
-
-                for (JsonElement element : apply.getAsJsonArray()) {
-                    addModel(element.getAsJsonObject(), models);
-                }
-
-            }
+            ModelListJson.collectModels(part.get("apply"), models);
         }
 
         ModelTextureResolver.resolve(models, entry);
 
-    }
-
-    private static void addModel(JsonObject apply, List<Identifier> models) {
-
-        if (!apply.has("model"))
-            return;
-
-        models.add(Identifier.parse(apply.get("model").getAsString()));
     }
 }
