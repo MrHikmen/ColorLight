@@ -1,6 +1,7 @@
 package me.mrhikmen.colorlight.client.config;
 
 import com.google.gson.*;
+import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.lua.SettingKey;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -41,20 +42,26 @@ public class ColorLightConfig {
      * against, otherwise vertex colours are used. Switchable while playing; ignored while a shader pack is on.
      */
     public boolean GPU_PIPELINE = true;
+    /**
+     * Colour the light on Voxy's distant LODs. The engine only knows the chunks the client has loaded, so this uses a
+     * coarse far-light map (8x8 blocks at the finest level, doubling per level, highest light wins) that is
+     * remembered between sessions. Needs Voxy; ignored otherwise.
+     */
+    public boolean VOXY_LIGHT = true;
     /** How many 16x16x16 light sections the GPU light volume can hold at once (16 KiB each). 64..4096. */
-    public int GPU_LIGHT_SECTIONS = 4096;
+    public int GPU_LIGHT_SECTIONS = 768;
     /** Id of the propagation method blocks use by default, e.g. {@code colorlight:grid}. Legacy values GRID / SMOOTH still work. */
     public String PROPAGATION_MODE = "colorlight:grid";
+    /** Id of the propagation method moving (entity) lights use. */
+    public String DYNAMIC_PROPAGATION = "colorlight:smooth";
+
     /**
      * Curve applied to how far a channel is from the light's own colour before it's blended onto the texture.
      * 1 = old linear behaviour (a cell needs to be almost fully lit before the tint reads as clearly coloured).
      * Less than 1 makes the colour stand out sooner, even in dimmer cells; greater than 1 keeps it subtle
      * until a cell is nearly saturated. Must stay above 0.
      */
-    public float TINT_GAMMA = 0.0f;
-
-    /** Id of the propagation method moving (entity) lights use. */
-    public String DYNAMIC_PROPAGATION = "colorlight:smooth";
+    public float TINT_GAMMA = 0.55f;
 
     public int BRIGHTNESS_WEIGHT     = 100;
     public int LOCAL_WEIGHT          = 100;
@@ -119,7 +126,7 @@ public class ColorLightConfig {
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
             } catch (IOException e) {
-                e.printStackTrace();
+                ColorLightClient.LOGGER.error("[ColorLight] Failed to read config file {}", PATH, e);
             }
         }
 
@@ -225,7 +232,7 @@ public class ColorLightConfig {
         try (Writer writer = Files.newBufferedWriter(PATH)) {
             gson.toJson(this, writer);
         } catch (IOException e) {
-            e.printStackTrace();
+            ColorLightClient.LOGGER.error("[ColorLight] Failed to write config file {}", PATH, e);
         } finally {
             for (Map.Entry<SettingKey, Object> e : current.entrySet())
                 write(e.getKey(), e.getValue());

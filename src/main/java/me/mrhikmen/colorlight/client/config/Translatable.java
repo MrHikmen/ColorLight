@@ -20,8 +20,11 @@ public class Translatable {
     public static Component LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.general.light_range.tooltip");
     public static Component SMOOTH_LIGHTING = Component.translatable("me.colorlight.general.smooth_lighting");
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
+    public static Component GPU_EXPERIMENTS = Component.translatable("me.colorlight.general.gpu_experiments");
     public static Component GPU_PIPELINE = Component.translatable("me.colorlight.general.gpu_pipeline");
     public static Component GPU_PIPELINE_Tooltip = Component.translatable("me.colorlight.general.gpu_pipeline.tooltip");
+    public static Component VOXY_LIGHT = Component.translatable("me.colorlight.general.voxy_light");
+    public static Component VOXY_LIGHT_Tooltip = Component.translatable("me.colorlight.general.voxy_light.tooltip");
     public static Component GPU_LIGHT_SECTIONS = Component.translatable("me.colorlight.general.gpu_light_sections");
     public static Component GPU_LIGHT_SECTIONS_Tooltip = Component.translatable("me.colorlight.general.gpu_light_sections.tooltip");
     public static Component SECTIONS_Value(int value) {
@@ -35,16 +38,25 @@ public class Translatable {
     public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
 
     public static Component WEIGHT = Component.translatable("me.colorlight.general.weight");
-    public static Component BRIGHTNESS_WEIGHT = Component.translatable("me.colorlight.general.brightness_weight");
-    public static Component LOCAL_WEIGHT = Component.translatable("me.colorlight.general.local_weight");
-    public static Component REGION_WEIGHT = Component.translatable("me.colorlight.general.region_weight");
-    public static Component ALPHA_WEIGHT = Component.translatable("me.colorlight.general.alpha_weight");
-    public static Component ANOMALY_WEIGHT = Component.translatable("me.colorlight.general.anomaly_weight");
-    public static Component SATURATION_WEIGHT = Component.translatable("me.colorlight.general.saturation_weight");
-    public static Component GLOWCOLORSCORE_WEIGHT = Component.translatable("me.colorlight.general.glowcolorscore_weight");
-    public static Component WHITEPENALTY_WEIGHT = Component.translatable("me.colorlight.general.whitepenalty_weight");
     public static Component WEIGHT_Tooltip = Component.translatable("me.colorlight.general.weight.tooltip");
+    public static Component BRIGHTNESS_WEIGHT = Component.translatable("me.colorlight.general.brightness_weight");
+    public static Component BRIGHTNESS_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.brightness_weight.tooltip");
+    public static Component LOCAL_WEIGHT = Component.translatable("me.colorlight.general.local_weight");
+    public static Component LOCAL_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.local_weight.tooltip");
+    public static Component REGION_WEIGHT = Component.translatable("me.colorlight.general.region_weight");
+    public static Component REGION_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.region_weight.tooltip");
+    public static Component ALPHA_WEIGHT = Component.translatable("me.colorlight.general.alpha_weight");
+    public static Component ALPHA_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.alpha_weight.tooltip");
+    public static Component ANOMALY_WEIGHT = Component.translatable("me.colorlight.general.anomaly_weight");
+    public static Component ANOMALY_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.anomaly_weight.tooltip");
+    public static Component SATURATION_WEIGHT = Component.translatable("me.colorlight.general.saturation_weight");
+    public static Component SATURATION_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.saturation_weight.tooltip");
+    public static Component GLOWCOLORSCORE_WEIGHT = Component.translatable("me.colorlight.general.glowcolorscore_weight");
+    public static Component GLOWCOLORSCORE_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.glowcolorscore_weight.tooltip");
+    public static Component WHITEPENALTY_WEIGHT = Component.translatable("me.colorlight.general.whitepenalty_weight");
+    public static Component WHITEPENALTY_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.whitepenalty_weight.tooltip");
 
+    public static Component VOXY = Component.translatable("me.colorlight.compatibility.voxy");
     public static Component ENTITY_TRACKING = Component.translatable("me.colorlight.compatibility.entity_tracking");
     public static Component ENTITY_TRACKING_ENABLED = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled");
     public static Component ENTITY_TRACKING_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled.tooltip");
@@ -54,17 +66,18 @@ public class Translatable {
     public static Component ENTITY_CHECK_RADIUS_CHUNKS_Tooltip = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks.tooltip");
 
     public static Component BLOCKS_Value(int value) {
-        if (value == 1) return Component.translatable("me.colorlight.block_value.1", value);
-        if (value % 10 > 1 && value % 10 < 5 && !(value % 100 >= 12 && value % 100 <= 14))
-            return Component.translatable("me.colorlight.block_value.1-5", value);
-        return Component.translatable("me.colorlight.block_value", value);
+        return pluralValue("me.colorlight.block_value", value);
     }
 
     public static Component CHUNKS_Value(int value) {
-        if (value == 1) return Component.translatable("me.colorlight.chunks_value.1", value);
+        return pluralValue("me.colorlight.chunks_value", value);
+    }
+
+    private static Component pluralValue(String baseKey, int value) {
+        if (value == 1) return Component.translatable(baseKey + ".1", value);
         if (value % 10 > 1 && value % 10 < 5 && !(value % 100 >= 12 && value % 100 <= 14))
-            return Component.translatable("me.colorlight.chunks_value.1-5", value);
-        return Component.translatable("me.colorlight.chunks_value", value);
+            return Component.translatable(baseKey + ".1-5", value);
+        return Component.translatable(baseKey, value);
     }
 
     public static Component WEIGHT_Value(int value) {

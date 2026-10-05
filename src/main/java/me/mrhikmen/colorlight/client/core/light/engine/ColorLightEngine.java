@@ -838,6 +838,11 @@ public class ColorLightEngine {
         return lit;
     }
 
+    /** Like {@link #copySectionColors} but only the static light (no moving lights). */
+    public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
+        return data.copySection(sx, sy, sz, out);
+    }
+
     /** Hands every section that holds light, and its neighbours, to the mesh-rebuild queue. Never waits for a flood. */
     public void markEverythingDirty() {
         List<Long> keys = new java.util.ArrayList<>();

@@ -12,6 +12,7 @@ import me.mrhikmen.colorlight.client.script.ScriptRuntime;
 import me.mrhikmen.colorlight.client.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.client.core.render.ModelPlugin;
 import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.compat.lod.LodLight;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -47,7 +48,11 @@ public class ColorLightClient implements ClientModInitializer {
         ColorLightDaylightRefresher.register();
         ColorLightDirtyFlusher.register();
         ClientTickEvents.END_CLIENT_TICK.register(ColorLightGpu::tick);
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ColorLightGpu.shutdown());
+        ClientTickEvents.END_CLIENT_TICK.register(LodLight::tick);
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            ColorLightGpu.shutdown();
+            LodLight.shutdown();
+        });
 
         ModelLoadingPlugin.register(new ModelPlugin());
 

@@ -7,6 +7,7 @@ import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 import me.mrhikmen.colorlight.client.core.util.ColorLightRenderUtil;
 import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.compat.lod.LodLight;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -56,6 +57,9 @@ public final class ColorLightDirtyFlusher {
 
             // GPU pipeline: the shader reads light straight from the light volume, so no mesh depends on it
             // (except right after the pipeline switched on or off, when every mesh has to be built again).
+            if (drained.length > 0)
+                LodLight.markDirty(drained); // far-away light (Voxy), kept whatever way the terrain is lit
+
             boolean gpu = ColorLightGpu.isActive();
             if (gpu && drained.length > 0)
                 ColorLightGpu.onSectionsChanged(drained);

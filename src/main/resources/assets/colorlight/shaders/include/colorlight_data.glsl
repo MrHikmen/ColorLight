@@ -2,8 +2,8 @@
 //
 // Keep every constant in this file in sync with me.mrhikmen.colorlight.client.gpu.GpuLightVolume.
 //
-//   u_CLData : ints [0, CL_HEADER_INTS) = header, then one int per section "page":
-//              the pool slot of that section, or -1 when the section holds no light.
+//   u_CLHeader : 16 ints, see below.
+//   u_CLData : one int per section "page": the pool slot of that section, or -1 when the section holds no light.
 //              Pages are indexed toroidally: (sx & 63) | ((sz & 63) << 6) | ((sy & 31) << 12).
 //   u_CLPool : slots of 4096 cells; texel = slot * 4096 + (y << 8 | z << 4 | x).
 //              cell = 0x00BBGGRR (light colour, 0..255 per channel) | CL_OPAQUE_BIT for solid blocks.
@@ -11,27 +11,26 @@
 // Header ints: 0..2 camera block (ints), 3 enabled (1/0), 4..6 camera fraction (float bits),
 //              7 tint strength (float bits), 8 tint gamma (float bits), 9 smooth lighting (1/0).
 
-#define CL_HEADER_INTS 16
 #define CL_SECTION_RADIUS_XZ 31
 #define CL_SECTION_RADIUS_Y 15
 const int CL_OPAQUE_BIT = 1 << 24;
 
-uniform isamplerBuffer u_CLData;
+uniform isamplerBuffer u_CLHeader;
 
 ivec3 cl_cameraBlock() {
-    return ivec3(texelFetch(u_CLData, 0).r, texelFetch(u_CLData, 1).r, texelFetch(u_CLData, 2).r);
+    return ivec3(texelFetch(u_CLHeader, 0).r, texelFetch(u_CLHeader, 1).r, texelFetch(u_CLHeader, 2).r);
 }
 
 bool cl_enabled() {
-    return texelFetch(u_CLData, 3).r == 1;
+    return texelFetch(u_CLHeader, 3).r == 1;
 }
 
 bool cl_smooth() {
-    return texelFetch(u_CLData, 9).r == 1;
+    return texelFetch(u_CLHeader, 9).r == 1;
 }
 
 float cl_headerFloat(int index) {
-    return intBitsToFloat(texelFetch(u_CLData, index).r);
+    return intBitsToFloat(texelFetch(u_CLHeader, index).r);
 }
 
 vec3 cl_cameraFrac() {
@@ -40,6 +39,7 @@ vec3 cl_cameraFrac() {
 
 #ifdef CL_FRAGMENT
 
+uniform isamplerBuffer u_CLData;
 uniform isamplerBuffer u_CLPool;
 
 // Raw cell value, or -1 when nothing is known about the cell: its section is outside the window or holds no light,
@@ -52,7 +52,7 @@ int cl_cellRaw(ivec3 cell, ivec3 camSection) {
     }
 
     int page = (section.x & 63) | ((section.z & 63) << 6) | ((section.y & 31) << 12);
-    int slot = texelFetch(u_CLData, CL_HEADER_INTS + page).r;
+    int slot = texelFetch(u_CLData, page).r;
     if (slot < 0) {
         return -1;
     }

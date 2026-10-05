@@ -1,0 +1,15 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "me.mrhikmen.colorlight.client.mixin.voxy",
+  "plugin": "me.mrhikmen.colorlight.client.mixin.ColorLightVoxyPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+    "ShaderLoaderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

@@ -6,6 +6,8 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 
+import me.mrhikmen.colorlight.client.compat.lod.VoxyLightBridge;
+
 import net.fabricmc.loader.api.FabricLoader;
 
 import net.minecraft.client.Minecraft;
@@ -102,6 +104,7 @@ public final class ColorLightGpu {
     // ------------------------------------------------------------------------------------------------------
 
     private static boolean lastActive;
+    private static volatile boolean volumeNeedsReset;
     private static boolean lastActiveKnown;
 
     private static void syncMode() {
@@ -120,8 +123,8 @@ public final class ColorLightGpu {
         if (engine != null)
             engine.markEverythingDirty();
         meshRebuild = true;
-        if (now && volume != null)
-            volume.reset(); // it was not kept up to date while idle
+        if (now)
+            volumeNeedsReset = true; // it was not kept up to date while idle; done in the tick (no GPU writes here)
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -219,15 +222,28 @@ public final class ColorLightGpu {
 
     /**
      * True while Sodium's terrain pipelines are ours (and so need our buffers bound on every draw). Deliberately NOT
-     * the same as {@link #isActive()}: right after an Iris shader pack is switched off, Sodium draws with our pipeline
-     * again a few frames before {@link #pollShaderPack} notices; leaving the buffers unbound then crashes the draw.
+     * the same as {@link #isActive()}: after an Iris shader pack is switched off, or after {@link #fail}, Sodium still
+     * draws with our pipeline, which then renders plain vertex colours ("disabled" in the header) but must still find
+     * its buffers bound or the draw crashes.
      */
     private static boolean pipelineInUse() {
-        return !failed && gpuMode();
+        return gpuMode();
     }
 
     /** Once per frame, before any terrain pass. */
     public static void onFrameStart(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
+        // Voxy's LODs have their own pipeline and their own switch; they only need to know where the camera is
+        VoxyLightBridge.onFrame(camBlockX, camBlockZ);
+
+        prepareFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
+    }
+
+    /**
+     * Makes the volume and its header (camera, settings) current. Called from the frame hook and again from every draw:
+     * the second call finds nothing to do, but it means a frame whose hook didn't run (it happens on the first frame
+     * in a world) is still drawn with a valid header instead of an unbound or stale one.
+     */
+    private static void prepareFrame(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
         if (!pipelineInUse())
             return;
 
@@ -250,14 +266,19 @@ public final class ColorLightGpu {
     }
 
     /** Before every terrain draw: make the volume's buffers visible to the shader. */
-    public static void onDraw(RenderPass pass) {
+    public static void onDraw(RenderPass pass, int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
+        // same as in the frame hook, for when that one did not run: cheap, it only uploads when something changed
+        VoxyLightBridge.onFrame(camBlockX, camBlockZ);
+
         if (!pipelineInUse())
             return;
 
-        if (!(layoutPatched && vertexRedirected && fragmentRedirected && frameHooked)) {
+        prepareFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
+
+        if (!failed && !(layoutPatched && vertexRedirected && fragmentRedirected)) {
+            // vertex colours take over, but the pipeline is still ours: keep binding below
             fail("a Sodium hook did not apply (layout=" + layoutPatched + ", vertex=" + vertexRedirected
-                    + ", fragment=" + fragmentRedirected + ", frame=" + frameHooked + ")");
-            return;
+                    + ", fragment=" + fragmentRedirected + ")");
         }
 
         GpuLightVolume v = volume();
@@ -267,6 +288,7 @@ public final class ColorLightGpu {
             return;
         }
 
+        pass.setUniform("u_CLHeader", v.headerBuffer());
         pass.setUniform("u_CLData", v.dataBuffer());
         pass.setUniform("u_CLPool", v.poolBuffer());
     }
@@ -317,6 +339,11 @@ public final class ColorLightGpu {
             sx = pos.getX() >> 4;
             sy = pos.getY() >> 4;
             sz = pos.getZ() >> 4;
+        }
+
+        if (volumeNeedsReset) {
+            volumeNeedsReset = false;
+            volume().reset();
         }
 
         volume().tick(engine, level, sx, sy, sz);

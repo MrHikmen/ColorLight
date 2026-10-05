@@ -47,6 +47,6 @@ public abstract class DefaultChunkRendererMixin implements SodiumHookMarkers.Dra
                                             GpuBuffer sectionTimeInfo,
                                             @Nullable OitStage stage,
                                             CallbackInfo ci) {
-        ColorLightGpu.onDraw(pass);
+        ColorLightGpu.onDraw(pass, camera.intX, camera.intY, camera.intZ, camera.fracX, camera.fracY, camera.fracZ);
     }
 }

@@ -2,6 +2,7 @@ package me.mrhikmen.colorlight.client.config.gui.sodium;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
+import me.mrhikmen.colorlight.client.compat.lod.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
@@ -34,14 +35,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     public void registerConfigLate(ConfigBuilder builder) {
         config.load();
         boolean ldl = ColorLightLambDynLightsCompat.isPresent();
+        boolean voxy = ColorLightVoxyCompat.isPresent();
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(Identifier.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl));
+        if (ldl || voxy) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -74,22 +76,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setBinding(value -> config.SMOOTH_LIGHTING = value, () -> config.SMOOTH_LIGHTING)
                                 .setDefaultValue(config.SMOOTH_LIGHTING)
                         )
-                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:gpu_pipeline"))
-                                .setName(Translatable.GPU_PIPELINE)
-                                .setTooltip(Translatable.GPU_PIPELINE_Tooltip)
-                                .setStorageHandler(this::save)
-                                .setBinding(value -> config.GPU_PIPELINE = value, () -> config.GPU_PIPELINE)
-                                .setDefaultValue(config.GPU_PIPELINE)
-                        )
-                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:gpu_light_sections"))
-                                .setName(Translatable.GPU_LIGHT_SECTIONS)
-                                .setTooltip(Translatable.GPU_LIGHT_SECTIONS_Tooltip)
-                                .setRange(64, 4096, 64)
-                                .setValueFormatter(value -> Translatable.SECTIONS_Value(value))
-                                .setStorageHandler(this::save)
-                                .setBinding(value -> config.GPU_LIGHT_SECTIONS = value, () -> config.GPU_LIGHT_SECTIONS)
-                                .setDefaultValue(config.GPU_LIGHT_SECTIONS)
-                        )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:tint_gamma"))
                                 .setName(Translatable.TINT_GAMMA)
                                 .setTooltip(Translatable.TINT_GAMMA_Tooltip)
@@ -112,10 +98,29 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                 )
                 .addOptionGroup(builder.createOptionGroup()
+                        .setName(Translatable.GPU_EXPERIMENTS)
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:gpu_pipeline"))
+                                .setName(Translatable.GPU_PIPELINE)
+                                .setTooltip(Translatable.GPU_PIPELINE_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.GPU_PIPELINE = value, () -> config.GPU_PIPELINE)
+                                .setDefaultValue(config.GPU_PIPELINE)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:gpu_light_sections"))
+                                .setName(Translatable.GPU_LIGHT_SECTIONS)
+                                .setTooltip(Translatable.GPU_LIGHT_SECTIONS_Tooltip)
+                                .setRange(64, 4096, 64)
+                                .setValueFormatter(value -> Translatable.SECTIONS_Value(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.GPU_LIGHT_SECTIONS = value, () -> config.GPU_LIGHT_SECTIONS)
+                                .setDefaultValue(config.GPU_LIGHT_SECTIONS)
+                        )
+                )
+                .addOptionGroup(builder.createOptionGroup()
                         .setName(Translatable.WEIGHT)
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:brightness_weight"))
                                 .setName(Translatable.BRIGHTNESS_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.BRIGHTNESS_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -125,7 +130,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:local_weight"))
                                 .setName(Translatable.LOCAL_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.LOCAL_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -135,7 +140,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:region_weight"))
                                 .setName(Translatable.REGION_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.REGION_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -145,7 +150,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:alpha_weight"))
                                 .setName(Translatable.ALPHA_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.ALPHA_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -155,7 +160,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:anomaly_weight"))
                                 .setName(Translatable.ANOMALY_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.ANOMALY_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -165,7 +170,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:saturation_weight"))
                                 .setName(Translatable.SATURATION_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.SATURATION_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -175,7 +180,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:glowcolorscore_weight"))
                                 .setName(Translatable.GLOWCOLORSCORE_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.GLOWCOLORSCORE_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -185,7 +190,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(Identifier.parse("colorlight:whitepenalty_weight"))
                                 .setName(Translatable.WHITEPENALTY_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.WHITEPENALTY_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -219,10 +224,10 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return built;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy) {
         Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
         Identifier entityFollowId = Identifier.parse("colorlight:entity_follow_render_distance");
-        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}.", ldl);
+        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}.", ldl, voxy);
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.COMPATIBILITY);
         if (ldl) {
             page.addOptionGroup(builder.createOptionGroup()
@@ -262,6 +267,18 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setBinding(value -> config.ENTITY_CHECK_RADIUS_CHUNKS = value, () -> config.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setDefaultValue(config.ENTITY_CHECK_RADIUS_CHUNKS)
                     )
+            );
+        }
+        if (voxy) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.VOXY)
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:voxy_light"))
+                                .setName(Translatable.VOXY_LIGHT)
+                                .setTooltip(Translatable.VOXY_LIGHT_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
+                                .setDefaultValue(config.VOXY_LIGHT)
+                        )
             );
         }
         return page;

@@ -44,6 +44,7 @@ public abstract class ShaderChunkRendererMixin implements SodiumHookMarkers.Shad
 
         LIGHT_GROUP = BindGroupLayout.builder()
                 .withUniform("u_LightTex", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_CLHeader", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
                 .withUniform("u_CLData", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
                 .withUniform("u_CLPool", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
                 .build();

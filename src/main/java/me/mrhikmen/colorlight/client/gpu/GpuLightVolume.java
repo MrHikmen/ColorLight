@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 /**
@@ -23,7 +24,9 @@ import java.util.Arrays;
  * <p>
  * <b>Layout</b> (mirrored by {@code shaders/include/colorlight_data.glsl} - change both together):
  * <ul>
- *     <li><b>data buffer</b>: {@link #HEADER_INTS} header ints (camera, flags, tint settings), then one int per
+ *     <li><b>header buffer</b>: {@link #HEADER_INTS} ints (camera, flags, tint settings), rewritten by mapping it,
+ *     which is allowed while a render pass is open (a command-encoder write is not).</li>
+ *     <li><b>data buffer</b>: one int per
  *     section page: the {@link #pool} slot holding that section, or -1. Pages are addressed toroidally, so the
  *     window follows the camera without anything being moved.</li>
  *     <li><b>pool buffer</b>: slots of 4096 cells (16 KiB). A slot exists only for a section that holds light.
@@ -63,6 +66,7 @@ public final class GpuLightVolume {
 
     private final int slotCount;
 
+    private GpuBuffer header_;
     private GpuBuffer data;
     private GpuBuffer pool;
 
@@ -75,7 +79,6 @@ public final class GpuLightVolume {
     private final int[] cells = new int[SECTION_CELLS];
     private final ByteBuffer sectionBytes = MemoryUtil.memAlloc(SECTION_CELLS * Integer.BYTES);
     private final ByteBuffer wordBytes = MemoryUtil.memAlloc(Integer.BYTES);
-    private final ByteBuffer headerBytes = MemoryUtil.memAlloc(HEADER_INTS * Integer.BYTES);
     private final int[] header = new int[HEADER_INTS];
     private final int[] lastHeader = new int[HEADER_INTS];
     private boolean headerWritten;
@@ -109,7 +112,11 @@ public final class GpuLightVolume {
     // ------------------------------------------------------------------------------------------------------
 
     public boolean hasBuffers() {
-        return data != null && pool != null;
+        return header_ != null && data != null && pool != null;
+    }
+
+    public GpuBuffer headerBuffer() {
+        return header_;
     }
 
     public GpuBuffer dataBuffer() {
@@ -125,17 +132,25 @@ public final class GpuLightVolume {
             return;
 
         var device = RenderSystem.getDevice();
-        data = device.createBuffer(() -> "ColorLight light pages", USAGE, (long) (HEADER_INTS + PAGE_COUNT) * Integer.BYTES);
+        header_ = device.createBuffer(() -> "ColorLight light header", USAGE, (long) HEADER_INTS * Integer.BYTES);
+        data = device.createBuffer(() -> "ColorLight light pages", USAGE, (long) PAGE_COUNT * Integer.BYTES);
         pool = device.createBuffer(() -> "ColorLight light pool", USAGE, (long) slotCount * SECTION_CELLS * Integer.BYTES);
 
         try (var mapping = data.map(false, true)) {
             MemoryUtil.memSet(mapping.data(), 0xFF); // every page -1 = "no light here"
+        }
+        try (var mapping = header_.map(false, true)) {
+            MemoryUtil.memSet(mapping.data(), 0); // disabled until the first writeHeader
         }
         headerWritten = false;
     }
 
     /** Frees the GPU buffers and the scratch memory. The volume must not be used afterwards. */
     public void close() {
+        if (header_ != null) {
+            header_.close();
+            header_ = null;
+        }
         if (data != null) {
             data.close();
             data = null;
@@ -146,7 +161,6 @@ public final class GpuLightVolume {
         }
         MemoryUtil.memFree(sectionBytes);
         MemoryUtil.memFree(wordBytes);
-        MemoryUtil.memFree(headerBytes);
     }
 
     private void write(GpuBuffer buffer, long offsetBytes, ByteBuffer source, int lengthBytes) {
@@ -157,7 +171,7 @@ public final class GpuLightVolume {
         wordBytes.clear();
         wordBytes.putInt(value);
         wordBytes.flip();
-        write(data, (long) (HEADER_INTS + pageIndex) * Integer.BYTES, wordBytes, Integer.BYTES);
+        write(data, (long) pageIndex * Integer.BYTES, wordBytes, Integer.BYTES);
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -187,11 +201,12 @@ public final class GpuLightVolume {
         if (headerWritten && Arrays.equals(header, lastHeader))
             return;
 
-        headerBytes.clear();
-        for (int v : header)
-            headerBytes.putInt(v);
-        headerBytes.flip();
-        write(data, 0L, headerBytes, HEADER_INTS * Integer.BYTES);
+        // mapped, not written through the command encoder: this runs while Sodium's render pass is open
+        try (var mapping = header_.map(false, true)) {
+            ByteBuffer bytes = mapping.data().order(ByteOrder.nativeOrder());
+            for (int i = 0; i < HEADER_INTS; i++)
+                bytes.putInt(i * Integer.BYTES, header[i]);
+        }
 
         System.arraycopy(header, 0, lastHeader, 0, HEADER_INTS);
         headerWritten = true;
