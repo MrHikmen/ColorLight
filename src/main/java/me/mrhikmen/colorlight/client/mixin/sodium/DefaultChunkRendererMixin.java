@@ -5,8 +5,8 @@ import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuSampler;
 
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
-import me.mrhikmen.colorlight.client.gpu.SodiumHookMarkers;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.gpu.SodiumHookMarkers;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer;

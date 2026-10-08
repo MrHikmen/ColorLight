@@ -2,13 +2,12 @@ package me.mrhikmen.colorlight.client.core.light.propagation;
 
 import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
-import me.mrhikmen.colorlight.client.lua.LuaSandbox;
+import me.mrhikmen.colorlight.client.core.resourcepack.lua.LuaSandbox;
 
 import org.luaj.vm2.LuaError;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
-import org.luaj.vm2.lib.OneArgFunction;
 import org.luaj.vm2.lib.ThreeArgFunction;
 import org.luaj.vm2.lib.VarArgFunction;
 import org.luaj.vm2.lib.ZeroArgFunction;

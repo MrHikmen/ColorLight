@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.api.propagation;
 
 import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
-import me.mrhikmen.colorlight.client.lua.ScriptedPropagationMethod;
+import me.mrhikmen.colorlight.client.core.resourcepack.lua.ScriptedPropagationMethod;
 
 import net.minecraft.resources.Identifier;
 

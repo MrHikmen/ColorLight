@@ -4,7 +4,7 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
 

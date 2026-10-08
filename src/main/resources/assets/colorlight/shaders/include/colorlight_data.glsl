@@ -1,6 +1,6 @@
 // ColorLight: sparse light volume that lives on the GPU.
 //
-// Keep every constant in this file in sync with me.mrhikmen.colorlight.client.gpu.GpuLightVolume.
+// Keep every constant in this file in sync with me.mrhikmen.colorlight.client.core.render.gpu.GpuLightVolume.
 //
 //   u_CLHeader : 16 ints, see below.
 //   u_CLData : one int per section "page": the pool slot of that section, or -1 when the section holds no light.

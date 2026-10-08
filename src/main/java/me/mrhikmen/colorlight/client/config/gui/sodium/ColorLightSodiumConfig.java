@@ -6,12 +6,8 @@ import me.mrhikmen.colorlight.client.compat.lod.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.config.gui.screen.ColorLightBlockConfigScreen;
 import me.mrhikmen.colorlight.client.config.gui.screen.PropagationPickerScreen;
-import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.ColorLightApply;
 

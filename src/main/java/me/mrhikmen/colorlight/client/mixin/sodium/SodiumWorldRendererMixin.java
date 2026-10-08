@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client.mixin.sodium;
 
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
-import me.mrhikmen.colorlight.client.gpu.SodiumHookMarkers;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.gpu.SodiumHookMarkers;
 
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform;

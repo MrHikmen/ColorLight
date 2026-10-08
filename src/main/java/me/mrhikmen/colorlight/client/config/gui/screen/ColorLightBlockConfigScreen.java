@@ -5,7 +5,7 @@ import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.client.core.scanner.BlockScanner;
+import me.mrhikmen.colorlight.client.core.resourcepack.scanner.BlockScanner;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 import net.minecraft.client.gui.components.AbstractSliderButton;

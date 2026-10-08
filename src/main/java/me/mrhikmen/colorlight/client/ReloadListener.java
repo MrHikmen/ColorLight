@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client;
 
-import me.mrhikmen.colorlight.client.core.scanner.BlockScanner;
-import me.mrhikmen.colorlight.client.script.ScriptRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.scanner.BlockScanner;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.ScriptRuntime;
 
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 

@@ -27,13 +27,20 @@ import java.util.Arrays;
  *     bound. The buffer is created and bound through plain GL calls and does not touch any state that Minecraft's
  *     renderer tracks, except for the one indexed SSBO binding that we pick for ourselves.</li>
  * </ol>
+ * <p>
+ * The buffer holds {@link #SECTIONS} grids: section 0 is {@link LodLightMap}'s standalone 4-block "full" tier,
+ * sections 1..3 are its coarsening levels 0..2 (8/16/32-block cells). Which section a quad samples is chosen in
+ * {@code colorlight_lod.glsl} purely from the quad's distance to the camera, not from Voxy's own LOD level.
  */
 public final class VoxyLightBridge {
 
-    private static final int GRID = 128;                          // cells per side of one level, toroidal
+    private static final int GRID = 512;                          // cells per side of one grid, toroidal
     private static final int HEADER_INTS = 16;
     private static final int LEVEL_INTS = GRID * GRID;
-    private static final int TOTAL_INTS = HEADER_INTS + LodLightMap.LEVELS * LEVEL_INTS;
+    /** 0: full tier (4-block cells); 1..3: coarse levels 0..2 (8/16/32-block cells). Keep in sync with the shader. */
+    private static final int SECTIONS = 4;
+    private static final int FULL_CELL_SHIFT = LodLightMap.FULL_SHIFT;
+    private static final int TOTAL_INTS = HEADER_INTS + SECTIONS * LEVEL_INTS;
 
     private static volatile boolean patched;
     private static int binding = -1;
@@ -47,9 +54,9 @@ public final class VoxyLightBridge {
     private static final int[] gridScratch = new int[LEVEL_INTS];
 
     private static LodLightMap lastMap;
-    private static final long[] uploadedVersion = new long[LodLightMap.LEVELS];
-    private static final int[] uploadedCamX = new int[LodLightMap.LEVELS];
-    private static final int[] uploadedCamZ = new int[LodLightMap.LEVELS];
+    private static final long[] uploadedVersion = new long[SECTIONS];
+    private static final int[] uploadedCamX = new int[SECTIONS];
+    private static final int[] uploadedCamZ = new int[SECTIONS];
 
     // ------------------------------------------------------------------------------------------------------
     // Shader text
@@ -185,28 +192,33 @@ public final class VoxyLightBridge {
         headerWritten = true;
     }
 
-    /** Refreshes at most one level per frame, so a big refill never lands in a single frame. */
+    /** Refreshes at most one section per frame, so a big refill never lands in a single frame. */
     private static void uploadOneLevel(LodLightMap map, int camX, int camZ) {
         if (map != lastMap) {
             lastMap = map;
             Arrays.fill(uploadedVersion, -1L);
         }
 
-        for (int k = 0; k < LodLightMap.LEVELS; k++) {
-            int shift = LodLightMap.BASE_SHIFT + k;
+        for (int s = 0; s < SECTIONS; s++) {
+            boolean full = s == 0;
+            int shift = full ? FULL_CELL_SHIFT : (LodLightMap.BASE_SHIFT + (s - 1));
+            long version = full ? map.fullVersion() : map.version(s - 1);
             int cellX = camX >> shift;
             int cellZ = camZ >> shift;
-            if (map.version(k) == uploadedVersion[k] && cellX == uploadedCamX[k] && cellZ == uploadedCamZ[k])
+            if (version == uploadedVersion[s] && cellX == uploadedCamX[s] && cellZ == uploadedCamZ[s])
                 continue;
 
-            map.fillGrid(k, cellX, cellZ, GRID, gridScratch);
+            if (full)
+                map.fillFullGrid(cellX, cellZ, GRID, gridScratch);
+            else
+                map.fillGrid(s - 1, cellX, cellZ, GRID, gridScratch);
             gridBytes.clear();
             gridBytes.put(gridScratch, 0, LEVEL_INTS).flip();
-            GL45C.glNamedBufferSubData(buffer, (long) (HEADER_INTS + k * LEVEL_INTS) * Integer.BYTES, gridBytes);
+            GL45C.glNamedBufferSubData(buffer, (long) (HEADER_INTS + s * LEVEL_INTS) * Integer.BYTES, gridBytes);
 
-            uploadedVersion[k] = map.version(k);
-            uploadedCamX[k] = cellX;
-            uploadedCamZ[k] = cellZ;
+            uploadedVersion[s] = version;
+            uploadedCamX[s] = cellX;
+            uploadedCamZ[s] = cellZ;
             return;
         }
     }

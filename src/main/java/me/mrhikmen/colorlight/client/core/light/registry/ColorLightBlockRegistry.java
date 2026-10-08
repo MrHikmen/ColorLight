@@ -5,9 +5,9 @@ import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
-import me.mrhikmen.colorlight.client.script.ScriptRuntime;
-import me.mrhikmen.colorlight.client.lua.BlockOverride;
-import me.mrhikmen.colorlight.client.lua.BlockRules;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.ScriptRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.lua.BlockOverride;
+import me.mrhikmen.colorlight.client.core.resourcepack.lua.BlockRules;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;

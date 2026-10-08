@@ -4,8 +4,17 @@
 // Buffer layout (ints), written by VoxyLightBridge, filled from LodLightMap:
 //   [0] camera block x   [1] camera block z   [2] enabled (1/0)
 //   [3] tint gamma (float bits)   [4] tint strength (float bits)
-//   [16 + level * 16384 + (cx & 127) | (cz & 127) << 7]: 0x00BBGGRR light colour of the cell, 0 = none.
-// Level k has cells of (8 << k) blocks; cells farther than 63 from the camera cell are not stored.
+//   [16 + section * 262144 + ((cx & 511) | (cz & 511) << 9)]: 0x00BBGGRR light colour of the cell, 0 = none.
+// Section 0 is LodLightMap's standalone "full" tier (4-block cells, each light source kept separate); sections
+// 1..3 are its coarsening levels 0..2 (8/16/32-block cells). Cells farther than 255 cells from the camera (in
+// whichever section's own cell size) are not stored.
+//
+// Which section a quad samples depends only on its real distance to the camera (see cl_lodRaw), not on Voxy's own
+// LOD level for that quad:
+//   0-700 blocks    -> section 0 (4x4,  each source separate)
+//   700-1300 blocks  -> section 1 (8x8)
+//   1300-1900 blocks -> section 2 (16x16)
+//   1900+ blocks     -> section 3 (32x32, stays 32x32 out to the LOD horizon)
 // Keep the constants in sync with LodLightMap / VoxyLightBridge.
 
 #ifdef LIGHTING_SAMPLER_BINDING
@@ -15,28 +24,41 @@ layout(binding = __CL_BINDING__, std430) readonly restrict buffer ColorLightLodB
 };
 
 ivec3 cl_quadBlock = ivec3(0);
-uint cl_lodLevel = 0u;
 
 // Called by setupQuad for every vertex: where the quad is, in blocks.
 void cl_setQuad(vec3 sectionLocalPos, float lodScale, ivec3 baseSection, uint lodLevel) {
     cl_quadBlock = baseSectionPos * 32 + (baseSection << 5) + ivec3(floor(sectionLocalPos * lodScale));
-    cl_lodLevel = lodLevel;
 }
 
 int cl_lodRaw() {
-    int k = int(min(cl_lodLevel, 4u));
-    int cell = 8 << k;
-
     ivec2 b = cl_quadBlock.xz;
-    ivec2 c = (b - (b & (cell - 1))) / cell; // exact floor division
     ivec2 cam = ivec2(clLod[0], clLod[1]);
+    float dist = length(vec2(b - cam));
+
+    int section;
+    int cell;
+    if (dist <= 700.0) {
+        section = 0;
+        cell = 4;
+    } else if (dist <= 1300.0) {
+        section = 1;
+        cell = 8;
+    } else if (dist <= 1900.0) {
+        section = 2;
+        cell = 16;
+    } else {
+        section = 3;
+        cell = 32;
+    }
+
+    ivec2 c    = (b   - (b   & (cell - 1))) / cell; // exact floor division
     ivec2 camC = (cam - (cam & (cell - 1))) / cell;
 
     ivec2 d = abs(c - camC);
-    if (d.x > 63 || d.y > 63) {
+    if (d.x > 255 || d.y > 255) {
         return 0;
     }
-    return clLod[16 + k * 16384 + ((c.x & 127) | ((c.y & 127) << 7))];
+    return clLod[16 + section * 262144 + ((c.x & 511) | ((c.y & 511) << 9))];
 }
 
 // Voxy's own lighting for the quad, with the block-light part recoloured by the far light map. Same maths as the

@@ -32,6 +32,11 @@ import java.util.zip.GZIPOutputStream;
  * its column: the visible side of a LOD is its top, so the highest lit spot wins (then the brighter one). A coarser
  * cell takes the winner out of its four children, so the priority is the same on every level.
  * <p>
+ * <b>Full tier</b>: in addition to the 8x8-and-up chain above, a separate, finer 4x4 grid ({@link #fullLevel}) is
+ * kept for the band right around the camera, so two light sources a few blocks apart inside the same chunk still
+ * show their own colour instead of being merged into one "winner" cell. It is not part of the coarsening chain
+ * (nothing coarser is built from it); it is a leaf tier used on its own, the same way level 0 is.
+ * <p>
  * <b>Cell value</b> (a long, so comparing two values compares height first, then brightness):
  * {@code (blockY + 2048) << 32 | brightness << 24 | 0xBBGGRR}. 0 means "no light".
  * <p>
@@ -42,6 +47,8 @@ public final class LodLightMap {
     public static final int LEVELS = 5;
     /** Level 0 cells are {@code 1 << BASE_SHIFT} = 8 blocks wide; level k cells are {@code 8 << k}. */
     public static final int BASE_SHIFT = 3;
+    /** The full tier's cells are {@code 1 << FULL_SHIFT} = 4 blocks wide. */
+    public static final int FULL_SHIFT = 2;
 
     private static final int BANDS = 64;          // 16-block high slices of a column, sectionY + BAND_OFFSET
     private static final int BAND_OFFSET = 16;
@@ -49,11 +56,16 @@ public final class LodLightMap {
     private static final long Y_BIAS = 2048;
 
     private static final int FILE_MAGIC = 0xC01A11D0;
-    private static final int FILE_VERSION = 1;
+    private static final int FILE_VERSION = 2;
 
     private final Long2ObjectOpenHashMap<long[]> columns = new Long2ObjectOpenHashMap<>();
     private final Long2LongOpenHashMap[] levels = new Long2LongOpenHashMap[LEVELS];
     private final long[] levelVersion = new long[LEVELS];
+
+    private final Long2ObjectOpenHashMap<long[]> fullColumns = new Long2ObjectOpenHashMap<>();
+    private final Long2LongOpenHashMap fullLevel = new Long2LongOpenHashMap();
+    private long fullVersion;
+
     private final LongOpenHashSet pending = new LongOpenHashSet();
     private final int[] cells = new int[16 * 16 * 16];
     private boolean unsaved;
@@ -63,6 +75,7 @@ public final class LodLightMap {
             levels[i] = new Long2LongOpenHashMap();
             levels[i].defaultReturnValue(0L);
         }
+        fullLevel.defaultReturnValue(0L);
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -103,21 +116,32 @@ public final class LodLightMap {
         boolean lit = engine.copyStaticSection(sx, sy, sz, cells);
         int band = Math.max(0, Math.min(BANDS - 1, sy + BAND_OFFSET));
 
+        // Coarse (8x8) cells: feed the level0..4 coarsening chain used for the mid/far bands.
         for (int sub = 0; sub < 4; sub++) {
             int x0 = (sub & 1) * 8;
             int z0 = (sub >> 1) * 8;
-            long value = lit ? bestOfRegion(sy, x0, z0) : 0L;
+            long value = lit ? bestOfRegion(sy, x0, z0, 8) : 0L;
             setBand((sx << 1) + (sub & 1), (sz << 1) + (sub >> 1), band, value);
+        }
+
+        // Fine (4x4) cells: the standalone "full" tier used right around the camera, so nearby sources in the
+        // same chunk keep their own colour instead of being merged into one 8x8 winner.
+        for (int sub = 0; sub < 16; sub++) {
+            int x0 = (sub & 3) * 4;
+            int z0 = (sub >> 2) * 4;
+            long value = lit ? bestOfRegion(sy, x0, z0, 4) : 0L;
+            setFullBand((sx << 2) + (sub & 3), (sz << 2) + (sub >> 2), band, value);
         }
     }
 
-    /** The winner of an 8x8 (x, z) by 16 (y) block of a section: highest of the clearly lit cells, then brightest. */
-    private long bestOfRegion(int sy, int x0, int z0) {
+    /** The winner of a {@code size}x{@code size} (x, z) by 16 (y) block of a section: highest of the clearly lit
+     *  cells, then brightest. {@code size} must divide 16 (4 or 8). */
+    private long bestOfRegion(int sy, int x0, int z0, int size) {
         int maxBrightness = 0;
         for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 8; z++) {
+            for (int z = 0; z < size; z++) {
                 int row = (y << 8) | ((z0 + z) << 4) + x0;
-                for (int x = 0; x < 8; x++) {
+                for (int x = 0; x < size; x++) {
                     int v = cells[row + x];
                     if (v != 0)
                         maxBrightness = Math.max(maxBrightness, brightness(v));
@@ -132,9 +156,9 @@ public final class LodLightMap {
         for (int y = 15; y >= 0; y--) {
             int bestBrightness = 0;
             int bestValue = 0;
-            for (int z = 0; z < 8; z++) {
+            for (int z = 0; z < size; z++) {
                 int row = (y << 8) | ((z0 + z) << 4) + x0;
-                for (int x = 0; x < 8; x++) {
+                for (int x = 0; x < size; x++) {
                     int v = cells[row + x];
                     int b = brightness(v);
                     if (b >= threshold && b > bestBrightness) {
@@ -204,6 +228,42 @@ public final class LodLightMap {
         }
     }
 
+    /** Same idea as {@link #setBand}, but for the standalone 4x4 full tier: a leaf, so no cascading upward. */
+    private void setFullBand(int cx, int cz, int band, long value) {
+        long key = cellKey(cx, cz);
+        long[] column = fullColumns.get(key);
+        if (column == null) {
+            if (value == 0L)
+                return;
+            column = new long[BANDS];
+            fullColumns.put(key, column);
+        }
+        if (column[band] == value)
+            return;
+
+        column[band] = value;
+        unsaved = true;
+
+        long top = 0L;
+        for (long v : column)
+            top = Math.max(top, v);
+        if (top == 0L)
+            fullColumns.remove(key);
+
+        setFullCell(cx, cz, top);
+    }
+
+    private void setFullCell(int cx, int cz, long value) {
+        long key = cellKey(cx, cz);
+        if (fullLevel.get(key) == value)
+            return;
+        if (value == 0L)
+            fullLevel.remove(key);
+        else
+            fullLevel.put(key, value);
+        fullVersion++;
+    }
+
     // ------------------------------------------------------------------------------------------------------
     // Reading it (for the GPU copy)
     // ------------------------------------------------------------------------------------------------------
@@ -213,17 +273,30 @@ public final class LodLightMap {
         return levelVersion[level];
     }
 
+    /** Changes whenever the full tier changed. */
+    public long fullVersion() {
+        return fullVersion;
+    }
+
     /**
      * Writes the window of {@code size x size} cells around the camera cell into {@code out} as toroidal grid
      * ({@code (x & (size-1)) | (z & (size-1)) * size}); every cell is 0x00BBGGRR, or 0 for "no light". Cells farther
      * than {@code size / 2 - 1} from the camera are left out (the shader skips them too).
      */
     public void fillGrid(int level, int camCellX, int camCellZ, int size, int[] out) {
+        fillGridFrom(levels[level], camCellX, camCellZ, size, out);
+    }
+
+    /** Same as {@link #fillGrid}, but for the standalone 4x4 full tier. */
+    public void fillFullGrid(int camCellX, int camCellZ, int size, int[] out) {
+        fillGridFrom(fullLevel, camCellX, camCellZ, size, out);
+    }
+
+    private void fillGridFrom(Long2LongOpenHashMap map, int camCellX, int camCellZ, int size, int[] out) {
         Arrays.fill(out, 0, size * size, 0);
         int half = size / 2 - 1;
         int mask = size - 1;
         int shift = Integer.numberOfTrailingZeros(size);
-        Long2LongOpenHashMap map = levels[level];
 
         if (map.size() <= size * size) {
             for (Long2LongMap.Entry e : map.long2LongEntrySet()) {
@@ -264,44 +337,63 @@ public final class LodLightMap {
         try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(new BufferedOutputStream(Files.newOutputStream(tmp))))) {
             out.writeInt(FILE_MAGIC);
             out.writeInt(FILE_VERSION);
-            out.writeInt(columns.size());
-            for (Long2ObjectOpenHashMap.Entry<long[]> e : columns.long2ObjectEntrySet()) {
-                long[] column = e.getValue();
-                int count = 0;
-                for (long v : column)
-                    if (v != 0L)
-                        count++;
-                out.writeLong(e.getLongKey());
-                out.writeByte(count);
-                for (int band = 0; band < BANDS; band++) {
-                    if (column[band] != 0L) {
-                        out.writeByte(band);
-                        out.writeLong(column[band]);
-                    }
-                }
-            }
+            writeColumns(out, columns);
+            writeColumns(out, fullColumns);
         }
         Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         unsaved = false;
     }
 
-    public void load(Path file) throws IOException {
-        try (DataInputStream in = new DataInputStream(new GZIPInputStream(new BufferedInputStream(Files.newInputStream(file))))) {
-            if (in.readInt() != FILE_MAGIC || in.readInt() != FILE_VERSION)
-                return;
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                long key = in.readLong();
-                int bands = in.readUnsignedByte();
-                for (int b = 0; b < bands; b++) {
-                    int band = in.readUnsignedByte();
-                    long value = in.readLong();
-                    if (band < BANDS)
-                        setBand(cellX(key), cellZ(key), band, value);
+    private void writeColumns(DataOutputStream out, Long2ObjectOpenHashMap<long[]> map) throws IOException {
+        out.writeInt(map.size());
+        for (Long2ObjectOpenHashMap.Entry<long[]> e : map.long2ObjectEntrySet()) {
+            long[] column = e.getValue();
+            int count = 0;
+            for (long v : column)
+                if (v != 0L)
+                    count++;
+            out.writeLong(e.getLongKey());
+            out.writeByte(count);
+            for (int band = 0; band < BANDS; band++) {
+                if (column[band] != 0L) {
+                    out.writeByte(band);
+                    out.writeLong(column[band]);
                 }
             }
         }
+    }
+
+    public void load(Path file) throws IOException {
+        try (DataInputStream in = new DataInputStream(new GZIPInputStream(new BufferedInputStream(Files.newInputStream(file))))) {
+            if (in.readInt() != FILE_MAGIC)
+                return;
+            int version = in.readInt();
+            if (version != 1 && version != 2)
+                return;
+            readColumns(in, this::setBand);
+            if (version >= 2)
+                readColumns(in, this::setFullBand);
+        }
         unsaved = false;
+    }
+
+    private void readColumns(DataInputStream in, BandSetter setter) throws IOException {
+        int count = in.readInt();
+        for (int i = 0; i < count; i++) {
+            long key = in.readLong();
+            int bands = in.readUnsignedByte();
+            for (int b = 0; b < bands; b++) {
+                int band = in.readUnsignedByte();
+                long value = in.readLong();
+                if (band < BANDS)
+                    setter.set(cellX(key), cellZ(key), band, value);
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface BandSetter {
+        void set(int cx, int cz, int band, long value);
     }
 
     // ------------------------------------------------------------------------------------------------------

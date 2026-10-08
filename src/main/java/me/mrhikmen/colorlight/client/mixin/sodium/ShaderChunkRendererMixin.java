@@ -4,8 +4,8 @@ import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import com.mojang.renderpearl.api.pipeline.UniformType;
 
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
-import me.mrhikmen.colorlight.client.gpu.SodiumHookMarkers;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.gpu.SodiumHookMarkers;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer;
 import net.minecraft.resources.Identifier;

@@ -8,10 +8,10 @@ import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDirtyFlusher;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.script.ScriptRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.ScriptRuntime;
 import me.mrhikmen.colorlight.client.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.client.core.render.ModelPlugin;
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.compat.lod.LodLight;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -22,7 +22,6 @@ import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

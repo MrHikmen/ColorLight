@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight.client.config;
 
 import com.google.gson.*;
 import me.mrhikmen.colorlight.client.ColorLightClient;
-import me.mrhikmen.colorlight.client.lua.SettingKey;
+import me.mrhikmen.colorlight.client.core.resourcepack.lua.SettingKey;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;

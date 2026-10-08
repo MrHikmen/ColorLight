@@ -5,8 +5,8 @@ import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
-import me.mrhikmen.colorlight.client.core.util.ColorLightRenderUtil;
-import me.mrhikmen.colorlight.client.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.compat.lod.LodLight;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
