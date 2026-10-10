@@ -53,7 +53,7 @@ public class ColorLightEngine {
     /**
      * Set on a source cell that spreads with a propagation method other than the engine's default one -
      * which method exactly is looked up in {@link #customMethodByKey}, since an arbitrary number of
-     * methods (from Lua packs or other mods) can't each get their own bit here. A source without this
+     * methods (from resource pack JSON or other mods) can't each get their own bit here. A source without this
      * flag uses the default method.
      */
     static final int FLAG_CUSTOM = 1 << 26;
@@ -421,6 +421,13 @@ public class ColorLightEngine {
             if (!hasStaticLightNear(x, y, z))
                 return;
 
+            // Remember the light around the block: if the re-flood ends with exactly the same light (a block that
+            // only looked like it could matter), nothing is published as dirty and nothing visibly rebuilds.
+            int radius = Math.min(maxRangeBlocks, 24) + 1;
+            boolean snapshot = dirtySections.isEmpty();
+            if (snapshot)
+                snapshotRegion(x, y, z, radius);
+
             long key = PosKey.pack(x, y, z);
             int old = cell & RGB_MASK;
             data.put(x, y, z, 0);
@@ -440,9 +447,35 @@ public class ColorLightEngine {
             }
 
             flushQueuesLocked();
+
+            if (snapshot && regionUnchanged(x, y, z, radius))
+                dirtySections.clear();
         } finally {
             unlock();
         }
+    }
+
+    private int[] regionSnapshot = new int[0];
+
+    private void snapshotRegion(int cx, int cy, int cz, int r) {
+        int side = 2 * r + 1;
+        if (regionSnapshot.length < side * side * side)
+            regionSnapshot = new int[side * side * side];
+        int i = 0;
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int z = cz - r; z <= cz + r; z++)
+                for (int x = cx - r; x <= cx + r; x++)
+                    regionSnapshot[i++] = data.get(x, y, z);
+    }
+
+    private boolean regionUnchanged(int cx, int cy, int cz, int r) {
+        int i = 0;
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int z = cz - r; z <= cz + r; z++)
+                for (int x = cx - r; x <= cx + r; x++)
+                    if (regionSnapshot[i++] != data.get(x, y, z))
+                        return false;
+        return true;
     }
 
     /**

@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.core.resourcepack.lua;
+package me.mrhikmen.colorlight.client.core.resourcepack.data;
 
 /** What the block scripts need to know about the game's blocks. Kept as an interface so the loader has no game dependency. */
 public interface BlockCatalog {

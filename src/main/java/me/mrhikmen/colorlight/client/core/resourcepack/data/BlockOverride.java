@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.core.resourcepack.lua;
+package me.mrhikmen.colorlight.client.core.resourcepack.data;
 
 /**
  * What one {@code colorlight.block(...)} call says about a block. Every field is optional: whatever is left out keeps the

@@ -1,9 +1,10 @@
-package me.mrhikmen.colorlight.client.core.resourcepack.lua;
+package me.mrhikmen.colorlight.client.core.resourcepack.data;
 
-import org.luaj.vm2.LuaValue;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
 
 /**
- * The settings a resource pack's {@code settings.lua} may provide, with the config field each one maps to.
+ * The settings a resource pack's {@code settings.json} may provide, with the config field each one maps to.
  * <p>
  * The pack's values are <b>defaults</b>: they apply to every setting the player has not changed themselves (see
  * {@code ColorLightConfig}), so a pack can ship a sensible light range or tint without taking the sliders away.
@@ -33,49 +34,52 @@ public enum SettingKey {
 
     public enum Type { BOOL, INT, FLOAT, STRING }
 
-    public final String luaKey;
+    public final String jsonKey;
     public final String field;
     public final Type type;
     public final double min, max;
 
-    SettingKey(String luaKey, String field, Type type, double min, double max) {
-        this.luaKey = luaKey;
+    SettingKey(String jsonKey, String field, Type type, double min, double max) {
+        this.jsonKey = jsonKey;
         this.field = field;
         this.type = type;
         this.min = min;
         this.max = max;
     }
 
-    public static SettingKey byLuaKey(String key) {
+    public static SettingKey byJsonKey(String key) {
         for (SettingKey k : values())
-            if (k.luaKey.equals(key))
+            if (k.jsonKey.equals(key))
                 return k;
         return null;
     }
 
     /**
-     * Converts a Lua value to the Java value for this key (Boolean, Integer, Float or String), clamped to range.
+     * Converts a JSON value to the Java value for this key (Boolean, Integer, Float or String), clamped to range.
      *
      * @throws IllegalArgumentException if the value has the wrong type
      */
-    public Object coerce(LuaValue value) {
+    public Object coerce(JsonElement value) {
+        if (value == null || !value.isJsonPrimitive())
+            throw new IllegalArgumentException("'" + jsonKey + "' has an invalid value");
+        JsonPrimitive p = value.getAsJsonPrimitive();
         switch (type) {
             case BOOL:
-                if (!value.isboolean())
-                    throw new IllegalArgumentException("'" + luaKey + "' must be true or false");
-                return value.toboolean();
+                if (!p.isBoolean())
+                    throw new IllegalArgumentException("'" + jsonKey + "' must be true or false");
+                return p.getAsBoolean();
             case INT:
-                if (!value.isnumber())
-                    throw new IllegalArgumentException("'" + luaKey + "' must be a number");
-                return (int) Math.max(min, Math.min(max, Math.round(value.todouble())));
+                if (!p.isNumber())
+                    throw new IllegalArgumentException("'" + jsonKey + "' must be a number");
+                return (int) Math.max(min, Math.min(max, Math.round(p.getAsDouble())));
             case FLOAT:
-                if (!value.isnumber())
-                    throw new IllegalArgumentException("'" + luaKey + "' must be a number");
-                return (float) Math.max(min, Math.min(max, value.todouble()));
+                if (!p.isNumber())
+                    throw new IllegalArgumentException("'" + jsonKey + "' must be a number");
+                return (float) Math.max(min, Math.min(max, p.getAsDouble()));
             default:
-                if (!value.isstring())
-                    throw new IllegalArgumentException("'" + luaKey + "' must be a string");
-                return value.tojstring();
+                if (!p.isString())
+                    throw new IllegalArgumentException("'" + jsonKey + "' must be a string");
+                return p.getAsString();
         }
     }
 }

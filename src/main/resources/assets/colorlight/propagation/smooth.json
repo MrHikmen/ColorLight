@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "colorlight:smooth  -  circle (круг)",
+    "",
+    "Light hops between all 26 surrounding blocks (faces, edges and corners) and loses an amount proportional to the",
+    "real distance travelled, so the reach is a Euclidean distance: a circle from above, a sphere in 3D. Costs",
+    "roughly four times the work of grid.",
+    "",
+    "This is also the method moving (entity) lights use by default (setting \"dynamic_propagation\")."
+  ],
+
+  "name": "Smooth (circle)",
+
+  "scale": 8,
+  "preserve_hue": true,
+  "max_opacity": 15,
+
+  "neighbors": "full",
+
+  "loss": {
+    "distance": true,
+    "opacity_factor": 1.0
+  }
+}

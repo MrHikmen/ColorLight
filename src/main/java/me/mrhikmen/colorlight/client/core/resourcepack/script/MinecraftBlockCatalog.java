@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.core.resourcepack.script;
 
-import me.mrhikmen.colorlight.client.core.resourcepack.lua.BlockCatalog;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.BlockCatalog;
 
 import net.fabricmc.loader.api.FabricLoader;
 

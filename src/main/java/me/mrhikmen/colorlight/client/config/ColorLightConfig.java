@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight.client.config;
 
 import com.google.gson.*;
 import me.mrhikmen.colorlight.client.ColorLightClient;
-import me.mrhikmen.colorlight.client.core.resourcepack.lua.SettingKey;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.SettingKey;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
@@ -20,7 +20,7 @@ import java.util.Objects;
 /**
  * ColorLight's settings file ({@code config/colorlight.json}).
  * <p>
- * <b>Resource packs can provide defaults</b> ({@code assets/colorlight/settings.lua}, see {@link SettingKey}). The rule:
+ * <b>Resource packs can provide defaults</b> ({@code assets/colorlight/settings.json}, see {@link SettingKey}). The rule:
  * <ul>
  *     <li>a setting the player has changed in ColorLight's GUI is theirs - it is remembered in
  *     {@link #userOverrides} and the pack never touches it again;</li>
@@ -74,7 +74,7 @@ public class ColorLightConfig {
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
-    /** Lua keys of the settings the player changed by hand; resource packs leave these alone. */
+    /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
     public List<String> userOverrides = new ArrayList<>();
 
     public LinkedList<BlockSettings> blocks = new LinkedList<>();
@@ -177,14 +177,14 @@ public class ColorLightConfig {
     private void applyPackDefaults() {
         // first undo what an earlier pack set, so a pack that no longer lists a key lets go of it
         for (Map.Entry<SettingKey, Object> e : appliedFromPack.entrySet()) {
-            if (!userOverrides.contains(e.getKey().luaKey) && fileValues.containsKey(e.getKey()))
+            if (!userOverrides.contains(e.getKey().jsonKey) && fileValues.containsKey(e.getKey()))
                 write(e.getKey(), fileValues.get(e.getKey()));
         }
         appliedFromPack.clear();
 
         for (Map.Entry<SettingKey, Object> e : packDefaults.entrySet()) {
             SettingKey key = e.getKey();
-            if (userOverrides.contains(key.luaKey))
+            if (userOverrides.contains(key.jsonKey))
                 continue;
             write(key, e.getValue());
             appliedFromPack.put(key, e.getValue());
@@ -207,20 +207,20 @@ public class ColorLightConfig {
         // Work out which pack-controlled settings the player changed since the pack applied them.
         for (Map.Entry<SettingKey, Object> e : appliedFromPack.entrySet()) {
             SettingKey key = e.getKey();
-            if (!Objects.equals(read(key), e.getValue()) && !userOverrides.contains(key.luaKey)) {
-                userOverrides.add(key.luaKey);
+            if (!Objects.equals(read(key), e.getValue()) && !userOverrides.contains(key.jsonKey)) {
+                userOverrides.add(key.jsonKey);
                 fileValues.put(key, read(key));
             }
         }
         for (SettingKey key : SettingKey.values()) {
-            if (userOverrides.contains(key.luaKey))
+            if (userOverrides.contains(key.jsonKey))
                 fileValues.put(key, read(key));
         }
 
         // Write the player's values, not the pack's, for everything the pack still controls.
         Map<SettingKey, Object> current = new EnumMap<>(SettingKey.class);
         for (SettingKey key : appliedFromPack.keySet()) {
-            if (userOverrides.contains(key.luaKey))
+            if (userOverrides.contains(key.jsonKey))
                 continue;
             current.put(key, read(key));
             write(key, fileValues.get(key));

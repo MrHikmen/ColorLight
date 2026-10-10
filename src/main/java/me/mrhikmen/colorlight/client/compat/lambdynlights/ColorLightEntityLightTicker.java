@@ -190,7 +190,7 @@ public final class ColorLightEntityLightTicker {
         tracked.strength = strength;
 
         REQUESTS.put(id, new Request(engine, id, false, x, y, z,
-                settings.r, settings.g, settings.b, (int) (strength*1.5)));
+                settings.r, settings.g, settings.b, strength));
         scheduleDrain();
     }
 

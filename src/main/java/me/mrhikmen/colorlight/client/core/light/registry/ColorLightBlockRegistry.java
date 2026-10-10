@@ -5,9 +5,9 @@ import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
-import me.mrhikmen.colorlight.client.core.resourcepack.script.ScriptRuntime;
-import me.mrhikmen.colorlight.client.core.resourcepack.lua.BlockOverride;
-import me.mrhikmen.colorlight.client.core.resourcepack.lua.BlockRules;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.DataRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.BlockOverride;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.BlockRules;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -55,8 +55,8 @@ public final class ColorLightBlockRegistry {
         }
 
         // 3. resource-pack block files
-        BlockRules rules = ScriptRuntime.blockRules();
-        for (Map.Entry<String, BlockOverride> rule : rules.resolve(ScriptRuntime.catalog()).entrySet()) {
+        BlockRules rules = DataRuntime.blockRules();
+        for (Map.Entry<String, BlockOverride> rule : rules.resolve(DataRuntime.catalog()).entrySet()) {
             Block block = blockById(rule.getKey());
             if (block == null)
                 continue;

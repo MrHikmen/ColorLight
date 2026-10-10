@@ -40,9 +40,6 @@ repositories {
             includeGroup "maven.modrinth"
         }
     }
-    flatDir {
-        dir "deps"
-    }
 }
 
 dependencies {
@@ -62,10 +59,6 @@ dependencies {
 
     //dh compat
     compileOnly "maven.modrinth:uCdwusMi:gBf0SaV1"
-
-    // Lua for resource-pack scripts (assets/colorlight/propagation, block, settings.lua). Pure Java, bundled into the mod jar.
-    implementation "org.luaj:luaj-jse:${project.luaj_version}"
-    include "org.luaj:luaj-jse:${project.luaj_version}"
 }
 
 processResources {

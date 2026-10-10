@@ -8,7 +8,7 @@ import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDirtyFlusher;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.resourcepack.script.ScriptRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.DataRuntime;
 import me.mrhikmen.colorlight.client.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.client.core.render.ModelPlugin;
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
@@ -36,9 +36,9 @@ public class ColorLightClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // The propagation methods themselves come from Lua files in resource packs (assets/colorlight/propagation).
+        // The propagation methods themselves come from JSON files in resource packs (assets/colorlight/propagation).
         // Until the first resource reload has run them, the two Java fallbacks keep "grid" and "smooth" resolvable.
-        ScriptRuntime.registerFallbacks();
+        DataRuntime.registerFallbacks();
 
         config.load();
 

@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.core.resourcepack.lua;
+package me.mrhikmen.colorlight.client.core.resourcepack.data;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;

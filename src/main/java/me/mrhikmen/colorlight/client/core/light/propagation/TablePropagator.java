@@ -10,11 +10,11 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
 /**
  * The one flood-fill kernel behind every data-driven propagation method.
  * <p>
- * <b>What the resource pack decides</b> (all of it comes from a {@code .lua} file, see {@code PropagationSpec}):
+ * <b>What the resource pack decides</b> (all of it comes from a {@code .json} file, see {@code PropagationSpec}):
  * <ul>
  *     <li>which neighbours light hops to ({@code dx, dy, dz} offsets, each component -1..1);</li>
  *     <li>how much brightness a hop into a block of a given opacity costs (a table precomputed from the pack's
- *     {@code loss} function - so the Lua code never runs inside the flood loop, which is what keeps this fast);</li>
+ *     {@code loss} formula - so no per-hop parsing or scripting ever runs inside the flood loop, which is what keeps this fast);</li>
  *     <li>the fixed-point precision the running value is kept in ({@code scale}, 1 = whole units);</li>
  *     <li>whether the colour's ratio (its hue) is preserved while it fades.</li>
  * </ul>

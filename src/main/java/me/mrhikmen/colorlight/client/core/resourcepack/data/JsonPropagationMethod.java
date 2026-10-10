@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.core.resourcepack.lua;
+package me.mrhikmen.colorlight.client.core.resourcepack.data;
 
 import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
@@ -6,18 +6,18 @@ import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
 
 import net.minecraft.resources.Identifier;
 
-/** A {@link PropagationMethod} whose behaviour comes from a {@link PropagationSpec} (a Lua file in a resource pack). */
-public final class ScriptedPropagationMethod implements PropagationMethod {
+/** A {@link PropagationMethod} whose behaviour comes from a {@link PropagationSpec} (a JSON file in a resource pack). */
+public final class JsonPropagationMethod implements PropagationMethod {
 
     private final Identifier id;
     private final PropagationSpec spec;
     private final String source;
 
     /**
-     * @param source where it came from, e.g. {@code "resource pack 'Fancy Light' (colorlight:propagation/ring.lua)"},
+     * @param source where it came from, e.g. {@code "resource pack 'Fancy Light' (colorlight:propagation/ring.json)"},
      *               or {@code "built-in fallback"}
      */
-    public ScriptedPropagationMethod(Identifier id, PropagationSpec spec, String source) {
+    public JsonPropagationMethod(Identifier id, PropagationSpec spec, String source) {
         this.id = id;
         this.spec = spec;
         this.source = source;

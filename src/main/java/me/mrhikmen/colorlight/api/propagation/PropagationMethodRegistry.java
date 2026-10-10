@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.api.propagation;
 
 import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
-import me.mrhikmen.colorlight.client.core.resourcepack.lua.ScriptedPropagationMethod;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
 
 import net.minecraft.resources.Identifier;
 
@@ -15,14 +15,14 @@ import java.util.Map;
  * Where {@link PropagationMethod}s live: the single place the engine, the config, the GUI and every addon agree on what
  * {@code "colorlight:grid"}, {@code "colorlight:smooth"} or {@code "colorlight:beam"} mean.
  * <p>
- * Most entries come from Lua files in resource packs and are (re)filled on every resource reload
+ * Most entries come from JSON files in resource packs and are (re)filled on every resource reload
  * ({@link #clearScripted()} + {@link #register}); methods a mod registered from Java are kept across reloads.
  */
 public final class PropagationMethodRegistry {
 
-    /** Id of the diamond-shaped method. Its definition is {@code assets/colorlight/propagation/grid.lua} in the mod's own pack. */
+    /** Id of the diamond-shaped method. Its definition is {@code assets/colorlight/propagation/grid.json} in the mod's own pack. */
     public static final Identifier GRID = Identifier.fromNamespaceAndPath("colorlight", "grid");
-    /** Id of the round method. Its definition is {@code assets/colorlight/propagation/smooth.lua} in the mod's own pack. */
+    /** Id of the round method. Its definition is {@code assets/colorlight/propagation/smooth.json} in the mod's own pack. */
     public static final Identifier SMOOTH = Identifier.fromNamespaceAndPath("colorlight", "smooth");
 
     /** Insertion-ordered so a GUI listing methods gets a stable, predictable order. */
@@ -39,9 +39,9 @@ public final class PropagationMethodRegistry {
             METHODS.remove(id);
     }
 
-    /** Drops every method that came from a Lua file (or the built-in fallback); Java-registered ones stay. */
+    /** Drops every method that came from a resource pack JSON file (or the built-in fallback); Java-registered ones stay. */
     public static synchronized void clearScripted() {
-        METHODS.values().removeIf(m -> m instanceof ScriptedPropagationMethod);
+        METHODS.values().removeIf(m -> m instanceof JsonPropagationMethod);
     }
 
     public static synchronized PropagationMethod get(Identifier id) {

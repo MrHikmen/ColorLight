@@ -47,6 +47,15 @@ public abstract class LevelChunkMixin {
         // Flags dynamic lights near the change for recomputation. Lock-free, so it stays on the game thread.
         engine.invalidateDynamicAround(pos);
 
+        // The engine only reads a block's light dampening and its emission. If neither changed (a lever, a button,
+        // a door turning, a redstone state...) the light cannot change, so skip the whole darken + re-flood: it
+        // would end with the same light but still mark sections dirty and make the meshes visibly rebuild.
+        BlockState previous = cir.getReturnValue();
+        if (emission <= 0 && previous.getLightEmission() <= 0
+                && previous.getLightDampening() == state.getLightDampening()
+                && !engine.hasSource(pos))
+            return;
+
         // Nothing lit nearby and not a source: the change cannot affect static light, so don't even queue it.
         // (Checked lock-free; this is the overwhelmingly common case.) Only trusted while no flood is running -
         // otherwise light that hasn't reached this block yet would later pass straight through it.

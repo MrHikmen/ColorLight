@@ -127,6 +127,7 @@ public final class GpuLightVolume {
         return pool;
     }
 
+
     public void ensureBuffers() {
         if (hasBuffers())
             return;
@@ -285,6 +286,7 @@ public final class GpuLightVolume {
         }
 
         uploadPending(engine, level);
+
     }
 
     private boolean inWindow(int sx, int sy, int sz) {

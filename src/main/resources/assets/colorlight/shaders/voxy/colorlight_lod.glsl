@@ -99,12 +99,10 @@ vec4 cl_getLighting(uint lighting) {
     vec3 delta = max(blockOnly - base, vec3(0.0));
     float peak = max(delta.r, max(delta.g, delta.b));
 
-    // day and night: the lightmap follows the time of day, the tint only shows as far as block light makes it bright.
-    // Same formula as colored_terrain.fsh's cl_lightColor (no extra scaling here), so Voxy's far quads fade the
-    // tint in and out across day/night exactly like the near chunks do.
+    // day and night: the lightmap follows the time of day, the tint only shows as far as block light makes it bright
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
-    float blockShare = ((fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) : 1.0) * 10;
+    float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) * 10 : 1.0;
     // See colored_terrain.fsh: stretched from (0.0, 0.5) so dusk/dawn fade the tint in and out gradually across
     // most of the sky-light fade instead of snapping partway through it, kept in sync with that shader.
     float daylight = smoothstep(0.0, 1.0, blockShare);
@@ -115,7 +113,7 @@ vec4 cl_getLighting(uint lighting) {
     float retention = clamp(1.0 - tintGamma, 0.0, 1.0);
     float shaped = pow(max(lvl, 0.0001), exponent);
     float kept = smoothstep(0.0, 0.06, lvl);
-    float amount = clamp(tintStrength * mix(shaped, kept, retention)* daylight, 0.0, 1.0);
+    float amount = clamp(tintStrength * mix(shaped, kept, retention) * daylight, 0.0, 1.0);
 
     vec3 lit = clamp(full + amount * (hue * peak * vivid - delta), vec3(0.0), vec3(1.0));
     return vec4(lit, vanilla.a);

@@ -33,10 +33,10 @@ layout(location = 0) out vec4 fragColor; // The output fragment for the color fr
 
 vec4 calculateFinalColor(vec4 color) {
     #ifdef OIT_ACCUMULATE
-    color = sampleColorForAccumulation(color);
-    vec4 fogColor = vec4(u_FogColor.rgb * color.a, u_FogColor.a);
+        color = sampleColorForAccumulation(color);
+        vec4 fogColor = vec4(u_FogColor.rgb * color.a, u_FogColor.a);
     #else
-    vec4 fogColor = u_FogColor;
+        vec4 fogColor = u_FogColor;
     #endif
 
     #ifdef OIT_ALPHA_ONLY
@@ -143,7 +143,7 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     vec3 skyOnly = textureLod(u_LightTex, vec2(8.0 / 256.0, uv.y), 0.0).rgb;
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
-    float blockShare = ((fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) : 1.0) * 10;
+    float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) * 10 : 1.0;
     // Stretched from (0.0, 0.5): under full open sky blockShare is still exactly 0, so the tint is still fully
     // gone at high noon, but the ramp up to full tint now spans almost the whole blockShare range instead of
     // just its lower half. Dusk and dawn move through this range gradually (vanilla's own sky-light fade is not
@@ -195,17 +195,17 @@ vec4 cl_resolveVertexColor() {
 
 void main() {
     vec4 color = u_UseRGSS ? sampleRGSS(u_BlockTex, v_TexCoord, u_TexelSize) : sampleNearest(u_BlockTex, v_TexCoord, u_TexelSize);
-    #ifdef OIT_ALPHA_ONLY
+#ifdef OIT_ALPHA_ONLY
     color *= v_Color; // Apply per-vertex color modulator
-    #else
+#else
     color *= cl_resolveVertexColor(); // COLORLIGHT: per-pixel light instead of the per-vertex one
-    #endif
+#endif
 
-    #ifdef ALPHA_CUTOUT
+#ifdef ALPHA_CUTOUT
     if (color.a < ALPHA_CUTOUT) {
         discard;
     }
-    #endif
+#endif
 
     #ifdef OIT_ALPHA_ONLY
     executeAlphaOnlyPhase(gl_FragCoord.z, color.a);

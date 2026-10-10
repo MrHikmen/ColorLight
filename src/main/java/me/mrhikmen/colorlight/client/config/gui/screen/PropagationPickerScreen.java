@@ -18,7 +18,7 @@ import java.util.function.Supplier;
 
 /**
  * Lets the player pick a propagation method from <b>everything registered right now</b> - the built-in ones, those from
- * Lua files in the active resource packs and those from other mods.
+ * JSON files in the active resource packs and those from other mods.
  * <p>
  * Sodium's option widgets are built once, when the game starts, so a fixed slider or list in the options page would
  * only ever show the methods that existed back then (a resource pack applied later would not appear until a restart).
