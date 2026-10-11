@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
 import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
@@ -73,8 +73,8 @@ public class ColorLightEngine {
     private final Identifier dynamicMethodId;
 
     /**
-     * Propagators/queues for every {@link PropagationMethod} in use (the default one and whatever blocks or
-     * other mods asked for; see {@link me.mrhikmen.colorlight.api.propagation}), created lazily the first time
+     * Propagators/queues for every {@link JsonPropagationMethod} in use (the default one and whatever blocks
+     * asked for; see {@link me.mrhikmen.colorlight.client.core.light.propagation}), created lazily the first time
      * that method is actually used by this engine. Only touched while holding {@link #lock}.
      */
     private final Map<Identifier, LightPropagator> customPropagators = new HashMap<>();
@@ -277,8 +277,8 @@ public class ColorLightEngine {
      * Adds a source that spreads using the propagation method {@code methodId} identifies (see
      * {@link PropagationMethodRegistry}, and {@link me.mrhikmen.colorlight.client.config.BlockSettings#propagation}
      * for where a block's own choice usually comes from), independent of the engine's default.
-     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the mod
-     * providing it is missing) falls back to it too, so a stale config entry never breaks lighting.
+     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the pack
+     * providing it is disabled) falls back to it too, so a stale config entry never breaks lighting.
      * Re-adding an identical source is a no-op; re-adding it with a different colour/model first
      * removes the old one so stale light around it is cleaned up.
      */
@@ -593,7 +593,7 @@ public class ColorLightEngine {
     /** The propagator for {@code methodId}, created and cached on first use. Call only while holding {@link #lock}. */
     private LightPropagator propagatorFor(Identifier methodId) {
         return customPropagators.computeIfAbsent(methodId == null ? defaultMethodId : methodId, id -> {
-            PropagationMethod method = PropagationMethodRegistry.get(id);
+            JsonPropagationMethod method = PropagationMethodRegistry.get(id);
             if (method == null)
                 method = PropagationMethodRegistry.get(defaultMethodId); // unregistered in the meantime
             if (method == null)

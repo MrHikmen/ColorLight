@@ -1,7 +1,5 @@
 package me.mrhikmen.colorlight.client.core.light.registry;
 
-import me.mrhikmen.colorlight.api.block.BlockLightDefinition;
-import me.mrhikmen.colorlight.api.block.ColorLightBlockAPI;
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
@@ -22,7 +20,6 @@ import java.util.Map;
  * Sources are layered, lowest priority first:
  * <ol>
  *     <li>the texture scan (entries in the config that the player did not touch);</li>
- *     <li>defaults other mods registered through {@link ColorLightBlockAPI};</li>
  *     <li>resource-pack block files ({@code assets/colorlight/block/*.json}), field by field;</li>
  *     <li>entries the player edited by hand in the GUI ({@code edit = true}) - these always win.</li>
  * </ol>
@@ -43,18 +40,7 @@ public final class ColorLightBlockRegistry {
                 map.put(block, entry.copy());
         }
 
-        // 2. other mods' defaults
-        for (BlockLightDefinition definition : ColorLightBlockAPI.snapshot()) {
-            try {
-                Block block = BuiltInRegistries.BLOCK.getValue(definition.block());
-                if (block != null)
-                    map.put(block, definition.toBlockSettings());
-            } catch (Exception e) {
-                // an id that does not name a block
-            }
-        }
-
-        // 3. resource-pack block files
+        // 2. resource-pack block files
         BlockRules rules = DataRuntime.blockRules();
         for (Map.Entry<String, BlockOverride> rule : rules.resolve(DataRuntime.catalog()).entrySet()) {
             Block block = blockById(rule.getKey());
@@ -86,7 +72,7 @@ public final class ColorLightBlockRegistry {
             base.enable = true;
         }
 
-        // 4. the player's own entries
+        // 3. the player's own entries
         for (BlockSettings entry : config.blocks) {
             if (!entry.edit)
                 continue;

@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.core.resourcepack.script;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.resourcepack.data.BlockRules;
 import me.mrhikmen.colorlight.client.core.resourcepack.data.DataPackLoader;
 import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
@@ -39,7 +39,7 @@ public final class DataRuntime {
             data = LoadedData.empty();
         }
 
-        PropagationMethodRegistry.clearScripted();
+        PropagationMethodRegistry.clear();
         registerFallbacks();
         for (JsonPropagationMethod method : data.methods())
             PropagationMethodRegistry.register(method);

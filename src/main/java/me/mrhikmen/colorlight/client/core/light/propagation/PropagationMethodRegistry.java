@@ -1,6 +1,5 @@
-package me.mrhikmen.colorlight.api.propagation;
+package me.mrhikmen.colorlight.client.core.light.propagation;
 
-import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
 import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
 
 import net.minecraft.resources.Identifier;
@@ -12,11 +11,11 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Where {@link PropagationMethod}s live: the single place the engine, the config, the GUI and every addon agree on what
+ * Where {@link JsonPropagationMethod}s live: the single place the engine, the config and the GUI agree on what
  * {@code "colorlight:grid"}, {@code "colorlight:smooth"} or {@code "colorlight:beam"} mean.
  * <p>
- * Most entries come from JSON files in resource packs and are (re)filled on every resource reload
- * ({@link #clearScripted()} + {@link #register}); methods a mod registered from Java are kept across reloads.
+ * Every entry comes from a JSON file in a resource pack (or the built-in fallback) and the registry is refilled on
+ * every resource reload ({@link #clear()} + {@link #register}).
  */
 public final class PropagationMethodRegistry {
 
@@ -26,25 +25,20 @@ public final class PropagationMethodRegistry {
     public static final Identifier SMOOTH = Identifier.fromNamespaceAndPath("colorlight", "smooth");
 
     /** Insertion-ordered so a GUI listing methods gets a stable, predictable order. */
-    private static final Map<Identifier, PropagationMethod> METHODS = new LinkedHashMap<>();
+    private static final Map<Identifier, JsonPropagationMethod> METHODS = new LinkedHashMap<>();
 
-    public static synchronized void register(PropagationMethod method) {
+    public static synchronized void register(JsonPropagationMethod method) {
         if (method == null || method.id() == null)
             throw new IllegalArgumentException("A propagation method and its id must not be null");
         METHODS.put(method.id(), method);
     }
 
-    public static synchronized void unregister(Identifier id) {
-        if (id != null)
-            METHODS.remove(id);
+    /** Drops every registered method; called on each resource reload before the packs' methods are registered again. */
+    public static synchronized void clear() {
+        METHODS.clear();
     }
 
-    /** Drops every method that came from a resource pack JSON file (or the built-in fallback); Java-registered ones stay. */
-    public static synchronized void clearScripted() {
-        METHODS.values().removeIf(m -> m instanceof JsonPropagationMethod);
-    }
-
-    public static synchronized PropagationMethod get(Identifier id) {
+    public static synchronized JsonPropagationMethod get(Identifier id) {
         return (id != null) ? METHODS.get(id) : null;
     }
 
@@ -53,7 +47,7 @@ public final class PropagationMethodRegistry {
     }
 
     /** Every registered method, in registration order. Safe to iterate without external locking. */
-    public static synchronized Collection<PropagationMethod> all() {
+    public static synchronized Collection<JsonPropagationMethod> all() {
         return List.copyOf(METHODS.values());
     }
 
@@ -64,7 +58,7 @@ public final class PropagationMethodRegistry {
      */
     public static TablePropagator tableFor(Identifier id, Identifier fallback, float decayPerOpacityUnit) {
         for (Identifier candidate : new Identifier[]{id, fallback, SMOOTH, GRID}) {
-            PropagationMethod method = get(candidate);
+            JsonPropagationMethod method = get(candidate);
             if (method == null)
                 continue;
             TablePropagator table = method.createTable(decayPerOpacityUnit);
@@ -75,7 +69,7 @@ public final class PropagationMethodRegistry {
     }
 
     /**
-     * Parses a config or API value into an id. Accepts a full {@code namespace:path} id (e.g.
+     * Parses a config value into an id. Accepts a full {@code namespace:path} id (e.g.
      * {@code "colorlight:beam"}) and, for configs written before methods had ids at all, the bare legacy
      * tokens {@code GRID}/{@code SMOOTH} (case-insensitive). Does <b>not</b> check the id is actually
      * registered - callers resolve that separately so a config written with a pack's method still

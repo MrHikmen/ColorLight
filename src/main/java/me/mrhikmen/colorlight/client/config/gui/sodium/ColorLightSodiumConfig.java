@@ -8,7 +8,7 @@ import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.config.gui.screen.ColorLightBlockConfigScreen;
 import me.mrhikmen.colorlight.client.config.gui.screen.PropagationPickerScreen;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.ColorLightApply;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;

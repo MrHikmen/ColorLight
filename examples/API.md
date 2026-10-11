@@ -1,78 +1,65 @@
-# ColorLight: Lua in Resource Packs
+# ColorLight: Data in Resource Packs
 
-Light propagation methods and default settings are defined through **Lua files in the resource pack**, while block colors are configured using standard **JSON** (colors in `hex` or `rgb` format). The mod provides `grid.lua` and `smooth.lua` by default — any resource pack can override them or add its own methods.
+Light propagation methods, default settings and block colors are all defined by plain **JSON files in the resource pack** (block colors in `hex` or `rgb` format). The mod provides `grid.json` and `smooth.json` by default — any resource pack can override them or add its own methods.
 
 ```text
 assets/colorlight/
-├── settings.lua            default settings
-├── propagation/<name>.lua  light propagation method, id = colorlight:<name>
-└── block/<name>.json       block colors / light level / propagation method (standard JSON)
+├── settings.json            default settings
+├── propagation/<name>.json  light propagation method, id = colorlight:<name>
+└── block/<name>.json        block colors / light level / propagation method
 ```
 
 Files are loaded every time resources are reloaded (`F3+T`, changing resource packs). A complete example is available in `examples/resourcepack/`. To see which files were loaded and whether any errors occurred, use the `/colorlight scripts` command.
 
-## Security
+## Safety
 
-A script is downloaded content, so the sandbox is strict: only `base` (without `dofile/loadfile/require`), `table`, `string`, `math`, `bit32`, and the `colorlight` table are available. There is no `io`, `os`, `debug`, or Java reflection. Infinite loops are interrupted by an instruction limit, and an error in a file only causes that file to be skipped (the error is recorded in the log and shown by `/colorlight scripts`).
+A resource pack is downloaded content, so it only ever supplies data: numbers and strings that the mod reads and validates, never code. An error in a file only causes that file to be skipped (the error is recorded in the log and shown by `/colorlight scripts`). Comments `//` and `/* */` and trailing commas are allowed in every file, and keys beginning with `_` are ignored (useful for notes).
 
 ---
 
-## 1. Propagation Methods — `propagation/<name>.lua`
+## 1. Propagation Methods — `propagation/<name>.json`
 
-The file returns a table. There are two types.
-
-### Table-based
-
-Lua describes the *rules*, while the propagation loop itself is executed in Java. The `loss` function is called in advance (for each neighbor and each opacity value), so Lua is not executed during the actual light propagation — performance is the same as with the previous Java implementation.
-
-```lua
-return {
-    name = "Vertical beam",       -- name displayed in the menu
-    scale = 1,                    -- precision: 1 = whole units, 8 = 1/8 (1..64)
-    preserve_hue = true,          -- color channels fade together (hue remains stable)
-    max_opacity = 15,             -- blocks with this opacity or higher stop the light
-    neighbors = colorlight.faces, -- where light can spread: list of {dx,dy,dz}, each from -1 to 1
-    loss = function(dx, dy, dz, opacity, decay, range)
-        return (1 + opacity) * decay   -- light loss (0..255) per step
-    end,
+```json
+{
+  "name": "Vertical beam",
+  "scale": 1,
+  "preserve_hue": true,
+  "max_opacity": 15,
+  "neighbors": [[0,1,0], [0,-1,0], [1,0,0], [-1,0,0], [0,0,1], [0,0,-1]],
+  "loss": {
+    "vertical_factor": 0.25,
+    "horizontal_factor": 2.5
+  }
 }
 ```
 
-| Field                                | Description                                                                                                                                                                                                                                                                             |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `neighbors`                          | List of `{dx,dy,dz}`; `colorlight.faces` — 6 faces, `colorlight.full` — all 26 neighbors. Offsets must be within ±1 (this is what allows light to fade when a block is removed). Can also be a function returning a list.                                                               |
-| `loss(dx,dy,dz,opacity,decay,range)` | `opacity` — opacity of the block being entered, 0..15; `decay` = 255 / range — light loss per block in air; `range` — propagation distance in blocks. The result is measured in light units; the minimum after rounding is 1. If `loss` is not specified: `distance·(1+opacity)·decay`. |
-| `scale`                              | Precision of intermediate value storage. `1` — fast (like a "diamond"), `8` — smooth (like a "circle").                                                                                                                                                                                 |
+| Field          | Description                                                                                                                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | Name displayed in the menu (defaults to the method id).                                                                                                                                                          |
+| `neighbors`    | **Required.** Where light can spread: `"faces"` — 6 faces, `"full"` — all 26 neighbors, or a list of `[dx,dy,dz]`. Offsets must be within ±1 (this is what allows light to fade when a block is removed).        |
+| `scale`        | Precision of intermediate value storage, 1..64 (default `1`). `1` — fast (like a "diamond"), `8` — smooth (like a "circle").                                                                                     |
+| `preserve_hue` | Color channels fade together so the hue remains stable (default `true`).                                                                                                                                         |
+| `max_opacity`  | Blocks with this opacity or higher stop the light, 1..15 (default `15`).                                                                                                                                         |
+| `loss`         | Light loss per step, see below. If omitted: `distance·(1+opacity)·decay`.                                                                                                                                        |
 
-The built-in `grid.lua` (6 neighbors, `scale=1`) and `smooth.lua` (26 neighbors, `scale=8`, loss proportional to distance) fully reproduce the previous behavior — verified through bit-by-bit comparison with the old Java code.
+The cost of one step is a small formula whose weights come straight from the file:
 
-### Fully scripted (flexible, slower)
-
-```lua
-return {
-    name = "Cross (scripted)",
-    propagate = function(field, queue, ctx)
-        while true do
-            local x, y, z = queue.poll()      -- nil when the queue is empty
-            if not x then break end
-            local r, g, b = field.get(x, y, z)
-            -- ... field.set(nx, ny, nz, r, g, b); queue.add(nx, ny, nz)
-        end
-    end,
-}
+```text
+units = decay · multiplier · distance · (1 + opacity_factor · opacity) · axis_factor + flat · decay
 ```
 
-* `field.get(x,y,z) -> r,g,b`, `field.set(x,y,z,r,g,b)`, `field.opacity(x,y,z) -> 0..15`
-* `queue.poll() -> x,y,z | nil`, `queue.add(x,y,z)`, `queue.empty()`
-* `ctx.decay`, `ctx.range`, `ctx.max_opacity`
+`decay` = 255 / range — light loss per block in air; `opacity` — opacity of the block being entered, 0..15. The result is measured in light units; the minimum after rounding is 1. The formula is evaluated in advance (for each neighbor and each opacity value), so resolving it costs nothing while light is actually spreading.
 
-This runs in the interpreter, so it is noticeably slower than the table-based method — intended for small effects. This method cannot be used for moving light sources (see `dynamic_propagation`).
+| `loss` field        | Default | Description                                                     |
+| ------------------- | ------- | --------------------------------------------------------------- |
+| `distance`          | `false` | `true` — multiply by the real step length `√(dx²+dy²+dz²)`      |
+| `opacity_factor`    | `1.0`   | Weight of opacity in `(1 + opacity_factor · opacity)`           |
+| `vertical_factor`   | `1.0`   | Extra multiplier for steps with `dy ≠ 0`                        |
+| `horizontal_factor` | `1.0`   | Extra multiplier for steps with `dy = 0`                        |
+| `multiplier`        | `1.0`   | Overall scale of the whole formula                              |
+| `flat`              | `0.0`   | Extra constant cost, in `decay` units                           |
 
-### Multiple methods in one file
-
-```lua
-colorlight.propagation("beam_short", { ... })   -- id colorlight:beam_short
-```
+The built-in `grid.json` (6 neighbors, `scale=1`) and `smooth.json` (26 neighbors, `scale=8`, loss proportional to distance) define the two default shapes.
 
 ### Selecting a method for a block
 
@@ -84,7 +71,7 @@ In the block JSON: `"propagation": "colorlight:beam"`; the global method is defi
 
 Standard JSON: the key selects the block(s), and the value describes the light. All `.json` files from `assets/colorlight/block/` across all enabled resource packs are loaded alphabetically (a file with the same name in a higher-priority pack overrides the one in a lower-priority pack; prefixes such as `10_`, `20_` define the order). Later entries override earlier ones **field by field**. Comments `//` and `/* */` are allowed; keys beginning with `_` are ignored (useful for notes).
 
-Priority: **texture scanning < API from other mods < resource pack JSON < blocks manually edited by the player in the GUI.**
+Priority: **texture scanning < resource pack JSON < blocks manually edited by the player in the GUI.**
 
 ```json
 {
@@ -117,17 +104,15 @@ An invalid entry is skipped and reported by `/colorlight scripts`; the rest of t
 
 ---
 
-## 3. Settings — `settings.lua`
+## 3. Settings — `settings.json`
 
-```lua
-return {
-    light_range = 12,
-    propagation = "colorlight:smooth",
-    tint_gamma  = 0.7,
+```json
+{
+  "light_range": 12,
+  "propagation": "colorlight:smooth",
+  "tint_gamma": 0.7
 }
 ```
-
-(Alternatively, `colorlight.settings{ ... }`.)
 
 Values from the resource pack are **default values**: any setting the player has changed manually in the ColorLight menu remains unchanged; all other settings take their values from the pack (when multiple packs are enabled, the highest-priority pack takes precedence). Pack values are not written to `colorlight.json`, so the previous values are restored after the pack is disabled.
 
@@ -144,100 +129,81 @@ Values from the resource pack are **default values**: any setting the player has
 
 ---
 
-## 4. API for Other Mods (Java)
-
-* `PropagationMethodRegistry.register(method)` — register a method from code; it persists across resource reloads. The IDs `colorlight:grid` / `colorlight:smooth` are always available (Lua versions override the built-in fallbacks).
-* `ColorLightBlockAPI.register(...)` — default block colors (lower priority than resource pack JSON).
-* `ColorLightLua.register(name, function)` — add a custom function to the `colorlight` table for scripts.
-
-## 5. Limitations
+## 4. Limitations
 
 * Light can spread only to the 26 neighboring blocks (offsets −1..1).
-* Moving (entity) light sources use the table-based method (`dynamic_propagation`); the scripted `propagate` method is not suitable for them — `colorlight:smooth` is used.
-* Script changes take effect after resources are reloaded; light in the loaded world is recalculated at that point.
+* Moving (entity) light sources use `dynamic_propagation` (`colorlight:smooth` by default).
+* Changes take effect after resources are reloaded; light in the loaded world is recalculated at that point.
 
 <details>
 <summary>Rus</summary>
 
-# ColorLight: Lua в ресурспаках
+# ColorLight: данные в ресурспаках
 
-Способ распространения света и настройки по умолчанию описываются **Lua-файлами в ресурспаке**, цвета блоков — обычным **JSON** (цвет в `hex` или `rgb`). Сам мод поставляет `grid.lua` и `smooth.lua` — любой ресурспак может их заменить или добавить свои.
+Способ распространения света, настройки по умолчанию и цвета блоков описываются обычными **JSON-файлами в ресурспаке** (цвет в `hex` или `rgb`). Сам мод поставляет `grid.json` и `smooth.json` — любой ресурспак может их заменить или добавить свои.
 
 ```
 assets/colorlight/
-├── settings.lua            настройки по умолчанию
-├── propagation/<имя>.lua   способ распространения света, id = colorlight:<имя>
-└── block/<имя>.json        цвета / сила / способ для блоков (обычный JSON)
+├── settings.json            настройки по умолчанию
+├── propagation/<имя>.json   способ распространения света, id = colorlight:<имя>
+└── block/<имя>.json         цвета / сила / способ для блоков
 ```
 
 Файлы читаются при каждой загрузке ресурсов (`F3+T`, смена паков). Готовый пример — `examples/resourcepack/`. Посмотреть, что загрузилось и какие ошибки: команда `/colorlight scripts`.
 
 ## Безопасность
 
-Скрипт — это скачанный контент, поэтому песочница жёсткая: доступны только `base` (без `dofile/loadfile/require`), `table`, `string`, `math`, `bit32` и таблица `colorlight`. Нет `io`, `os`, `debug`, Java-рефлексии. Бесконечный цикл прерывается по лимиту инструкций, ошибка в файле лишь пропускает этот файл (в лог и в `/colorlight scripts`).
+Ресурспак — это скачанный контент, поэтому он поставляет только данные: числа и строки, которые мод читает и проверяет, но никогда не код. Ошибка в файле лишь пропускает этот файл (в лог и в `/colorlight scripts`). Во всех файлах разрешены комментарии `//` и `/* */` и висячие запятые, а ключи, начинающиеся с `_`, игнорируются (удобно для заметок).
 
 ---
 
-## 1. Способы распространения — `propagation/<имя>.lua`
+## 1. Способы распространения — `propagation/<имя>.json`
 
-Файл возвращает таблицу. Есть два вида.
-
-### Табличный
-
-Lua описывает *правила*, а цикл заливки выполняет Java. Функция `loss` вызывается заранее (для каждого соседа и каждой непрозрачности), поэтому внутри самой заливки Lua не исполняется — скорость такая же, как у прежнего Java-кода.
-
-```lua
-return {
-    name = "Vertical beam",       -- название в меню
-    scale = 1,                    -- точность: 1 = целые единицы, 8 = 1/8 (1..64)
-    preserve_hue = true,          -- каналы цвета гаснут вместе (оттенок не плывёт)
-    max_opacity = 15,             -- блок с такой непрозрачностью и выше останавливает свет
-    neighbors = colorlight.faces, -- куда свет прыгает: список {dx,dy,dz}, каждое -1..1
-    loss = function(dx, dy, dz, opacity, decay, range)
-        return (1 + opacity) * decay   -- потеря света (0..255) за один прыжок
-    end,
+```json
+{
+  "name": "Vertical beam",
+  "scale": 1,
+  "preserve_hue": true,
+  "max_opacity": 15,
+  "neighbors": [[0,1,0], [0,-1,0], [1,0,0], [-1,0,0], [0,0,1], [0,0,-1]],
+  "loss": {
+    "vertical_factor": 0.25,
+    "horizontal_factor": 2.5
+  }
 }
 ```
 
-| Поле                                 | Значение                                                                                                                                                                                                                                          |
-|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `neighbors`                          | список `{dx,dy,dz}`; `colorlight.faces` — 6 граней, `colorlight.full` — все 26 соседей. Смещения только в пределах ±1 (на этом держится «гашение» света при удалении блока). Можно функцией, возвращающей список.                                 |
-| `loss(dx,dy,dz,opacity,decay,range)` | `opacity` — затемнение входимого блока 0..15; `decay` = 255 / дальность — потеря на блок в воздухе; `range` — дальность в блоках. Результат в единицах света; минимум после округления — 1. Если `loss` не задан: `расстояние·(1+opacity)·decay`. |
-| `scale`                              | точность хранения промежуточного значения. `1` — быстро (как «ромб»), `8` — гладко (как «круг»).                                                                                                                                                  |
+| Поле           | Значение                                                                                                                                                                                                   |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | Название в меню (по умолчанию — id способа).                                                                                                                                                               |
+| `neighbors`    | **Обязательно.** Куда свет прыгает: `"faces"` — 6 граней, `"full"` — все 26 соседей, либо список `[dx,dy,dz]`. Смещения только в пределах ±1 (на этом держится «гашение» света при удалении блока).         |
+| `scale`        | Точность хранения промежуточного значения, 1..64 (по умолчанию `1`). `1` — быстро (как «ромб»), `8` — гладко (как «круг»).                                                                                  |
+| `preserve_hue` | Каналы цвета гаснут вместе, оттенок не плывёт (по умолчанию `true`).                                                                                                                                       |
+| `max_opacity`  | Блок с такой непрозрачностью и выше останавливает свет, 1..15 (по умолчанию `15`).                                                                                                                         |
+| `loss`         | Потеря света за один прыжок, см. ниже. Если не задан: `расстояние·(1+opacity)·decay`.                                                                                                                      |
 
-Встроенные `grid.lua` (6 соседей, `scale=1`) и `smooth.lua` (26 соседей, `scale=8`, потеря ∝ расстоянию) полностью воспроизводят прежнее поведение — проверено побитовым сравнением со старым Java-кодом.
+Цена одного прыжка — небольшая формула, веса которой берутся прямо из файла:
 
-### Полностью скриптовый (гибкий, медленнее)
-
-```lua
-return {
-    name = "Cross (scripted)",
-    propagate = function(field, queue, ctx)
-        while true do
-            local x, y, z = queue.poll()      -- nil, когда очередь пуста
-            if not x then break end
-            local r, g, b = field.get(x, y, z)
-            -- ... field.set(nx, ny, nz, r, g, b); queue.add(nx, ny, nz)
-        end
-    end,
-}
+```text
+units = decay · multiplier · distance · (1 + opacity_factor · opacity) · axis_factor + flat · decay
 ```
 
-* `field.get(x,y,z) -> r,g,b`, `field.set(x,y,z,r,g,b)`, `field.opacity(x,y,z) -> 0..15`
-* `queue.poll() -> x,y,z | nil`, `queue.add(x,y,z)`, `queue.empty()`
-* `ctx.decay`, `ctx.range`, `ctx.max_opacity`
+`decay` = 255 / дальность — потеря на блок в воздухе; `opacity` — затемнение входимого блока 0..15. Результат в единицах света; минимум после округления — 1. Формула считается заранее (для каждого соседа и каждой непрозрачности), поэтому во время самой заливки света она ничего не стоит.
 
-Работает в интерпретаторе, поэтому заметно медленнее табличного — для небольших эффектов. Такой способ нельзя использовать для движущихся источников (см. `dynamic_propagation`).
+| Поле `loss`         | По умолчанию | Значение                                                      |
+| ------------------- | ------------ | ------------------------------------------------------------- |
+| `distance`          | `false`      | `true` — умножать на реальную длину прыжка `√(dx²+dy²+dz²)`   |
+| `opacity_factor`    | `1.0`        | Вес непрозрачности в `(1 + opacity_factor · opacity)`         |
+| `vertical_factor`   | `1.0`        | Доп. множитель для прыжков с `dy ≠ 0`                         |
+| `horizontal_factor` | `1.0`        | Доп. множитель для прыжков с `dy = 0`                         |
+| `multiplier`        | `1.0`        | Общий масштаб всей формулы                                    |
+| `flat`              | `0.0`        | Дополнительная постоянная цена, в единицах `decay`            |
 
-### Несколько методов в одном файле
-
-```lua
-colorlight.propagation("beam_short", { ... })   -- id colorlight:beam_short
-```
+Встроенные `grid.json` (6 соседей, `scale=1`) и `smooth.json` (26 соседей, `scale=8`, потеря пропорциональна расстоянию) задают две формы по умолчанию.
 
 ### Выбор способа для блока
 
-В JSON блоков: `"propagation": "colorlight:beam"`; общий способ — настройка `propagation`.
+В JSON блока: `"propagation": "colorlight:beam"`; глобальный способ задаётся настройкой `propagation`.
 
 ---
 
@@ -245,7 +211,7 @@ colorlight.propagation("beam_short", { ... })   -- id colorlight:beam_short
 
 Обычный JSON: ключ выбирает блок(и), значение описывает свет. Читаются все `.json` из `assets/colorlight/block/` всех включённых паков, по алфавиту (файл с тем же именем в паке выше заменяет файл нижнего; префиксы `10_`, `20_` задают порядок). Более поздние записи переопределяют ранние **по полям**. Комментарии `//` и `/* */` терпятся; ключи, начинающиеся с `_`, игнорируются (удобно для заметок).
 
-Приоритет: **текстурный скан < API других модов < JSON из ресурспака < блоки, отредактированные игроком вручную в GUI.**
+Приоритет: **текстурный скан < JSON из ресурспака < блоки, отредактированные игроком вручную в GUI.**
 
 ```json
 {
@@ -278,16 +244,17 @@ colorlight.propagation("beam_short", { ... })   -- id colorlight:beam_short
 
 ---
 
-## 3. Настройки — `settings.lua`
+## 3. Настройки — `settings.json`
 
-```lua
-return {
-    light_range = 12,
-    propagation = "colorlight:smooth",
-    tint_gamma  = 0.7,
+```json
+{
+  "light_range": 12,
+  "propagation": "colorlight:smooth",
+  "tint_gamma": 0.7
 }
 ```
-(или `colorlight.settings{ ... }`). Значения из пака — **значения по умолчанию**: настройка, которую игрок изменил сам в меню ColorLight, остаётся его; остальные берут значение из пака (при нескольких паках — из верхнего). В файл `colorlight.json` значения пака не записываются, поэтому после отключения пака возвращаются прежние.
+
+Значения из ресурспака — **значения по умолчанию**: настройка, которую игрок изменил вручную в меню ColorLight, остаётся как есть; все остальные берутся из пака (при нескольких включённых паках побеждает пак с большим приоритетом). Значения пака не записываются в `colorlight.json`, поэтому после отключения пака прежние значения возвращаются.
 
 | Ключ                                                                                                                                                        | Тип / диапазон                                                             |
 |-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
@@ -302,16 +269,10 @@ return {
 
 ---
 
-## 4. API для других модов (Java)
-
-* `PropagationMethodRegistry.register(method)` — метод из кода; живёт между перезагрузками ресурсов. Идентификаторы `colorlight:grid` / `colorlight:smooth` всегда доступны (Lua-версии подменяют встроенные запасные).
-* `ColorLightBlockAPI.register(...)` — цвета блоков по умолчанию (приоритет ниже JSON ресурспака).
-* `ColorLightLua.register(name, function)` — добавить свою функцию в таблицу `colorlight` для скриптов.
-
-## 5. Ограничения
+## 4. Ограничения
 
 * Свет прыгает только на 26 соседних блоков (смещения −1..1).
-* Движущиеся (entity) источники используют табличный способ (`dynamic_propagation`); скриптовый `propagate` для них не подходит — используется `colorlight:smooth`.
-* Изменение скриптов применяется при перезагрузке ресурсов; при этом свет в загруженном мире пересчитывается.
+* Движущиеся (entity) источники используют `dynamic_propagation` (по умолчанию `colorlight:smooth`).
+* Изменения применяются при перезагрузке ресурсов; при этом свет в загруженном мире пересчитывается.
 
 </details>

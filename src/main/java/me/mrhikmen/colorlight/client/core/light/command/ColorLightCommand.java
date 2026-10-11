@@ -7,8 +7,8 @@ import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.resourcepack.script.DataRuntime;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.network.chat.Component;
@@ -40,7 +40,7 @@ public final class ColorLightCommand {
                                                                     .executes(ctx -> addAtTarget(ctx, null))
                                                                     .then(ClientCommands.argument("method", StringArgumentType.greedyString())
                                                                             .suggests((ctx, builder) -> {
-                                                                                for (PropagationMethod method : PropagationMethodRegistry.all())
+                                                                                for (JsonPropagationMethod method : PropagationMethodRegistry.all())
                                                                                     builder.suggest(method.id().getPath());
                                                                                 return builder.buildFuture();
                                                                             })
@@ -93,8 +93,8 @@ public final class ColorLightCommand {
 
     /** Lists the propagation methods and any data problems, so pack authors see what loaded. */
     private static int listData(CommandContext<FabricClientCommandSource> ctx) {
-        for (PropagationMethod method : PropagationMethodRegistry.all()) {
-            String source = (method instanceof me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod scripted) ? scripted.source() : "mod (Java)";
+        for (JsonPropagationMethod method : PropagationMethodRegistry.all()) {
+            String source = method.source();
             ctx.getSource().sendFeedback(Component.literal(method.id() + " - " + method.displayName() + "  [" + source + "]"));
         }
         for (String problem : DataRuntime.problems())

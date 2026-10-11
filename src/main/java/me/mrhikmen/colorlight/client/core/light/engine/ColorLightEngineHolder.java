@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.Identifier;

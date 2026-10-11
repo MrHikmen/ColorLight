@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client.config.gui.screen;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
@@ -189,7 +189,7 @@ public class ColorLightBlockConfigScreen extends Screen {
     private static List<Identifier> propagationChoices() {
         List<Identifier> ids = new ArrayList<>();
         ids.add(null);
-        for (PropagationMethod method : PropagationMethodRegistry.all()) {
+        for (JsonPropagationMethod method : PropagationMethodRegistry.all()) {
             ids.add(method.id());
         }
         return ids;
@@ -201,7 +201,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         if (id == null) {
             value = Translatable.BLOCK_PROPAGATION_DEFAULT;
         } else {
-            PropagationMethod method = PropagationMethodRegistry.get(id);
+            JsonPropagationMethod method = PropagationMethodRegistry.get(id);
             value = Component.literal((method != null) ? method.displayName() : id.toString());
         }
         return Component.empty().append(Translatable.BLOCK_PROPAGATION).append(Component.literal(": ")).append(value);
