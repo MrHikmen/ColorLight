@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.mixin.sodium;
+package me.mrhikmen.colorlight.client.compat.sodium.mixin;
 
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.core.render.gpu.SodiumHookMarkers;

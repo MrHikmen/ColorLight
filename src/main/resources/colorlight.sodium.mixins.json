@@ -1,8 +1,8 @@
 {
   "required": false,
   "minVersion": "0.8",
-  "package": "me.mrhikmen.colorlight.client.mixin.sodium",
-  "plugin": "me.mrhikmen.colorlight.client.mixin.ColorLightMixinPlugin",
+  "package": "me.mrhikmen.colorlight.client.compat.sodium.mixin",
+  "plugin": "me.mrhikmen.colorlight.client.compat.sodium.mixin.ColorLightSodiumPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
   ],

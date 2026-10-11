@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.mixin.sodium;
+package me.mrhikmen.colorlight.client.compat.sodium.mixin;
 
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;

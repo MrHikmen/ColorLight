@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.compat.nvidium.mixin;
 
-import me.mrhikmen.colorlight.client.mixin.AbstractGateMixinPlugin;
+import me.mrhikmen.colorlight.client.compat.AbstractGateMixinPlugin;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**

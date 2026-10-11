@@ -1,5 +1,6 @@
-package me.mrhikmen.colorlight.client.mixin;
+package me.mrhikmen.colorlight.client.compat.sodium.mixin;
 
+import me.mrhikmen.colorlight.client.compat.AbstractGateMixinPlugin;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 
@@ -13,7 +14,7 @@ import java.util.Optional;
  * Escape hatches: {@code -Dcolorlight.noGpu=true} skips them entirely; {@code -Dcolorlight.forceGpu=true} applies them
  * to any Sodium version.
  */
-public final class ColorLightMixinPlugin extends AbstractGateMixinPlugin {
+public final class ColorLightSodiumPlugin extends AbstractGateMixinPlugin {
 
     /** Sodium versions the GPU pipeline was written against: major.minor prefix plus the Minecraft version. */
     private static final String SUPPORTED_SODIUM_PREFIX = "0.9.";
