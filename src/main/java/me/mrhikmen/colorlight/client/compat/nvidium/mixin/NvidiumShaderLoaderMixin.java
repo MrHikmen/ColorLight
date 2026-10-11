@@ -1,6 +1,6 @@
-package me.mrhikmen.colorlight.client.mixin.nvidium;
+package me.mrhikmen.colorlight.client.compat.nvidium.mixin;
 
-import me.mrhikmen.colorlight.client.core.render.gpu.NvidiumBridge;
+import me.mrhikmen.colorlight.client.compat.nvidium.NvidiumBridge;
 
 import net.minecraft.client.renderer.ShaderDefines;
 import net.minecraft.resources.Identifier;

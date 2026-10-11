@@ -1,8 +1,8 @@
 {
   "required": false,
   "minVersion": "0.8",
-  "package": "me.mrhikmen.colorlight.client.mixin.nvidium",
-  "plugin": "me.mrhikmen.colorlight.client.mixin.ColorLightNvidiumPlugin",
+  "package": "me.mrhikmen.colorlight.client.compat.nvidium.mixin",
+  "plugin": "me.mrhikmen.colorlight.client.compat.nvidium.mixin.ColorLightNvidiumPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
   ],

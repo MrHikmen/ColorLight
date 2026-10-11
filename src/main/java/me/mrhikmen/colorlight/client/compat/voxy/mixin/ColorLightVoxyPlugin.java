@@ -1,5 +1,6 @@
-package me.mrhikmen.colorlight.client.mixin;
+package me.mrhikmen.colorlight.client.compat.voxy.mixin;
 
+import me.mrhikmen.colorlight.client.mixin.AbstractGateMixinPlugin;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 

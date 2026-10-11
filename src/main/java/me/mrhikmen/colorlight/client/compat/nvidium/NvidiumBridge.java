@@ -1,7 +1,9 @@
-package me.mrhikmen.colorlight.client.core.render.gpu;
+package me.mrhikmen.colorlight.client.compat.nvidium;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.core.render.gpu.GpuLightVolume;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 

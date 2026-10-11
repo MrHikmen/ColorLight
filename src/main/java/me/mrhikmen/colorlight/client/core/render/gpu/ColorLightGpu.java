@@ -3,6 +3,7 @@ package me.mrhikmen.colorlight.client.core.render.gpu;
 import com.mojang.renderpearl.api.commands.RenderPass;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
+import me.mrhikmen.colorlight.client.compat.nvidium.NvidiumBridge;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 
