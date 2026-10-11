@@ -40,7 +40,10 @@
     ]
   },
   "mixins" : [
-    "colorlighting.mixins.json",
+    {
+      "config": "colorlighting.mixins.json",
+      "environment": "client"
+    },
     {
       "config": "colorlight.sodium.mixins.json",
       "environment": "client"
@@ -60,9 +63,9 @@
     "minecraft": "~${minecraft_version}"
   },
   "suggests": {
-    "sodium": "=> 0.8.0",
+    "sodium": "~0.9.2",
     "lambdynlights": "=> 4.0.0",
     "voxy": "=> 0.2.0",
-    "nvidium": "*"
+    "nvidium": "=> 0.4.0"
   }
 }
