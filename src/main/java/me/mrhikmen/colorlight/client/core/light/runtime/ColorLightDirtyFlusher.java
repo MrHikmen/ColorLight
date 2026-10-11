@@ -28,7 +28,7 @@ import java.util.Arrays;
  */
 public final class ColorLightDirtyFlusher {
 
-    private static final int MAX_SECTIONS_PER_TICK = 128;
+    private static final int MAX_SECTIONS_PER_TICK = 2048;
     /** Hard time cap per tick on top of the count cap; whatever is left simply waits for the next tick. */
     private static final long MAX_NANOS_PER_TICK = 1_500_000L;
     private static final int MAX_FAILED_TICKS = 200;
