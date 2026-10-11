@@ -1,21 +1,23 @@
 // ColorLight: coloured light for Voxy's LODs. This text is inserted into Voxy's vertex shader (quads3.vert) by
 // me.mrhikmen.colorlight.client.compat.lod.VoxyLightBridge; __CL_BINDING__ is replaced with a free SSBO binding.
 //
-// Buffer layout (ints), written by VoxyLightBridge, filled from LodLightMap:
+// Buffer layout (ints), written by VoxyLightBridge, filled from VoxyLightCache (read straight from Voxy's own
+// voxel storage - see that class, nothing here is ColorLight's own saved data):
 //   [0] camera block x   [1] camera block z   [2] enabled (1/0)
 //   [3] tint gamma (float bits)   [4] tint strength (float bits)
 //   [16 + section * 262144 + ((cx & 511) | (cz & 511) << 9)]: 0x00BBGGRR light colour of the cell, 0 = none.
-// Section 0 is LodLightMap's standalone "full" tier (4-block cells, each light source kept separate); sections
-// 1..3 are its coarsening levels 0..2 (8/16/32-block cells). Cells farther than 255 cells from the camera (in
-// whichever section's own cell size) are not stored.
+// Cells farther than 255 cells from the camera (in whichever section's own cell size) are not stored.
 //
 // Which section a quad samples depends only on its real distance to the camera (see cl_lodRaw), not on Voxy's own
-// LOD level for that quad:
-//   0-700 blocks    -> section 0 (4x4,  each source separate)
-//   700-1300 blocks  -> section 1 (8x8)
-//   1300-1900 blocks -> section 2 (16x16)
-//   1900+ blocks     -> section 3 (32x32, stays 32x32 out to the LOD horizon)
-// Keep the constants in sync with LodLightMap / VoxyLightBridge.
+// LOD level for that quad. 7 sections, one per VoxyLightCache.CELL_BLOCKS tier:
+//   0-700 blocks     -> section 0 (1x1,   full block resolution, each source separate)
+//   700-1300 blocks  -> section 1 (4x4)
+//   1300-1600 blocks -> section 2 (8x8)
+//   1600-1900 blocks -> section 3 (16x16, Voxy's own finest "far" voxel size)
+//   1900-2200 blocks -> section 4 (32x32)
+//   2200-2500 blocks -> section 5 (64x64)
+//   2500+ blocks     -> section 6 (128x128, stays 128x128 out to the LOD horizon)
+// Keep the constants in sync with VoxyLightCache / VoxyLightBridge.
 
 #ifdef LIGHTING_SAMPLER_BINDING
 
@@ -39,16 +41,25 @@ int cl_lodRaw() {
     int cell;
     if (dist <= 700.0) {
         section = 0;
-        cell = 4;
+        cell = 1;
     } else if (dist <= 1300.0) {
         section = 1;
+        cell = 4;
+    } else if (dist <= 1600.0) {
+        section = 2;
         cell = 8;
     } else if (dist <= 1900.0) {
-        section = 2;
-        cell = 16;
-    } else {
         section = 3;
+        cell = 16;
+    } else if (dist <= 2200.0) {
+        section = 4;
         cell = 32;
+    } else if (dist <= 2500.0) {
+        section = 5;
+        cell = 64;
+    } else {
+        section = 6;
+        cell = 128;
     }
 
     ivec2 c    = (b   - (b   & (cell - 1))) / cell; // exact floor division

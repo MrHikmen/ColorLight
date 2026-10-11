@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.lod;
+package me.mrhikmen.colorlight.client.compat.voxy;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
@@ -23,23 +23,29 @@ import java.util.Arrays;
  *     <li>{@link #patch}: Voxy builds its shader text with {@code ShaderLoader.parse}; a mixin hands the result of
  *     that to us and we add the {@code colorlight_lod.glsl} block and redirect one lighting call and one line of
  *     {@code setupQuad} to it. If any of those anchors is not found (Voxy changed), nothing is touched.</li>
- *     <li>{@link #onFrame}: once per frame a shader storage buffer with the {@link LodLightMap} grids is updated and
- *     bound. The buffer is created and bound through plain GL calls and does not touch any state that Minecraft's
- *     renderer tracks, except for the one indexed SSBO binding that we pick for ourselves.</li>
+ *     <li>{@link #onFrame}: once per frame a shader storage buffer with the {@link VoxyLightCache} grids is
+ *     updated and bound. The buffer is created and bound through plain GL calls and does not touch any state
+ *     that Minecraft's renderer tracks, except for the one indexed SSBO binding that we pick for ourselves.</li>
  * </ol>
  * <p>
- * The buffer holds {@link #SECTIONS} grids: section 0 is {@link LodLightMap}'s standalone 4-block "full" tier,
- * sections 1..3 are its coarsening levels 0..2 (8/16/32-block cells). Which section a quad samples is chosen in
- * {@code colorlight_lod.glsl} purely from the quad's distance to the camera, not from Voxy's own LOD level.
+ * The buffer holds {@link #SECTIONS} grids, one per {@link VoxyLightCache#CELL_BLOCKS} tier (1/4/8/16/32/64/128
+ * -block cells). Which section a quad samples is chosen in {@code colorlight_lod.glsl} purely from the quad's
+ * distance to the camera, not from Voxy's own LOD level - keep the shader's distance table and this class's
+ * {@link VoxyLightCache#CELL_BLOCKS} in sync.
  */
 public final class VoxyLightBridge {
 
     private static final int GRID = 512;                          // cells per side of one grid, toroidal
     private static final int HEADER_INTS = 16;
     private static final int LEVEL_INTS = GRID * GRID;
-    /** 0: full tier (4-block cells); 1..3: coarse levels 0..2 (8/16/32-block cells). Keep in sync with the shader. */
-    private static final int SECTIONS = 4;
-    private static final int FULL_CELL_SHIFT = LodLightMap.FULL_SHIFT;
+    /**
+     * One section per {@link VoxyLightCache} tier (keep this literal in sync with
+     * {@code VoxyLightCache.CELL_BLOCKS.length} and the shader's distance table - it is a plain number, not a
+     * reference to {@code VoxyLightCache.TIERS}, on purpose: {@link VoxyLightBridge} is loaded unconditionally
+     * (Voxy or not), and reading a static field of {@code VoxyLightCache} would force that class - and the Voxy
+     * classes its fields and methods mention - to load right then, even on a game without Voxy installed.
+     */
+    private static final int SECTIONS = 7;
     private static final int TOTAL_INTS = HEADER_INTS + SECTIONS * LEVEL_INTS;
 
     private static volatile boolean patched;
@@ -53,7 +59,7 @@ public final class VoxyLightBridge {
     private static IntBuffer gridBytes;
     private static final int[] gridScratch = new int[LEVEL_INTS];
 
-    private static LodLightMap lastMap;
+    private static VoxyLightCache lastCache;
     private static final long[] uploadedVersion = new long[SECTIONS];
     private static final int[] uploadedCamX = new int[SECTIONS];
     private static final int[] uploadedCamZ = new int[SECTIONS];
@@ -142,14 +148,14 @@ public final class VoxyLightBridge {
             // bind every frame: an indexed binding is global GL state, and this is cheap
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer);
 
-            LodLightMap map = LodLight.map();
-            boolean enabled = map != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
+            VoxyLightCache cache = LodLight.cache();
+            boolean enabled = cache != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
                     && ColorLightEngineHolder.get() != null;
 
             writeHeader(camBlockX, camBlockZ, enabled);
 
             if (enabled)
-                uploadOneLevel(map, camBlockX, camBlockZ);
+                uploadOneLevel(cache, camBlockX, camBlockZ);
         } catch (Throwable t) {
             ColorLightClient.LOGGER.error("[ColorLight] Far light colours for Voxy turned off: {}", t.toString());
             patched = false; // the shader then just sees "disabled" (header stays as last written)
@@ -171,7 +177,7 @@ public final class VoxyLightBridge {
         headerBytes.flip();
         GL45C.glNamedBufferSubData(buffer, 0L, headerBytes); // header[2] = 0: disabled until the first real frame
         Arrays.fill(uploadedVersion, -1L);
-        lastMap = null;
+        lastCache = null;
     }
 
     private static void writeHeader(int camX, int camZ, boolean enabled) {
@@ -193,25 +199,21 @@ public final class VoxyLightBridge {
     }
 
     /** Refreshes at most one section per frame, so a big refill never lands in a single frame. */
-    private static void uploadOneLevel(LodLightMap map, int camX, int camZ) {
-        if (map != lastMap) {
-            lastMap = map;
+    private static void uploadOneLevel(VoxyLightCache cache, int camX, int camZ) {
+        if (cache != lastCache) {
+            lastCache = cache;
             Arrays.fill(uploadedVersion, -1L);
         }
 
         for (int s = 0; s < SECTIONS; s++) {
-            boolean full = s == 0;
-            int shift = full ? FULL_CELL_SHIFT : (LodLightMap.BASE_SHIFT + (s - 1));
-            long version = full ? map.fullVersion() : map.version(s - 1);
+            int shift = Integer.numberOfTrailingZeros(VoxyLightCache.CELL_BLOCKS[s]);
+            long version = cache.version(s);
             int cellX = camX >> shift;
             int cellZ = camZ >> shift;
             if (version == uploadedVersion[s] && cellX == uploadedCamX[s] && cellZ == uploadedCamZ[s])
                 continue;
 
-            if (full)
-                map.fillFullGrid(cellX, cellZ, GRID, gridScratch);
-            else
-                map.fillGrid(s - 1, cellX, cellZ, GRID, gridScratch);
+            cache.fillGrid(s, cellX, cellZ, GRID, gridScratch);
             gridBytes.clear();
             gridBytes.put(gridScratch, 0, LEVEL_INTS).flip();
             GL45C.glNamedBufferSubData(buffer, (long) (HEADER_INTS + s * LEVEL_INTS) * Integer.BYTES, gridBytes);

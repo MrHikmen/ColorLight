@@ -2,7 +2,7 @@ package me.mrhikmen.colorlight.client.config.gui.sodium;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
-import me.mrhikmen.colorlight.client.compat.lod.ColorLightVoxyCompat;
+import me.mrhikmen.colorlight.client.compat.voxy.ColorLightVoxyCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;

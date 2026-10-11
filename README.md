@@ -1,10 +1,10 @@
-# ColorLight — What Changed (3 commits)
+# ColorLight shader GPU pipeline — What Changed
 
 A developer-focused breakdown of three commits in `ColorLight`: what changed technically and how to use/account for it.
 
 ---
 
-## 1. `57eee4a` — Shader GPU pipeline
+## 1. Shader GPU pipeline
 
 **Summary:** adds an alternative way to light the terrain — instead of baking colour into the chunk mesh (the old way), a **GPU shader** now reads colour directly from a "light volume" on the GPU, per pixel.
 
@@ -45,7 +45,7 @@ boolean mergeMaxInto(int sx, int sy, int sz, int[] out);    // per-channel max m
 
 ---
 
-## 2. `d4bb46d` — Voxy support again
+## 2. Voxy support again
 
 **Summary:** restores support for **Voxy** (a far-chunk LOD renderer), plus a new "far light" subsystem that keeps a simplified light map for chunks beyond normal render distance and survives game restarts.
 
@@ -77,7 +77,7 @@ ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
 
 ---
 
-## 3. `409d22d` — minor edits (refactor, no new behaviour)
+## 3. Minor edits (refactor, no new behaviour)
 
 Purely internal cleanup; behaviour is unchanged, but relevant if you're contributing to this codebase.
 
@@ -116,25 +116,47 @@ abstract class AbstractGateMixinPlugin implements IMixinConfigPlugin {
 
 ---
 
-## Summary table
+## 4. Far light now reads Voxy directly, no more disk persistence
 
-| Commit | Adds | Breaking changes |
+**Summary:** `LodLightMap` (ColorLight's own scanned-and-saved copy of distant light, `<game dir>/colorlight/lodlight/*.bin`) is gone. Far light is now read straight from Voxy's own, already-persistent voxel storage (`WorldEngine`/`WorldSection`/`Mapper`) every time it's needed, memoised only in memory for the session. Also reworked the distance/cell-size table: near field is now full 1-block resolution instead of 4-block, and the coarsening chain now goes out to 128-block cells instead of stopping at 32.
+
+### New/changed classes — `client/compat/lod/`
+- `VoxyLightCache.java` **(new)** — replaces `LodLightMap.java` (deleted). For each visible cell, walks straight down a Voxy voxel column (`WorldEngine.acquireIfExists(level, x, y, z)` → `WorldSection._unsafeGetRawDataArray()` → `Mapper.getBlockStateFromBlockId(...)`) and asks `ColorLightBlockRegistry` whether that block is a configured light source, same as a normal chunk scan. No own save format, no `engine.forEachLitSection` rescan, no autosave timer - the "file" is just Voxy's world, which already persists forever. Work that touches Voxy's section storage (and so can block on IO) runs on its own background thread, budgeted per tick; `fillGrid` (called from the render thread) only ever reads the already-filled, thread-safe in-memory maps.
+- `LodLight.java` — same public shape (`cache()`/`markDirty()`/`tick()`/`shutdown()`, `markDirty` is now a no-op kept for source compatibility), but owns a `VoxyLightCache` instead of a `LodLightMap`, and has **zero Voxy imports of its own** on purpose: `ColorLightClient` ticks it unconditionally, Voxy or not, so everything Voxy-specific has to stay behind `ColorLightVoxyCompat.isPresent()` and inside `VoxyLightCache` (which `VoxyCommon`/`WorldEngine`/etc. is only ever loaded once that's confirmed true).
+- `VoxyLightBridge.java` — `SECTIONS` 4 → 7 (one per `VoxyLightCache.CELL_BLOCKS` tier); reads `VoxyLightCache.fillGrid`/`version` instead of `LodLightMap.fillGrid`/`fillFullGrid`.
+- `assets/colorlight/shaders/voxy/colorlight_lod.glsl` — new 7-way distance table.
+
+### New distance/cell-size table (`colorlight_lod.glsl`, `VoxyLightCache.CELL_BLOCKS`)
+| Distance from camera | Cell size | Voxy LOD level used |
 |---|---|---|
-| `57eee4a` | GPU shader lighting pipeline, new config options `GPU_PIPELINE`/`GPU_LIGHT_SECTIONS` | None, but changes mesh-rebuild behaviour when enabled |
-| `d4bb46d` | Voxy support + "far light" subsystem with disk persistence | None, purely additive, gated by Voxy's presence |
-| `409d22d` | Refactor (shared base class for colour-picker widgets, shared blockstate model parser, shared base class for mixin plugins) | Yes, to the class hierarchy of `HueBarWidget`/`ColorSquareWidget` and the contract of custom `IMixinConfigPlugin`s if anyone extended them directly |
+| 0 - 700 blocks | 1×1×1 | 0 (Voxy's own finest) |
+| 700 - 1300 | 4×4×4 | 2 |
+| 1300 - 1600 | 8×8×8 | 3 |
+| 1600 - 1900 | 16×16×16 | 4 (Voxy's own coarsest) |
+| 1900 - 2200 | 32×32×32 | 4, 2×2×2 voxels grouped |
+| 2200 - 2500 | 64×64×64 | 4, 4×4×4 voxels grouped |
+| 2500+ | 128×128×128 (capped) | 4, 8×8×8 voxels grouped |
+
+Voxy itself only stores voxels down to 16 blocks/voxel (`WorldEngine.MAX_LOD_LAYER = 4`), so the three coarsest tiers don't correspond to a real Voxy level - they group several of Voxy's level-4 voxels per output cell and keep the brightest, same "top of column wins" rule as before.
+
+### What this means for developers
+- `LodLightMap` no longer exists; nothing reads or writes `<game dir>/colorlight/lodlight/` any more. If you had tooling that parsed that `.bin` format, it has nothing to read now.
+- Far light for a spot the player has never actually had loaded in Voxy (never imported/explored) is simply absent (same as before - this was never a prediction, only a memory of blocks Voxy actually has).
+- A distant light source changing (e.g. a player breaks a torch 1000 blocks away, in an area Voxy keeps updated) is only reflected once its cell's memo entry is recomputed; this build does not hook Voxy's own dirty-section callback (that callback has exactly one slot and Voxy's own renderer already owns it - stealing it would break Voxy's rendering), so for now that happens on a world rejoin or `clear()`, not live. Flagged as a known limitation, not silently glossed over.
+- `VoxyLightCache` directly imports Voxy's `WorldEngine`/`WorldSection`/`Mapper`/`VoxyCommon` - unlike `VoxyLightBridge`'s shader patching, this is a real compile-time API dependency (already declared `compileOnly` in `build.gradle`). Keep all Voxy-typed method signatures inside `VoxyLightCache` itself (or another class only reached behind `ColorLightVoxyCompat.isPresent()`); never add a Voxy-typed field or method signature to `LodLight` or anything else that's loaded unconditionally.
+
 ---
 
 <details>
 <summary>Rus</summary>
 
-# ColorLight — что изменилось (3 коммита)
+# ColorLight shader GPU pipeline — что изменилось
 
 Разбор трёх коммитов в `ColorLight`: что поменялось технически и как это использовать/учитывать при разработке.
 
 ---
 
-## 1. `57eee4a` — Shader GPU pipeline
+## 1. Shader GPU pipeline
 
 **Суть:** добавлен альтернативный способ освещения террейна — не через запекание цвета в меш чанка (как раньше), а через **GPU-шейдер**, который читает цвет напрямую из "светового тома" (light volume) на GPU, попиксельно.
 
@@ -175,7 +197,7 @@ boolean mergeMaxInto(int sx, int sy, int sz, int[] out);    // покомпон�
 
 ---
 
-## 2. `d4bb46d` — Voxy support again
+## 2. Voxy support again
 
 **Суть:** возвращена поддержка мода **Voxy** (LOD-рендерер дальних чанков) — плюс новая подсистема "far light" (LOD-освещение), которая хранит упрощённую карту освещения для чанков вне обычной дальности прогрузки и переживает перезапуск игры.
 
@@ -207,7 +229,7 @@ ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
 
 ---
 
-## 3. `409d22d` — minor edits (рефакторинг без новых фич)
+## 3. Minor edits (рефакторинг без новых фич)
 
 Чисто внутренняя чистка, поведение не меняется, но важно знать, если делаете PR в этот код.
 
@@ -246,13 +268,34 @@ abstract class AbstractGateMixinPlugin implements IMixinConfigPlugin {
 
 ---
 
-## Итоговая сводка по порядку коммитов
+## 4. Far light теперь читается напрямую из Voxy, без сохранения на диск
 
-| Коммит | Что добавляет | Breaking changes |
+**Суть:** `LodLightMap` (собственная сканированная и сохраняемая копия дальнего света, `<game dir>/colorlight/lodlight/*.bin`) убрана. Дальний свет теперь каждый раз читается напрямую из собственного, уже персистентного вокселя-хранилища Voxy (`WorldEngine`/`WorldSection`/`Mapper`), с мемоизацией только в памяти на время сессии. Заодно переработана таблица дистанция/размер ячейки: ближняя зона теперь полное разрешение 1 блок вместо 4, а огрубление идёт до ячеек 128 блоков вместо остановки на 32.
+
+### Новые/изменённые классы — `client/compat/lod/`
+- `VoxyLightCache.java` **(новый)** — заменяет `LodLightMap.java` (удалён). Для каждой видимой ячейки идёт прямо вниз по вокселя-колонке Voxy (`WorldEngine.acquireIfExists(level, x, y, z)` → `WorldSection._unsafeGetRawDataArray()` → `Mapper.getBlockStateFromBlockId(...)`) и спрашивает у `ColorLightBlockRegistry`, является ли этот блок настроенным источником света — так же, как обычное сканирование чанка. Нет своего формата сохранения, нет пересканирования через `engine.forEachLitSection`, нет таймера автосохранения — "файлом" выступает сам мир Voxy, который и так хранится вечно. Работа, трогающая хранилище секций Voxy (а значит, потенциально блокирующая на IO), идёт в отдельном фоновом потоке с бюджетом на тик; `fillGrid` (вызывается из render-потока) только читает уже заполненные потокобезопасные карты в памяти.
+- `LodLight.java` — та же публичная форма (`cache()`/`markDirty()`/`tick()`/`shutdown()`, `markDirty` теперь no-op, оставлен для совместимости исходников), но владеет `VoxyLightCache` вместо `LodLightMap`, и намеренно **не содержит ни одного импорта Voxy**: `ColorLightClient` тикает его безусловно, с Voxy или без, так что всё специфичное для Voxy должно оставаться за `ColorLightVoxyCompat.isPresent()` и внутри `VoxyLightCache` (куда `VoxyCommon`/`WorldEngine`/и т.д. подгружаются только после подтверждения этого условия).
+- `VoxyLightBridge.java` — `SECTIONS` 4 → 7 (по одной на каждый уровень `VoxyLightCache.CELL_BLOCKS`); читает `VoxyLightCache.fillGrid`/`version` вместо `LodLightMap.fillGrid`/`fillFullGrid`.
+- `assets/colorlight/shaders/voxy/colorlight_lod.glsl` — новая таблица дистанций на 7 уровней.
+
+### Новая таблица дистанция/размер ячейки (`colorlight_lod.glsl`, `VoxyLightCache.CELL_BLOCKS`)
+| Дистанция от камеры | Размер ячейки | Используемый LOD-уровень Voxy |
 |---|---|---|
-| `57eee4a` | GPU-шейдерный пайплайн освещения террейна, новые опции конфига `GPU_PIPELINE`/`GPU_LIGHT_SECTIONS` | Нет, но меняет логику ребилда мешей при включённой опции |
-| `d4bb46d` | Поддержка Voxy + подсистема "far light" с сохранением на диск | Нет, чисто аддитивно, гейтится наличием Voxy |
-| `409d22d` | Рефакторинг (общий базовый класс для color-picker виджетов, общий парсер blockstate-моделей, общий базовый класс для mixin-плагинов) | Да, по иерархии классов `HueBarWidget`/`ColorSquareWidget` и контракту кастомных `IMixinConfigPlugin`, если кто-то их наследовал напрямую |
+| 0 - 700 блоков | 1×1×1 | 0 (собственный самый точный уровень Voxy) |
+| 700 - 1300 | 4×4×4 | 2 |
+| 1300 - 1600 | 8×8×8 | 3 |
+| 1600 - 1900 | 16×16×16 | 4 (собственный самый грубый уровень Voxy) |
+| 1900 - 2200 | 32×32×32 | 4, группировка 2×2×2 вокселей |
+| 2200 - 2500 | 64×64×64 | 4, группировка 4×4×4 вокселей |
+| 2500+ | 128×128×128 (потолок) | 4, группировка 8×8×8 вокселей |
+
+Сам Voxy хранит воксели только до 16 блоков/воксель (`WorldEngine.MAX_LOD_LAYER = 4`), поэтому три самых грубых уровня не соответствуют реальному уровню Voxy — они группируют несколько вокселей уровня 4 Voxy на одну выходную ячейку и берут самый яркий, то же правило "верх колонки побеждает", что и раньше.
+
+### Как это использовать для разработчиков
+- `LodLightMap` больше не существует; ничто не читает и не пишет `<game dir>/colorlight/lodlight/`. Если у вас были инструменты, парсящие этот `.bin`-формат — парсить больше нечего.
+- Дальний свет для места, которое игрок никогда реально не прогружал в Voxy (не импортировано/не исследовано), просто отсутствует (как и раньше — это никогда не было предсказанием, только памятью о блоках, которые Voxy реально знает).
+- Изменение удалённого источника света (например, игрок ломает факел в 1000 блоках, в области, которую Voxy продолжает обновлять) отражается только после пересчёта мемо-записи этой ячейки; эта сборка не цепляется за собственный dirty-колбэк Voxy (у него ровно один слот, и им уже владеет собственный рендерер Voxy — забрать его значило бы сломать рендер Voxy), так что пока это происходит при повторном входе в мир или `clear()`, а не "вживую". Это явное известное ограничение, а не замалчиваемое.
+- `VoxyLightCache` напрямую импортирует `WorldEngine`/`WorldSection`/`Mapper`/`VoxyCommon` из Voxy — в отличие от патчинга шейдера в `VoxyLightBridge`, это настоящая compile-time зависимость от API (уже объявлена как `compileOnly` в `build.gradle`). Держите все Voxy-типизированные сигнатуры методов внутри самого `VoxyLightCache` (или другого класса, до которого можно дойти только за `ColorLightVoxyCompat.isPresent()`); никогда не добавляйте Voxy-типизированное поле или сигнатуру метода в `LodLight` или что-либо ещё, что грузится безусловно.
 
 </details>
 

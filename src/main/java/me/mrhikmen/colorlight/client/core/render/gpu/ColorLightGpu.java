@@ -6,7 +6,7 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 
-import me.mrhikmen.colorlight.client.compat.lod.VoxyLightBridge;
+import me.mrhikmen.colorlight.client.compat.voxy.VoxyLightBridge;
 
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -275,6 +275,9 @@ public final class ColorLightGpu {
 
         prepareFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
 
+        if (volume().isRawGl())
+            return; // Nvidium owns the draw; this hook only runs if Sodium draws after all, and has no GpuBuffers to bind
+
         if (!failed && !(layoutPatched && vertexRedirected && fragmentRedirected)) {
             // vertex colours take over, but the pipeline is still ours: keep binding below
             fail("a Sodium hook did not apply (layout=" + layoutPatched + ", vertex=" + vertexRedirected
@@ -299,8 +302,64 @@ public final class ColorLightGpu {
 
     private static GpuLightVolume volume() {
         if (volume == null)
-            volume = new GpuLightVolume(ColorLightClient.config.GPU_LIGHT_SECTIONS);
+            volume = new GpuLightVolume(ColorLightClient.config.GPU_LIGHT_SECTIONS, nvidiumRenders());
         return volume;
+    }
+
+    // ------------------------------------------------------------------------------------------------------
+    // Nvidium: it replaces Sodium's terrain draw (SodiumWorldRenderer.renderLayer is cancelled), so the draw hook above
+    // never runs. Nvidium draws with its own GL program and reads the light volume itself: ColorLight keeps the volume
+    // in plain GL buffers then (GpuLightVolume raw mode); NvidiumBridge patches Nvidium's shaders through mixins
+    // (mixin.nvidium) and attaches the buffers to them as texel buffers.
+    // ------------------------------------------------------------------------------------------------------
+
+    private static final int NVIDIUM_UNKNOWN = 0;
+    private static final int NVIDIUM_YES = 1;
+    private static final int NVIDIUM_NO = 2;
+    private static volatile int nvidium = NVIDIUM_UNKNOWN;
+
+    /**
+     * True if Nvidium is installed AND actually in charge of the terrain (it switches itself off on GPUs without mesh
+     * shaders). Nvidium decides that when the GL device is created, long before the first frame, so asking late enough
+     * (first frame / first volume) is safe; the answer is then fixed for the session.
+     */
+    public static boolean nvidiumRenders() {
+        int n = nvidium;
+        if (n == NVIDIUM_UNKNOWN) {
+            boolean on = false;
+            if (FabricLoader.getInstance().isModLoaded("nvidium")) {
+                try {
+                    Class<?> cls = Class.forName("me.cortex.nvidium.Nvidium", true, ColorLightGpu.class.getClassLoader());
+                    on = cls.getField("IS_ENABLED").getBoolean(null);
+                } catch (Throwable t) {
+                    ColorLightClient.LOGGER.warn("[ColorLight] Nvidium is installed but its state could not be read: {}", t.toString());
+                }
+                ColorLightClient.LOGGER.info("[ColorLight] Nvidium {}", on ? "is rendering the terrain: light volume goes to its shaders" : "is installed but inactive");
+            }
+            n = on ? NVIDIUM_YES : NVIDIUM_NO;
+            nvidium = n;
+        }
+        return n == NVIDIUM_YES;
+    }
+
+    /**
+     * True if Nvidium's terrain shaders should be patched with the ColorLight code (see {@link NvidiumBridge}). Decided once per session, like {@link #gpuMode()}. Whether the light is used at a given moment
+     * is still the header's enabled flag, so the config switch and failures need no shader rebuild.
+     */
+    public static boolean externalRendererSupported() {
+        return gpuMode() && nvidiumRenders();
+    }
+
+    /**
+     * For {@link NvidiumBridge}: OpenGL names of the light volume's
+     * {header, data, pool} buffers, or null while there are none (no frame has been prepared yet, or the pipeline
+     * failed). Null makes the shader fall back to the vertex colours / vanilla light.
+     */
+    public static int[] externalBuffers() {
+        if (failed || !gpuMode() || !nvidiumRenders())
+            return null;
+        GpuLightVolume v = volume;
+        return v == null ? null : v.glBufferNames();
     }
 
     /** The engine reported these sections as changed. */

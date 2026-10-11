@@ -13,6 +13,8 @@ import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 
+import org.lwjgl.opengl.GL15C;
+import org.lwjgl.opengl.GL45C;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -66,6 +68,14 @@ public final class GpuLightVolume {
 
     private final int slotCount;
 
+    /**
+     * Raw GL mode: the three buffers are plain OpenGL buffer objects instead of renderpearl {@link GpuBuffer}s. Used when
+     * another renderer (Nvidium) draws the terrain with its own GL program: it needs the buffer names to attach them
+     * as texel buffers, and renderpearl's draw-time bind groups do not exist there. The layout is identical.
+     */
+    private final boolean rawGl;
+    private int glHeader, glData, glPool;
+
     private GpuBuffer header_;
     private GpuBuffer data;
     private GpuBuffer pool;
@@ -97,6 +107,11 @@ public final class GpuLightVolume {
     }
 
     public GpuLightVolume(int requestedSlots) {
+        this(requestedSlots, false);
+    }
+
+    public GpuLightVolume(int requestedSlots, boolean rawGl) {
+        this.rawGl = rawGl;
         this.slotCount = clampSlots(requestedSlots);
         this.freeSlots = new int[slotCount];
         this.slotOf.defaultReturnValue(-1);
@@ -111,8 +126,21 @@ public final class GpuLightVolume {
     // GPU resources
     // ------------------------------------------------------------------------------------------------------
 
+    public boolean isRawGl() {
+        return rawGl;
+    }
+
     public boolean hasBuffers() {
+        if (rawGl)
+            return glHeader != 0 && glData != 0 && glPool != 0;
         return header_ != null && data != null && pool != null;
+    }
+
+    /** Raw GL mode only: OpenGL names of {header, data, pool}, or null while the buffers don't exist. */
+    public int[] glBufferNames() {
+        if (!rawGl || !hasBuffers())
+            return null;
+        return new int[]{glHeader, glData, glPool};
     }
 
     public GpuBuffer headerBuffer() {
@@ -132,6 +160,11 @@ public final class GpuLightVolume {
         if (hasBuffers())
             return;
 
+        if (rawGl) {
+            createRawBuffers();
+            return;
+        }
+
         var device = RenderSystem.getDevice();
         header_ = device.createBuffer(() -> "ColorLight light header", USAGE, (long) HEADER_INTS * Integer.BYTES);
         data = device.createBuffer(() -> "ColorLight light pages", USAGE, (long) PAGE_COUNT * Integer.BYTES);
@@ -146,8 +179,41 @@ public final class GpuLightVolume {
         headerWritten = false;
     }
 
+    private static int createRawBuffer(long sizeBytes, ByteBuffer initial) {
+        int id = GL45C.glCreateBuffers();
+        // immutable storage; DYNAMIC_STORAGE lets us update it with glNamedBufferSubData
+        GL45C.glNamedBufferStorage(id, sizeBytes, GL45C.GL_DYNAMIC_STORAGE_BIT);
+        if (initial != null)
+            GL45C.glNamedBufferSubData(id, 0L, initial);
+        return id;
+    }
+
+    private void createRawBuffers() {
+        ByteBuffer headerInit = MemoryUtil.memCalloc(HEADER_INTS * Integer.BYTES); // disabled until the first writeHeader
+        ByteBuffer pagesInit = MemoryUtil.memAlloc(PAGE_COUNT * Integer.BYTES);
+        try {
+            MemoryUtil.memSet(pagesInit, 0xFF); // every page -1 = "no light here"
+            glHeader = createRawBuffer((long) HEADER_INTS * Integer.BYTES, headerInit);
+            glData = createRawBuffer((long) PAGE_COUNT * Integer.BYTES, pagesInit);
+            glPool = createRawBuffer((long) slotCount * SECTION_CELLS * Integer.BYTES, null);
+        } finally {
+            MemoryUtil.memFree(headerInit);
+            MemoryUtil.memFree(pagesInit);
+        }
+        headerWritten = false;
+    }
+
     /** Frees the GPU buffers and the scratch memory. The volume must not be used afterwards. */
     public void close() {
+        if (rawGl) {
+            if (glHeader != 0)
+                GL15C.glDeleteBuffers(glHeader);
+            if (glData != 0)
+                GL15C.glDeleteBuffers(glData);
+            if (glPool != 0)
+                GL15C.glDeleteBuffers(glPool);
+            glHeader = glData = glPool = 0;
+        }
         if (header_ != null) {
             header_.close();
             header_ = null;
@@ -168,11 +234,19 @@ public final class GpuLightVolume {
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buffer.slice(offsetBytes, lengthBytes), source);
     }
 
+    /** Raw GL: same as {@link #write} for the buffer with the given GL name ({@code source} is position..limit). */
+    private void writeRaw(int glBuffer, long offsetBytes, ByteBuffer source) {
+        GL45C.glNamedBufferSubData(glBuffer, offsetBytes, source);
+    }
+
     private void writePage(int pageIndex, int value) {
         wordBytes.clear();
         wordBytes.putInt(value);
         wordBytes.flip();
-        write(data, (long) pageIndex * Integer.BYTES, wordBytes, Integer.BYTES);
+        if (rawGl)
+            writeRaw(glData, (long) pageIndex * Integer.BYTES, wordBytes);
+        else
+            write(data, (long) pageIndex * Integer.BYTES, wordBytes, Integer.BYTES);
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -202,11 +276,15 @@ public final class GpuLightVolume {
         if (headerWritten && Arrays.equals(header, lastHeader))
             return;
 
-        // mapped, not written through the command encoder: this runs while Sodium's render pass is open
-        try (var mapping = header_.map(false, true)) {
-            ByteBuffer bytes = mapping.data().order(ByteOrder.nativeOrder());
-            for (int i = 0; i < HEADER_INTS; i++)
-                bytes.putInt(i * Integer.BYTES, header[i]);
+        if (rawGl) {
+            GL45C.glNamedBufferSubData(glHeader, 0L, header);
+        } else {
+            // mapped, not written through the command encoder: this runs while Sodium's render pass is open
+            try (var mapping = header_.map(false, true)) {
+                ByteBuffer bytes = mapping.data().order(ByteOrder.nativeOrder());
+                for (int i = 0; i < HEADER_INTS; i++)
+                    bytes.putInt(i * Integer.BYTES, header[i]);
+            }
         }
 
         System.arraycopy(header, 0, lastHeader, 0, HEADER_INTS);
@@ -368,7 +446,10 @@ public final class GpuLightVolume {
         sectionBytes.clear();
         sectionBytes.asIntBuffer().put(cells);
         sectionBytes.limit(SECTION_CELLS * Integer.BYTES);
-        write(pool, (long) slot * SECTION_CELLS * Integer.BYTES, sectionBytes, SECTION_CELLS * Integer.BYTES);
+        if (rawGl)
+            writeRaw(glPool, (long) slot * SECTION_CELLS * Integer.BYTES, sectionBytes);
+        else
+            write(pool, (long) slot * SECTION_CELLS * Integer.BYTES, sectionBytes, SECTION_CELLS * Integer.BYTES);
 
         if (fresh)
             writePage(pageIndex(sx, sy, sz), slot); // after the data, so the shader never sees a half-written section

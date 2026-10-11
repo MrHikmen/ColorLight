@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.lod;
+package me.mrhikmen.colorlight.client.compat.voxy;
 
 import net.fabricmc.loader.api.FabricLoader;
 

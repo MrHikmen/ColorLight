@@ -7,7 +7,7 @@ import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 import me.mrhikmen.colorlight.client.core.render.ColorLightRenderUtil;
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
-import me.mrhikmen.colorlight.client.compat.lod.LodLight;
+import me.mrhikmen.colorlight.client.compat.voxy.LodLight;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -28,6 +28,17 @@ import java.util.Arrays;
  */
 public final class ColorLightDirtyFlusher {
 
+    /**
+     * Was 128. Too low for a single interactive edit: removing (or placing) one static source in an
+     * open/low-opacity area floods {@code maxRangeBlocks} blocks in every direction, which easily touches
+     * several hundred sections in one {@link ColorLightEngine} operation (see {@code darkenAndCollectSeeds}).
+     * At 128/tick that burst used to be spread over many ticks; nearest-first order meant sections near the
+     * player updated first and far ones kept showing the old (stale) colour for several more ticks, i.e. a
+     * visible wavefront of flicker/patchy colour radiating outward every time a light source was removed or
+     * added - not a single bad frame, but a glitch lasting up to a second or more. Raised so a normal
+     * interactive edit finishes in one tick; {@link #MAX_NANOS_PER_TICK} remains the real safety valve against
+     * pathological bursts (e.g. thousands of sections right after joining a world).
+     */
     private static final int MAX_SECTIONS_PER_TICK = 2048;
     /** Hard time cap per tick on top of the count cap; whatever is left simply waits for the next tick. */
     private static final long MAX_NANOS_PER_TICK = 1_500_000L;

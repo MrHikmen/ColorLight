@@ -51,14 +51,18 @@ dependencies {
     implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
     implementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 
-    //LDL compat
+    //Compat:
+    //LDL
     compileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
 
-    //voxy compat
+    //Voxy
     compileOnly "maven.modrinth:fxxUqruK:LzyXnE51"
 
-    //dh compat
-    compileOnly "maven.modrinth:uCdwusMi:gBf0SaV1"
+    //DH
+    compileOnly "maven.modrinth:uCdwusMi:TGgEbP9A"
+
+    //Nvidium
+    compileOnly "maven.modrinth:SfMw2IZN:8mVK1zbk"
 }
 
 processResources {

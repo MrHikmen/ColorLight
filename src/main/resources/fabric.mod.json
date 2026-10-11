@@ -48,6 +48,10 @@
     {
       "config": "colorlight.voxy.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "colorlight.nvidium.mixins.json",
+      "environment": "client"
     }
   ],
   "depends": {
@@ -58,6 +62,7 @@
   "suggests": {
     "sodium": "=> 0.8.0",
     "lambdynlights": "=> 4.0.0",
-    "voxy": "=> 0.2.0"
+    "voxy": "=> 0.2.0",
+    "nvidium": "*"
   }
 }
