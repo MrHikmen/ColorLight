@@ -4,6 +4,7 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
+import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
@@ -16,95 +17,205 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 /**
- * Coloured light for Voxy's distant LODs, read straight from Voxy's own (already persistent) voxel storage
- * instead of a separate copy ColorLight builds and saves itself.
+ * The list of coloured light sources of the world, for Voxy's distant LODs.
  * <p>
- * There is no "far light" file any more: everything here is a plain in-memory memo cache, good for one session.
- * Voxy already keeps its block data on disk forever (that is the whole point of Voxy), so re-deriving which
- * voxels are coloured light sources from it is cheap enough to simply redo next time a world is joined, and a
- * lot simpler than keeping our own save format in sync with Voxy's.
+ * <b>What the CPU does:</b> it only finds out <i>where</i> light sources are. Voxy's level-0 sections (full block
+ * resolution, saved by Voxy itself) are scanned in the background for blocks the ColorLight registry knows as
+ * coloured lights; every 32x32-block section column keeps a flat list of {@code x, y, z, rgb}. The lists are
+ * remembered on disk, so nothing has to be read twice, and a column is read again when Voxy reports a change in it
+ * (or the engine changed a nearby light), so a placed or broken light shows up (or goes away) by itself.
  * <p>
- * <b>Tiers</b> (cell width in blocks): {@link #CELL_BLOCKS}. The first four map 1:1 onto one of Voxy's own LOD
- * levels (0..4, i.e. 1/4/8/16-block voxels - Voxy's finest and its own coarsest). Voxy does not go coarser than
- * 16 blocks/voxel ({@code WorldEngine.MAX_LOD_LAYER}), so the remaining tiers (32/64/128) are built by grouping
- * several of Voxy's level-4 voxels per cell and keeping the brightest, the same "top of column wins" rule used
- * everywhere else here.
+ * <b>What the GPU does:</b> {@link VoxyLightBridge} uploads those lists together with a small table "column -> where
+ * its sources are", and {@code colorlight_lod.glsl} works out the colour of every LOD block itself, from the sources
+ * around it (3D distance, linear fade over the light range - like the normal engine). The brightness still comes
+ * from Voxy's own per-voxel light value, which is also what Voxy does for its normal lighting.
  * <p>
- * Only a column's topmost clearly-lit voxel is kept (same reasoning as the old {@code LodLightMap}: the visible
- * face of a LOD from a distance is its top), each channel the block's own colour - there is no flood-fill out
- * here, so a light's glow does not bleed into neighbouring cells the way it does up close.
- * <p>
- * All public methods are safe to call from any thread. Cell computation (which touches Voxy's section storage,
- * and so may block on IO the first time an area is visited) always happens on a single background worker;
- * {@link #fillGrid} only ever reads the already-memoised result and never blocks.
+ * Everything here is safe to call from any thread. Voxy storage is only touched from one background worker, in
+ * short time slices with pauses between, so it never takes a noticeable part of a frame.
  */
 public final class VoxyLightCache {
 
-    /** Cell width in blocks, index = tier. Keep in sync with {@code colorlight_lod.glsl}. */
-    public static final int[] CELL_BLOCKS = {1, 4, 8, 16, 32, 64, 128};
-    public static final int TIERS = CELL_BLOCKS.length;
+    /** Columns per side of the toroidal "column -> sources" table (keep in sync with VoxyLightBridge and the shader). */
+    public static final int GRID_COLS = 256;
+    /** Most sources uploaded at once (nearest columns first). Keep in sync with VoxyLightBridge. */
+    public static final int MAX_SOURCES = 131072;
+    /** Radius, in 32-block columns, that is scanned and uploaded (2880 blocks). */
+    public static final int WINDOW_COLS = 90;
+    /** The camera may move this many columns before the table is rebuilt (the shader keeps this margin). */
+    public static final int DRIFT_COLS = 8;
 
-    /** Which Voxy LOD level a tier's voxels come from (clamped to Voxy's own max, level 4). */
-    private static final int[] VOXY_LEVEL = {0, 2, 3, 4, 4, 4, 4};
+    private static final int MAX_PER_COLUMN = 128;
+    private static final int SCAN_TOP_Y = 400;
+    private static final int SCAN_BOTTOM_Y = -128;
+    private static final int MIN_BRIGHTNESS = 8; // out of 255
 
-    private static final int MIN_BRIGHTNESS = 8; // out of 255; fainter than this is not worth a colour
-    // Generous world-height window (blocks) to scan a column through; covers vanilla dimensions and then some.
-    private static final int SCAN_TOP_Y = 512;
-    private static final int SCAN_BOTTOM_Y = -512;
+    private static final long SLICE_NANOS = 3_000_000L;
+    private static final long SLICE_GAP_MS = 40L;
+    private static final long VOXY_CHANGE_DELAY_MS = 800L;
+    private static final long ENGINE_CHANGE_DELAY_MS = 2_500L;
+    private static final int[] NO_SOURCES = new int[0];
 
-    /** Cell key (x,z) -> (topBlockY + Y_BIAS) << 32 | brightness << 24 | 0xBBGGRR. 0 = "checked, nothing lit". */
-    private static final long Y_BIAS = 1L << 20;
+    private static final int FILE_MAGIC = 0x434C5658; // 'CLVX'
+    private static final int FILE_FORMAT = 3;         // 3: source lists (older far-light files are ignored)
 
-    private final ConcurrentHashMap<Long, Long>[] cache;
-    private final AtomicLong[] versions;
+    /** Nearest-first list of column offsets inside {@link #WINDOW_COLS}. */
+    private static final int[] SWEEP_DX;
+    private static final int[] SWEEP_DZ;
 
-    private static final int BUDGET_PER_TICK = 48; // new (uncached) cells computed per drain, across all tiers
-    private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "ColorLight Voxy Light Sampler");
+    static {
+        int r = WINDOW_COLS;
+        List<long[]> all = new ArrayList<>();
+        for (int dz = -r; dz <= r; dz++)
+            for (int dx = -r; dx <= r; dx++)
+                all.add(new long[]{(long) dx * dx + (long) dz * dz, dx, dz});
+        all.sort((a, b) -> Long.compare(a[0], b[0]));
+        SWEEP_DX = new int[all.size()];
+        SWEEP_DZ = new int[all.size()];
+        for (int i = 0; i < all.size(); i++) {
+            SWEEP_DX[i] = (int) all.get(i)[1];
+            SWEEP_DZ[i] = (int) all.get(i)[2];
+        }
+    }
+
+    /** Section column key (x,z of a level-0 section) -> flat {x, y, z, rgb} per source. Present (even empty) = scanned. */
+    private final ConcurrentHashMap<Long, int[]> columns = new ConcurrentHashMap<>();
+    private final AtomicLong version = new AtomicLong();
+    private final AtomicBoolean unsaved = new AtomicBoolean();
+
+    private final ConcurrentHashMap<Long, Long> dirtyCols = new ConcurrentHashMap<>();
+    private final ConcurrentLinkedQueue<long[]> incomingEngineDirty = new ConcurrentLinkedQueue<>();
+
+    private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "ColorLight Voxy Light Scanner");
         t.setDaemon(true);
-        t.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
+    private final ExecutorService filler = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "ColorLight Voxy Light Table");
+        t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);
         return t;
     });
     private final AtomicBoolean scheduled = new AtomicBoolean();
     private volatile WorldEngine pendingEngine;
     private volatile int pendingCamX, pendingCamZ;
+    private WorldEngine lastEngine;
     private boolean loggedFailure;
 
-    @SuppressWarnings("unchecked")
-    public VoxyLightCache() {
-        this.cache = new ConcurrentHashMap[TIERS];
-        this.versions = new AtomicLong[TIERS];
-        for (int t = 0; t < TIERS; t++) {
-            this.cache[t] = new ConcurrentHashMap<>();
-            this.versions[t] = new AtomicLong();
-        }
+    // block id -> light colour memo (worker thread only; cleared when the engine changes or a rescan starts)
+    private byte[] memoState = new byte[4096]; // 0 unknown, 1 not a light, 2 light
+    private int[] memoRgb = new int[4096];
+    private volatile boolean memoStale;
+
+    // sweep: scanning every column around the player once (nearest first)
+    private volatile boolean sweepActive;
+    private volatile int sweepIdx;
+    private volatile int sweepCenterX = Integer.MIN_VALUE, sweepCenterZ;
+
+    // GPU table
+    private static final int FILL_IDLE = 0, FILL_REQUESTED = 1, FILL_READY = 2;
+    private final AtomicInteger fillState = new AtomicInteger(FILL_IDLE);
+    private final long[] fillStamp = new long[4];
+    private IntBuffer cellBuf;
+    private IntBuffer srcBuf;
+
+    // ------------------------------------------------------------------------------------------------------
+    // Status / control (main thread)
+    // ------------------------------------------------------------------------------------------------------
+
+    /** Changes whenever any source list changed. */
+    public long version() {
+        return version.get();
     }
 
-    /** Forgets everything. Cheap: it all still lives in Voxy and will simply be re-read as cells are needed again. */
-    public void clear() {
-        for (ConcurrentHashMap<Long, Long> m : cache)
-            m.clear();
+    /** True while the first pass over the columns around the player is still running. */
+    public boolean isImporting() {
+        return sweepActive;
     }
 
-    /** Changes whenever a cell of this tier changed (added, removed or re-coloured). */
-    public long version(int tier) {
-        return versions[tier].get();
+    public boolean hasImported() {
+        return !sweepActive && !columns.isEmpty();
+    }
+
+    public int importDone() {
+        return sweepIdx;
+    }
+
+    public int importTotal() {
+        return SWEEP_DX.length;
+    }
+
+    /** Forgets every list and reads all columns around the player again. */
+    public void startImport() {
+        columns.clear();
+        dirtyCols.clear();
+        incomingEngineDirty.clear();
+        memoStale = true;
+        version.incrementAndGet();
+        unsaved.set(true);
+        restartSweep(pendingCamX, pendingCamZ);
+        ensureScheduled(0L);
+    }
+
+    public void cancelImport() {
+        sweepActive = false;
+    }
+
+    private void restartSweep(int camBlockX, int camBlockZ) {
+        sweepCenterX = camBlockX >> 5;
+        sweepCenterZ = camBlockZ >> 5;
+        sweepIdx = 0;
+        sweepActive = true;
+    }
+
+    /** Sections the engine changed (PosKey of 16-block sections). Cheap: the work happens on the worker. */
+    public void markDirty(long[] sectionKeys) {
+        incomingEngineDirty.add(sectionKeys);
+        ensureScheduled(ENGINE_CHANGE_DELAY_MS + 50L);
+    }
+
+    /** Voxy has (re)built or queued a section; only level 0 matters here: its column has to be read again. */
+    public void onVoxySection(long pos) {
+        if (WorldEngine.getLevel(pos) != 0)
+            return;
+        dirtyCols.putIfAbsent(colKey(WorldEngine.getX(pos), WorldEngine.getZ(pos)), System.currentTimeMillis() + VOXY_CHANGE_DELAY_MS);
+        ensureScheduled(VOXY_CHANGE_DELAY_MS + 50L);
     }
 
     /**
-     * Called once a client tick (by {@link LodLight}, itself only reached when {@code ColorLightVoxyCompat} says
-     * Voxy is present - this class, and everything it imports from Voxy, is never touched otherwise). Looks up
-     * the current dimension's {@link WorldEngine} and asks the background worker to fill in any not-yet-known
-     * cell around the camera, a little at a time. Entirely vanilla-typed signature on purpose: the caller needs
-     * no Voxy imports of its own.
+     * Called once a client tick. Only remembers Voxy's engine for the current dimension and the camera position,
+     * and keeps the first pass going; scans nothing itself.
      */
     public void tick(ClientLevel level) {
         if (level == null || !(level instanceof IWorldGetIdentifier getter))
@@ -118,46 +229,188 @@ public final class VoxyLightCache {
         WorldEngine engine = instance.getNullable(id);
         if (engine == null || !engine.isLive())
             return;
-
         var player = Minecraft.getInstance().player;
         if (player == null)
             return;
-        requestRefresh(engine, player.getBlockX(), player.getBlockZ());
-    }
-
-    /**
-     * Asks the background worker to fill in any not-yet-known cell around {@code (camBlockX, camBlockZ)}, a
-     * little at a time. Safe to call every frame; a drain already running or pending is not duplicated.
-     */
-    private void requestRefresh(WorldEngine engine, int camBlockX, int camBlockZ) {
         pendingEngine = engine;
-        pendingCamX = camBlockX;
-        pendingCamZ = camBlockZ;
-        if (scheduled.compareAndSet(false, true))
-            worker.execute(this::drain);
+        pendingCamX = player.getBlockX();
+        pendingCamZ = player.getBlockZ();
+
+        int camCx = pendingCamX >> 5, camCz = pendingCamZ >> 5;
+        if (!sweepActive && (sweepCenterX == Integer.MIN_VALUE
+                || Math.abs(camCx - sweepCenterX) >= 4 || Math.abs(camCz - sweepCenterZ) >= 4))
+            restartSweep(pendingCamX, pendingCamZ);
+        if (sweepActive)
+            ensureScheduled(0L);
+    }
+
+    // ------------------------------------------------------------------------------------------------------
+    // GPU table (render thread asks, filler thread builds, render thread uploads)
+    // ------------------------------------------------------------------------------------------------------
+
+    /**
+     * Asks the filler thread to build the "column -> sources" table and the source list around the camera (nearest
+     * columns first). Does nothing while one is being built or waits to be picked up. Cheap.
+     */
+    public void requestFill(int camBlockX, int camBlockZ) {
+        if (!fillState.compareAndSet(FILL_IDLE, FILL_REQUESTED))
+            return;
+        long v = version.get();
+        try {
+            filler.execute(() -> {
+                try {
+                    build(v, camBlockX >> 5, camBlockZ >> 5);
+                    fillState.set(FILL_READY);
+                } catch (Throwable t) {
+                    fillState.set(FILL_IDLE);
+                }
+            });
+        } catch (RuntimeException shutDown) {
+            fillState.set(FILL_IDLE);
+        }
     }
 
     /**
-     * Writes the window of {@code size x size} cells around the camera cell into {@code out} as a toroidal grid
-     * ({@code (x & (size-1)) | (z & (size-1)) << shift}); 0x00BBGGRR per cell, 0 for "no light" or "not computed
-     * yet" (the background worker will have it shortly - the caller just redraws once {@link #version} changes).
-     * Lock-free: only reads the memo map, never touches Voxy.
+     * @return true if a finished table is waiting; {@code stamp} gets {version, camCol x, camCol z, source count}.
+     *         Read {@link #cellBuffer} / {@link #sourceBuffer}, then call {@link #releaseFilled}.
      */
-    public void fillGrid(int tier, int camCellX, int camCellZ, int size, int[] out) {
-        Arrays.fill(out, 0, size * size, 0);
-        ConcurrentHashMap<Long, Long> map = cache[tier];
-        int half = size / 2 - 1;
-        int mask = size - 1;
-        int shift = Integer.numberOfTrailingZeros(size);
+    public boolean pollFilled(long[] stamp) {
+        if (fillState.get() != FILL_READY)
+            return false;
+        System.arraycopy(fillStamp, 0, stamp, 0, 4);
+        return true;
+    }
 
-        for (int dz = -half; dz <= half; dz++) {
-            for (int dx = -half; dx <= half; dx++) {
-                int cx = camCellX + dx;
-                int cz = camCellZ + dz;
-                Long v = map.get(cellKey(cx, cz));
-                if (v != null && v != 0L)
-                    out[(cx & mask) | ((cz & mask) << shift)] = (int) (v & 0xFFFFFFL);
+    public IntBuffer cellBuffer() {
+        cellBuf.clear();
+        return cellBuf;
+    }
+
+    /** Positioned at 0 with its limit at {@code count * 4} ints. */
+    public IntBuffer sourceBuffer(int count) {
+        srcBuf.clear();
+        srcBuf.limit(count * 4);
+        return srcBuf;
+    }
+
+    public void releaseFilled() {
+        fillState.set(FILL_IDLE);
+    }
+
+    private void build(long v, int camCx, int camCz) {
+        if (cellBuf == null) {
+            cellBuf = ByteBuffer.allocateDirect(GRID_COLS * GRID_COLS * 2 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
+            srcBuf = ByteBuffer.allocateDirect(MAX_SOURCES * 4 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
+        }
+        cellBuf.clear();
+        srcBuf.clear();
+        int cells = GRID_COLS * GRID_COLS * 2;
+        for (int i = 0; i < cells; i++)
+            cellBuf.put(i, 0);
+
+        int count = 0;
+        for (int i = 0; i < SWEEP_DX.length; i++) {
+            int cx = camCx + SWEEP_DX[i];
+            int cz = camCz + SWEEP_DZ[i];
+            int[] src = columns.get(colKey(cx, cz));
+            if (src == null || src.length == 0)
+                continue;
+            int n = src.length / 4;
+            if (count + n > MAX_SOURCES)
+                continue;
+            int cell = ((cx & (GRID_COLS - 1)) | ((cz & (GRID_COLS - 1)) * GRID_COLS)) * 2;
+            cellBuf.put(cell, count);
+            cellBuf.put(cell + 1, n);
+            srcBuf.position(count * 4);
+            srcBuf.put(src);
+            count += n;
+        }
+        fillStamp[0] = v;
+        fillStamp[1] = camCx;
+        fillStamp[2] = camCz;
+        fillStamp[3] = count;
+    }
+
+    // ------------------------------------------------------------------------------------------------------
+    // Persistence
+    // ------------------------------------------------------------------------------------------------------
+
+    public boolean hasUnsavedChanges() {
+        return unsaved.get();
+    }
+
+    /** Writes every column's list (gzip, atomic replace). Safe from any thread. */
+    public void save(Path file) throws IOException {
+        unsaved.set(false); // cleared first: a change made while writing marks it again
+        try {
+            Files.createDirectories(file.getParent());
+            Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+            Object[] entries = columns.entrySet().toArray();
+            try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(new BufferedOutputStream(Files.newOutputStream(tmp))))) {
+                out.writeInt(FILE_MAGIC);
+                out.writeInt(FILE_FORMAT);
+                out.writeInt(entries.length);
+                for (Object o : entries) {
+                    @SuppressWarnings("unchecked")
+                    Map.Entry<Long, int[]> e = (Map.Entry<Long, int[]>) o;
+                    int[] a = e.getValue();
+                    out.writeLong(e.getKey());
+                    out.writeInt(a.length);
+                    for (int x : a)
+                        out.writeInt(x);
+                }
             }
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException e) {
+            unsaved.set(true);
+            throw e;
+        }
+    }
+
+    /** Adds the columns of a saved file (columns already read this session win). */
+    public void load(Path file) throws IOException {
+        try (DataInputStream in = new DataInputStream(new GZIPInputStream(new BufferedInputStream(Files.newInputStream(file))))) {
+            if (in.readInt() != FILE_MAGIC || in.readInt() != FILE_FORMAT)
+                return;
+            int n = in.readInt();
+            for (int i = 0; i < n; i++) {
+                long key = in.readLong();
+                int len = in.readInt();
+                if (len < 0 || len > MAX_PER_COLUMN * 4 || (len & 3) != 0)
+                    throw new IOException("bad column");
+                int[] a = len == 0 ? NO_SOURCES : new int[len];
+                for (int j = 0; j < len; j++)
+                    a[j] = in.readInt();
+                columns.putIfAbsent(key, a);
+            }
+            version.incrementAndGet();
+        }
+    }
+
+    public void saveAsync(Path file) {
+        try {
+            worker.execute(() -> {
+                try {
+                    save(file);
+                } catch (Throwable t) {
+                    ColorLightClient.LOGGER.warn("[ColorLight] Could not save far light file {}: {}", file, t.toString());
+                }
+            });
+        } catch (RuntimeException shutDown) {
+        }
+    }
+
+    public void loadAsync(Path file) {
+        try {
+            worker.execute(() -> {
+                try {
+                    load(file);
+                    ColorLightClient.LOGGER.info("[ColorLight] Loaded far light from {} ({} columns)", file, columns.size());
+                } catch (Throwable t) {
+                    ColorLightClient.LOGGER.warn("[ColorLight] Could not read far light file {}: {}", file, t.toString());
+                }
+            });
+        } catch (RuntimeException shutDown) {
         }
     }
 
@@ -165,153 +418,189 @@ public final class VoxyLightCache {
     // Background worker
     // ------------------------------------------------------------------------------------------------------
 
-    private void drain() {
+    private void ensureScheduled(long delayMs) {
+        if (scheduled.compareAndSet(false, true)) {
+            try {
+                worker.schedule(this::slice, delayMs, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException shutDown) {
+                scheduled.set(false);
+            }
+        }
+    }
+
+    private void slice() {
         scheduled.set(false);
         WorldEngine engine = pendingEngine;
-        int camX = pendingCamX, camZ = pendingCamZ;
         if (engine == null || !engine.isLive())
-            return;
-
+            return; // the next tick() asks again
+        boolean more = false;
         try {
-            int spent = 0;
-            // Nearest tier (finest, smallest window) first: it is what is most visible and cheapest to fill.
-            outer:
-            for (int tier = 0; tier < TIERS; tier++) {
-                int shift = Integer.numberOfTrailingZeros(CELL_BLOCKS[tier]);
-                int camCellX = camX >> shift;
-                int camCellZ = camZ >> shift;
-                ConcurrentHashMap<Long, Long> map = cache[tier];
-
-                // A modest window per tier per drain: enough that a camera move keeps getting covered, without
-                // ever scanning the whole toroidal grid (the GPU side only reads what is near the camera anyway).
-                int r = 6;
-                for (int dz = -r; dz <= r; dz++) {
-                    for (int dx = -r; dx <= r; dx++) {
-                        if (spent >= BUDGET_PER_TICK)
-                            break outer;
-                        int cx = camCellX + dx;
-                        int cz = camCellZ + dz;
-                        long key = cellKey(cx, cz);
-                        if (map.containsKey(key))
-                            continue;
-                        long value = computeCell(engine, tier, cx, cz);
-                        map.put(key, value);
-                        versions[tier].incrementAndGet();
-                        spent++;
-                    }
-                }
+            if (engine != lastEngine || memoStale) {
+                lastEngine = engine;
+                memoStale = false;
+                Arrays.fill(memoState, (byte) 0);
             }
+            long deadline = System.nanoTime() + SLICE_NANOS;
+            more = runDirty(engine, deadline);
+            if (sweepActive)
+                more |= runSweep(engine, deadline);
         } catch (Throwable t) {
             if (!loggedFailure) {
                 loggedFailure = true;
                 ColorLightClient.LOGGER.warn("[ColorLight] Reading far light from Voxy failed (further failures are not logged)", t);
             }
-        } finally {
-            // more work may already be waiting (camera moved on, or this drain's budget ran out): go again
-            if (scheduled.compareAndSet(false, true))
-                worker.execute(this::drain);
-            else
-                scheduled.set(false);
         }
+        if (more)
+            ensureScheduled(SLICE_GAP_MS);
     }
 
-    /** Scans one output cell's column straight from Voxy's own voxel storage: topmost clearly-lit block wins. */
-    private long computeCell(WorldEngine engine, int tier, int cellX, int cellZ) {
-        int cellBlocks = CELL_BLOCKS[tier];
-        int level = VOXY_LEVEL[tier];
-        int voxelBlocks = 1 << level;
-        int group = Math.max(1, cellBlocks / voxelBlocks); // >1 only for the 32/64/128 tiers (coarser than Voxy itself)
+    private boolean runSweep(WorldEngine engine, long deadline) {
+        int cx0 = sweepCenterX, cz0 = sweepCenterZ;
+        while (sweepActive && sweepIdx < SWEEP_DX.length) {
+            int i = sweepIdx;
+            int cx = cx0 + SWEEP_DX[i];
+            int cz = cz0 + SWEEP_DZ[i];
+            sweepIdx = i + 1;
+            if (!columns.containsKey(colKey(cx, cz))) {
+                scanAndStore(engine, cx, cz);
+                if (System.nanoTime() > deadline)
+                    return sweepIdx < SWEEP_DX.length;
+            }
+        }
+        sweepActive = false;
+        return false;
+    }
 
-        long voxelX0 = (long) cellX * group;
-        long voxelZ0 = (long) cellZ * group;
-
-        int bestBrightness = 0;
-        long bestY = Long.MIN_VALUE;
-        int bestRgb = 0;
-
-        for (int gz = 0; gz < group; gz++) {
-            for (int gx = 0; gx < group; gx++) {
-                long vx = voxelX0 + gx;
-                long vz = voxelZ0 + gz;
-                long found = scanColumn(engine, level, vx, vz);
-                if (found == 0L)
-                    continue;
-                long y = (found >>> 32) & 0xFFFFFL;
-                int brightness = (int) ((found >>> 24) & 0xFF);
-                if (y > bestY || (y == bestY && brightness > bestBrightness)) {
-                    bestY = y;
-                    bestBrightness = brightness;
-                    bestRgb = (int) (found & 0xFFFFFFL);
-                }
+    private boolean runDirty(WorldEngine engine, long deadline) {
+        long now = System.currentTimeMillis();
+        long[] keys;
+        while ((keys = incomingEngineDirty.poll()) != null) {
+            for (long key : keys) {
+                // engine sections are 16 blocks wide; a column is 32
+                dirtyCols.putIfAbsent(colKey(PosKey.x(key) >> 1, PosKey.z(key) >> 1), now + ENGINE_CHANGE_DELAY_MS);
             }
         }
 
-        if (bestBrightness < MIN_BRIGHTNESS)
-            return 0L;
-        return ((bestY) << 32) | ((long) bestBrightness << 24) | (bestRgb & 0xFFFFFFL);
+        boolean waiting = false;
+        Iterator<Map.Entry<Long, Long>> it = dirtyCols.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Long, Long> e = it.next();
+            if (e.getValue() > now) {
+                waiting = true;
+                continue;
+            }
+            long k = e.getKey();
+            it.remove();
+            scanAndStore(engine, (int) (k >> 32), (int) k);
+            if (System.nanoTime() > deadline)
+                return true;
+        }
+        return waiting;
     }
 
-    /**
-     * Scans one Voxy voxel column top to bottom for the first (topmost) block the registry knows as a coloured
-     * light source. {@code vx}/{@code vz} are in level-{@code level} voxel units (Voxy's own section-local grid).
-     *
-     * @return {@code 0} for an empty column, otherwise {@code (worldY + Y_BIAS) << 32 | brightness << 24 | rgb}
-     */
-    private long scanColumn(WorldEngine engine, int level, long vx, long vz) {
-        int sx = (int) (vx >> 5);
-        int lx = (int) (vx & 31);
-        int sz = (int) (vz >> 5);
-        int lz = (int) (vz & 31);
+    private void scanAndStore(WorldEngine engine, int cx, int cz) {
+        int[] fresh = scanColumn(engine, cx, cz);
+        int[] old = columns.put(colKey(cx, cz), fresh);
+        if (old == null || !Arrays.equals(old, fresh)) {
+            version.incrementAndGet();
+            unsaved.set(true);
+        }
+    }
 
-        int sectionBlocks = 32 << level;
-        int syTop = Math.floorDiv(SCAN_TOP_Y, sectionBlocks);
-        int syBottom = Math.floorDiv(SCAN_BOTTOM_Y, sectionBlocks);
+    /** Reads one level-0 section column (all heights) and lists its coloured light blocks. */
+    private int[] scanColumn(WorldEngine engine, int sx, int sz) {
+        Map<Long, int[]> found = null; // dedupe key (4-block cell) -> {x, y, z, rgb, brightness}
 
+        int syTop = Math.floorDiv(SCAN_TOP_Y, 32);
+        int syBottom = Math.floorDiv(SCAN_BOTTOM_Y, 32);
         for (int sy = syTop; sy >= syBottom; sy--) {
-            WorldSection section = engine.acquireIfExists(level, sx, sy, sz);
+            WorldSection section = engine.acquireIfExists(0, sx, sy, sz);
             if (section == null)
                 continue;
             try {
                 long[] data = section._unsafeGetRawDataArray();
-                for (int ly = 31; ly >= 0; ly--) {
-                    long id = data[WorldSection.getIndex(lx, ly, lz)];
-                    if (Mapper.isAir(id))
-                        continue;
-
-                    BlockState state = engine.getMapper().getBlockStateFromBlockId(Mapper.getBlockId(id));
-                    if (state == null)
-                        continue;
-
-                    int emission = state.getLightEmission();
-                    if (emission <= 0)
-                        continue;
-
-                    BlockSettings settings = ColorLightBlockRegistry.get(state.getBlock());
-                    if (settings == null)
-                        continue;
-
-                    int strength = Math.min(settings.light, emission);
-                    float scale = Math.max(0f, Math.min(1f, strength / 15f));
-                    int rgb = ColorLightUtil.pack(Math.round(settings.r * scale), Math.round(settings.g * scale), Math.round(settings.b * scale));
-                    int brightness = Math.max(ColorLightUtil.r(rgb), Math.max(ColorLightUtil.g(rgb), ColorLightUtil.b(rgb)));
-                    if (brightness < MIN_BRIGHTNESS)
-                        continue;
-
-                    long worldY = ((long) sy * 32 + ly) << level;
-                    return ((worldY + Y_BIAS) << 32) | ((long) brightness << 24) | (rgb & 0xFFFFFFL);
+                for (int lz = 0; lz < 32; lz++) {
+                    for (int ly = 0; ly < 32; ly++) {
+                        for (int lx = 0; lx < 32; lx++) {
+                            long id = data[WorldSection.getIndex(lx, ly, lz)];
+                            if (Mapper.isAir(id))
+                                continue;
+                            int rgb = emitterRgb(engine, Mapper.getBlockId(id));
+                            if (rgb == 0)
+                                continue;
+                            int x = sx * 32 + lx, y = sy * 32 + ly, z = sz * 32 + lz;
+                            int brightness = Math.max(ColorLightUtil.r(rgb), Math.max(ColorLightUtil.g(rgb), ColorLightUtil.b(rgb)));
+                            long key = (((long) (x >> 2)) & 0x3FFFFFL) << 42 | (((long) (z >> 2)) & 0x3FFFFFL) << 20 | (((long) ((y >> 2) + 4096)) & 0xFFFFFL);
+                            if (found == null)
+                                found = new HashMap<>();
+                            int[] prev = found.get(key);
+                            if (prev == null || prev[4] < brightness)
+                                found.put(key, new int[]{x, y, z, rgb, brightness});
+                        }
+                    }
                 }
             } finally {
                 section.release();
             }
         }
-        return 0L;
+        if (found == null || found.isEmpty())
+            return NO_SOURCES;
+
+        List<int[]> list = new ArrayList<>(found.values());
+        if (list.size() > MAX_PER_COLUMN) {
+            list.sort((a, b) -> Integer.compare(b[4], a[4]));
+            list = list.subList(0, MAX_PER_COLUMN);
+        }
+        int[] out = new int[list.size() * 4];
+        for (int i = 0; i < list.size(); i++) {
+            int[] s = list.get(i);
+            out[i * 4] = s[0];
+            out[i * 4 + 1] = s[1];
+            out[i * 4 + 2] = s[2];
+            out[i * 4 + 3] = s[3];
+        }
+        return out;
     }
 
-    private static long cellKey(int cx, int cz) {
+    /** {@code 0x00BBGGRR} (scaled by the light's strength) if the block is a coloured light source, else 0. Memoised. */
+    private int emitterRgb(WorldEngine engine, int blockId) {
+        if (blockId >= memoState.length) {
+            int n = Integer.highestOneBit(blockId) << 1;
+            memoState = Arrays.copyOf(memoState, n);
+            memoRgb = Arrays.copyOf(memoRgb, n);
+        }
+        byte st = memoState[blockId];
+        if (st == 1)
+            return 0;
+        if (st == 2)
+            return memoRgb[blockId];
+
+        int result = 0;
+        BlockState state = engine.getMapper().getBlockStateFromBlockId(blockId);
+        if (state != null) {
+            int emission = state.getLightEmission();
+            BlockSettings settings = emission > 0 ? ColorLightBlockRegistry.get(state.getBlock()) : null;
+            if (settings != null) {
+                int strength = Math.min(settings.light, emission);
+                float scale = Math.max(0f, Math.min(1f, strength / 15f));
+                int rgb = ColorLightUtil.pack(Math.round(settings.r * scale), Math.round(settings.g * scale), Math.round(settings.b * scale)) & 0xFFFFFF;
+                int brightness = Math.max(ColorLightUtil.r(rgb), Math.max(ColorLightUtil.g(rgb), ColorLightUtil.b(rgb)));
+                if (brightness >= MIN_BRIGHTNESS)
+                    result = rgb;
+            }
+        }
+        memoState[blockId] = (byte) (result == 0 ? 1 : 2);
+        memoRgb[blockId] = result;
+        return result;
+    }
+
+    private static long colKey(int cx, int cz) {
         return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
     }
 
     public void shutdown() {
+        sweepActive = false;
         worker.shutdownNow();
+        filler.shutdownNow();
     }
 }

@@ -1,23 +1,15 @@
 // ColorLight: coloured light for Voxy's LODs. This text is inserted into Voxy's vertex shader (quads3.vert) by
-// me.mrhikmen.colorlight.client.compat.lod.VoxyLightBridge; __CL_BINDING__ is replaced with a free SSBO binding.
+// me.mrhikmen.colorlight.client.compat.voxy.VoxyLightBridge; __CL_BINDING__ is replaced with a free SSBO binding.
 //
-// Buffer layout (ints), written by VoxyLightBridge, filled from VoxyLightCache (read straight from Voxy's own
-// voxel storage - see that class, nothing here is ColorLight's own saved data):
+// Buffer layout (ints), written by VoxyLightBridge, built by VoxyLightCache (a list of coloured light sources found
+// in Voxy's own saved level-0 data; the colour of every LOD block is worked out right here from the sources
+// around it - nothing is precomputed per distance or per LOD level):
 //   [0] camera block x   [1] camera block z   [2] enabled (1/0)
-//   [3] tint gamma (float bits)   [4] tint strength (float bits)
-//   [16 + section * 262144 + ((cx & 511) | (cz & 511) << 9)]: 0x00BBGGRR light colour of the cell, 0 = none.
-// Cells farther than 255 cells from the camera (in whichever section's own cell size) are not stored.
-//
-// Which section a quad samples depends only on its real distance to the camera (see cl_lodRaw), not on Voxy's own
-// LOD level for that quad. 7 sections, one per VoxyLightCache.CELL_BLOCKS tier:
-//   0-700 blocks     -> section 0 (1x1,   full block resolution, each source separate)
-//   700-1300 blocks  -> section 1 (4x4)
-//   1300-1600 blocks -> section 2 (8x8)
-//   1600-1900 blocks -> section 3 (16x16, Voxy's own finest "far" voxel size)
-//   1900-2200 blocks -> section 4 (32x32)
-//   2200-2500 blocks -> section 5 (64x64)
-//   2500+ blocks     -> section 6 (128x128, stays 128x128 out to the LOD horizon)
-// Keep the constants in sync with VoxyLightCache / VoxyLightBridge.
+//   [3] tint gamma (float bits)   [4] tint strength (float bits)   [5] light reach in blocks (1..32)
+//   [16 + ((col.x & 255) | (col.y & 255) * 256) * 2 + 0/1]: first source / source count of a 32x32-block column
+//   [16 + 131072 + i * 4 + 0..3]: source i = x, y, z, 0x00BBGGRR
+// The table is toroidal and valid out to 90 columns (2880 blocks) from where it was filled, with an 8 column margin
+// for the camera moving before the next refill. Keep the numbers in sync with VoxyLightCache / VoxyLightBridge.
 
 #ifdef LIGHTING_SAMPLER_BINDING
 
@@ -32,44 +24,38 @@ void cl_setQuad(vec3 sectionLocalPos, float lodScale, ivec3 baseSection, uint lo
     cl_quadBlock = baseSectionPos * 32 + (baseSection << 5) + ivec3(floor(sectionLocalPos * lodScale));
 }
 
-int cl_lodRaw() {
-    ivec2 b = cl_quadBlock.xz;
-    ivec2 cam = ivec2(clLod[0], clLod[1]);
-    float dist = length(vec2(b - cam));
-
-    int section;
-    int cell;
-    if (dist <= 700.0) {
-        section = 0;
-        cell = 1;
-    } else if (dist <= 1300.0) {
-        section = 1;
-        cell = 4;
-    } else if (dist <= 1600.0) {
-        section = 2;
-        cell = 8;
-    } else if (dist <= 1900.0) {
-        section = 3;
-        cell = 16;
-    } else if (dist <= 2200.0) {
-        section = 4;
-        cell = 32;
-    } else if (dist <= 2500.0) {
-        section = 5;
-        cell = 64;
-    } else {
-        section = 6;
-        cell = 128;
+// Colour (0..255 per channel, already faded) of the light that reaches this LOD block: the strongest source per
+// channel, each fading linearly to nothing over the light reach, by true 3D distance - like the CPU engine does
+// near the player. Voxy's own light value for the quad still decides how bright the result is (see cl_getLighting).
+vec3 cl_light() {
+    vec3 p = vec3(cl_quadBlock) + 0.5;
+    ivec2 col = ivec2(cl_quadBlock.x >> 5, cl_quadBlock.z >> 5);
+    ivec2 camCol = ivec2(clLod[0] >> 5, clLod[1] >> 5);
+    ivec2 away = abs(col - camCol);
+    if (away.x > 82 || away.y > 82) {
+        return vec3(0.0); // outside the part of the table that is valid (90 columns, minus the 8 column margin)
     }
 
-    ivec2 c    = (b   - (b   & (cell - 1))) / cell; // exact floor division
-    ivec2 camC = (cam - (cam & (cell - 1))) / cell;
-
-    ivec2 d = abs(c - camC);
-    if (d.x > 255 || d.y > 255) {
-        return 0;
+    float reach = float(max(clLod[5], 1));
+    vec3 best = vec3(0.0);
+    int budget = 384; // most sources looked at per vertex, so a dense town cannot stall the vertex shader
+    for (int dz = -1; dz <= 1; dz++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ivec2 c = col + ivec2(dx, dz);
+            int cell = 16 + ((c.x & 255) | ((c.y & 255) << 8)) * 2;
+            int first = clLod[cell];
+            int count = clLod[cell + 1];
+            for (int i = 0; i < count && budget > 0; i++, budget--) {
+                int s = 16 + 131072 + (first + i) * 4;
+                float w = 1.0 - distance(p, vec3(clLod[s], clLod[s + 1], clLod[s + 2]) + 0.5) / reach;
+                if (w > 0.0) {
+                    int rgb = clLod[s + 3];
+                    best = max(best, vec3(float(rgb & 255), float((rgb >> 8) & 255), float((rgb >> 16) & 255)) * w);
+                }
+            }
+        }
     }
-    return clLod[16 + section * 262144 + ((c.x & 511) | ((c.y & 511) << 9))];
+    return best;
 }
 
 // Voxy's own lighting for the quad, with the block-light part recoloured by the far light map. Same maths as the
@@ -86,12 +72,7 @@ vec4 cl_getLighting(uint lighting) {
         return vanilla;
     }
 
-    int raw = cl_lodRaw();
-    if (raw == 0) {
-        return vanilla;
-    }
-
-    vec3 cl = vec3(float(raw & 255), float((raw >> 8) & 255), float((raw >> 16) & 255));
+    vec3 cl = cl_light();
     float clPeak = max(cl.r, max(cl.g, cl.b));
     if (clPeak <= 0.0) {
         return vanilla;

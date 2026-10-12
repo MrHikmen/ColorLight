@@ -15,30 +15,25 @@ public class Translatable {
 
     public static Component ENABLE = Component.translatable("me.colorlight.general.enable");
     public static Component ENABLE_Tooltip = Component.translatable("me.colorlight.general.enable.tooltip");
-
     public static Component LIGHT_RANGE = Component.translatable("me.colorlight.general.light_range");
     public static Component LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.general.light_range.tooltip");
     public static Component SMOOTH_LIGHTING = Component.translatable("me.colorlight.general.smooth_lighting");
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
+    public static Component TINT_GAMMA = Component.translatable("me.colorlight.general.tint_gamma");
+    public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
+    public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
+    public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
+
     public static Component GPU_EXPERIMENTS = Component.translatable("me.colorlight.general.gpu_experiments");
     public static Component GPU_PIPELINE = Component.translatable("me.colorlight.general.gpu_pipeline");
     public static Component GPU_PIPELINE_Tooltip = Component.translatable("me.colorlight.general.gpu_pipeline.tooltip");
-    public static Component VOXY_LIGHT = Component.translatable("me.colorlight.general.voxy_light");
-    public static Component VOXY_LIGHT_Tooltip = Component.translatable("me.colorlight.general.voxy_light.tooltip");
     public static Component GPU_LIGHT_SECTIONS = Component.translatable("me.colorlight.general.gpu_light_sections");
     public static Component GPU_LIGHT_SECTIONS_Tooltip = Component.translatable("me.colorlight.general.gpu_light_sections.tooltip");
     public static Component SECTIONS_Value(int value) {
         return Component.translatable("me.colorlight.general.gpu_light_sections.value", value, String.format("%.1f", value * 16 / 1024.0));
     }
-    public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
-    public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
-    public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
-    public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
-    public static Component TINT_GAMMA = Component.translatable("me.colorlight.general.tint_gamma");
-    public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
 
     public static Component WEIGHT = Component.translatable("me.colorlight.general.weight");
-    public static Component WEIGHT_Tooltip = Component.translatable("me.colorlight.general.weight.tooltip");
     public static Component BRIGHTNESS_WEIGHT = Component.translatable("me.colorlight.general.brightness_weight");
     public static Component BRIGHTNESS_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.brightness_weight.tooltip");
     public static Component LOCAL_WEIGHT = Component.translatable("me.colorlight.general.local_weight");
@@ -57,11 +52,25 @@ public class Translatable {
     public static Component WHITEPENALTY_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.whitepenalty_weight.tooltip");
 
     public static Component VOXY = Component.translatable("me.colorlight.compatibility.voxy");
+    public static Component VOXY_LIGHT = Component.translatable("me.colorlight.compatibility.voxy_light");
+    public static Component VOXY_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_light.tooltip");
+    public static Component VOXY_IMPORT = Component.translatable("me.colorlight.compatibility.voxy_import");
+    public static Component VOXY_IMPORT_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_import.tooltip");
+    public static Component VOXY_IMPORT_Start = Component.translatable("me.colorlight.compatibility.voxy_import.start");
+    public static Component VOXY_IMPORT_Cancel = Component.translatable("me.colorlight.compatibility.voxy_import.cancel");
+    public static Component VOXY_IMPORT_Done = Component.translatable("me.colorlight.compatibility.voxy_import.done");
+    public static Component VOXY_IMPORT_Idle = Component.translatable("me.colorlight.compatibility.voxy_import.idle");
+    public static Component VOXY_IMPORT_Progress(int done, int total) {
+        return Component.translatable("me.colorlight.compatibility.voxy_import.progress", done, total);
+    }
+
     public static Component ENTITY_TRACKING = Component.translatable("me.colorlight.compatibility.entity_tracking");
     public static Component ENTITY_TRACKING_ENABLED = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled");
     public static Component ENTITY_TRACKING_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled.tooltip");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE_Tooltip = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance.tooltip");
+    public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
+    public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS_Tooltip = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks.tooltip");
 

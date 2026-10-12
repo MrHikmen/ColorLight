@@ -28,25 +28,22 @@ import java.util.Arrays;
  *     that Minecraft's renderer tracks, except for the one indexed SSBO binding that we pick for ourselves.</li>
  * </ol>
  * <p>
- * The buffer holds {@link #SECTIONS} grids, one per {@link VoxyLightCache#CELL_BLOCKS} tier (1/4/8/16/32/64/128
- * -block cells). Which section a quad samples is chosen in {@code colorlight_lod.glsl} purely from the quad's
- * distance to the camera, not from Voxy's own LOD level - keep the shader's distance table and this class's
- * {@link VoxyLightCache#CELL_BLOCKS} in sync.
+ * The buffer holds a header, a table "32-block column -> (first source, source count)" and the flat source list
+ * ({@code x, y, z, rgb}) that {@link VoxyLightCache} builds. {@code colorlight_lod.glsl} adds up the sources around
+ * every LOD block itself. Keep the numbers below in sync with {@link VoxyLightCache} and that shader (they are
+ * plain literals, not references, on purpose: this class is loaded whether or not Voxy is installed, and reading a
+ * static field of {@code VoxyLightCache} would force that class - and the Voxy classes it mentions - to load).
  */
 public final class VoxyLightBridge {
 
-    private static final int GRID = 512;                          // cells per side of one grid, toroidal
     private static final int HEADER_INTS = 16;
-    private static final int LEVEL_INTS = GRID * GRID;
-    /**
-     * One section per {@link VoxyLightCache} tier (keep this literal in sync with
-     * {@code VoxyLightCache.CELL_BLOCKS.length} and the shader's distance table - it is a plain number, not a
-     * reference to {@code VoxyLightCache.TIERS}, on purpose: {@link VoxyLightBridge} is loaded unconditionally
-     * (Voxy or not), and reading a static field of {@code VoxyLightCache} would force that class - and the Voxy
-     * classes its fields and methods mention - to load right then, even on a game without Voxy installed.
-     */
-    private static final int SECTIONS = 7;
-    private static final int TOTAL_INTS = HEADER_INTS + SECTIONS * LEVEL_INTS;
+    private static final int GRID_COLS = 256;
+    private static final int MAX_SOURCES = 131072;
+    private static final int CELL_INTS = GRID_COLS * GRID_COLS * 2;
+    private static final int SOURCE_OFFSET_INTS = HEADER_INTS + CELL_INTS;
+    private static final int TOTAL_INTS = SOURCE_OFFSET_INTS + MAX_SOURCES * 4;
+    /** Rebuild the table once the camera has moved this many columns (the shader keeps the same margin). */
+    private static final int DRIFT_COLS = 8;
 
     private static volatile boolean patched;
     private static int binding = -1;
@@ -56,13 +53,13 @@ public final class VoxyLightBridge {
     private static final int[] lastHeader = new int[HEADER_INTS];
     private static boolean headerWritten;
     private static IntBuffer headerBytes;
-    private static IntBuffer gridBytes;
-    private static final int[] gridScratch = new int[LEVEL_INTS];
 
     private static VoxyLightCache lastCache;
-    private static final long[] uploadedVersion = new long[SECTIONS];
-    private static final int[] uploadedCamX = new int[SECTIONS];
-    private static final int[] uploadedCamZ = new int[SECTIONS];
+    private static long uploadedVersion = -1L;
+    private static int uploadedColX, uploadedColZ;
+    private static long lastUploadNanos;
+    /** At most ~6 uploads per second (up to ~2.5 MB each): while sources are being read, the version keeps changing. */
+    private static final long MIN_UPLOAD_GAP_NANOS = 160_000_000L;
 
     // ------------------------------------------------------------------------------------------------------
     // Shader text
@@ -169,14 +166,13 @@ public final class VoxyLightBridge {
         buffer = GL45C.glCreateBuffers();
         GL45C.glNamedBufferStorage(buffer, (long) TOTAL_INTS * Integer.BYTES, GL44C.GL_DYNAMIC_STORAGE_BIT);
         headerBytes = MemoryUtil.memAllocInt(HEADER_INTS);
-        gridBytes = MemoryUtil.memAllocInt(LEVEL_INTS);
         headerWritten = false;
         headerBytes.clear();
         for (int i = 0; i < HEADER_INTS; i++)
             headerBytes.put(0);
         headerBytes.flip();
         GL45C.glNamedBufferSubData(buffer, 0L, headerBytes); // header[2] = 0: disabled until the first real frame
-        Arrays.fill(uploadedVersion, -1L);
+        uploadedVersion = -1L;
         lastCache = null;
     }
 
@@ -187,6 +183,7 @@ public final class VoxyLightBridge {
         header[2] = enabled ? 1 : 0;
         header[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
         header[4] = Float.floatToRawIntBits(1.0f);
+        header[5] = Math.max(1, Math.min(32, ColorLightEngineHolder.getMaxRangeBlocks())); // light reach in blocks (the shader reads 3x3 columns)
 
         if (headerWritten && Arrays.equals(header, lastHeader))
             return;
@@ -198,31 +195,35 @@ public final class VoxyLightBridge {
         headerWritten = true;
     }
 
-    /** Refreshes at most one section per frame, so a big refill never lands in a single frame. */
+    /**
+     * The table is built on the cache's filler thread ({@link VoxyLightCache#requestFill}); here a finished one is
+     * just copied to the GPU, at most one per {@link #MIN_UPLOAD_GAP_NANOS}.
+     */
     private static void uploadOneLevel(VoxyLightCache cache, int camX, int camZ) {
         if (cache != lastCache) {
             lastCache = cache;
-            Arrays.fill(uploadedVersion, -1L);
+            uploadedVersion = -1L;
         }
 
-        for (int s = 0; s < SECTIONS; s++) {
-            int shift = Integer.numberOfTrailingZeros(VoxyLightCache.CELL_BLOCKS[s]);
-            long version = cache.version(s);
-            int cellX = camX >> shift;
-            int cellZ = camZ >> shift;
-            if (version == uploadedVersion[s] && cellX == uploadedCamX[s] && cellZ == uploadedCamZ[s])
-                continue;
-
-            cache.fillGrid(s, cellX, cellZ, GRID, gridScratch);
-            gridBytes.clear();
-            gridBytes.put(gridScratch, 0, LEVEL_INTS).flip();
-            GL45C.glNamedBufferSubData(buffer, (long) (HEADER_INTS + s * LEVEL_INTS) * Integer.BYTES, gridBytes);
-
-            uploadedVersion[s] = version;
-            uploadedCamX[s] = cellX;
-            uploadedCamZ[s] = cellZ;
-            return;
+        long now = System.nanoTime();
+        long[] stamp = new long[4];
+        if (now - lastUploadNanos >= MIN_UPLOAD_GAP_NANOS && cache.pollFilled(stamp)) {
+            GL45C.glNamedBufferSubData(buffer, (long) HEADER_INTS * Integer.BYTES, cache.cellBuffer());
+            int count = (int) stamp[3];
+            if (count > 0)
+                GL45C.glNamedBufferSubData(buffer, (long) SOURCE_OFFSET_INTS * Integer.BYTES, cache.sourceBuffer(count));
+            uploadedVersion = stamp[0];
+            uploadedColX = (int) stamp[1];
+            uploadedColZ = (int) stamp[2];
+            cache.releaseFilled();
+            lastUploadNanos = now;
         }
+
+        boolean stale = cache.version() != uploadedVersion
+                || Math.abs((camX >> 5) - uploadedColX) > DRIFT_COLS
+                || Math.abs((camZ >> 5) - uploadedColZ) > DRIFT_COLS;
+        if (stale)
+            cache.requestFill(camX, camZ);
     }
 
     private static void disableInShader() {

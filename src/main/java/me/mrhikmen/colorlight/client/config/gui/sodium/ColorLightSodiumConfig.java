@@ -275,6 +275,12 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
                                 .setDefaultValue(config.VOXY_LIGHT)
                         )
+                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:voxy_import"))
+                                .setName(Translatable.VOXY_IMPORT)
+                                .setTooltip(Translatable.VOXY_IMPORT_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
+                                        new me.mrhikmen.colorlight.client.config.gui.screen.VoxyImportScreen(parentScreen)))
+                        )
             );
         }
         return page;
