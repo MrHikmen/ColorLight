@@ -43,9 +43,11 @@ public class ColorLightClient implements ClientModInitializer {
         config.load();
 
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
+
         ColorLightBlockRegistry.load(config);
         ColorLightDaylightRefresher.register();
         ColorLightDirtyFlusher.register();
+
         ClientTickEvents.END_CLIENT_TICK.register(ColorLightGpu::tick);
         ClientTickEvents.END_CLIENT_TICK.register(LodLight::tick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {

@@ -65,8 +65,10 @@ import java.util.zip.GZIPOutputStream;
  */
 public final class VoxyLightCache {
 
-    /** Columns per side of the toroidal "column -> sources" table (keep in sync with VoxyLightBridge and the shader). */
-    public static final int GRID_COLS = 256;
+    /** Cells (16x16 blocks) per side of the toroidal "cell -> sources" table (keep in sync with VoxyLightBridge and the shader). */
+    public static final int GRID_CELLS = 512;
+    /** Most sources kept per 16x16-block cell in the uploaded table (strongest first). */
+    private static final int PER_CELL_CAP = 96;
     /** Most sources uploaded at once (nearest columns first). Keep in sync with VoxyLightBridge. */
     public static final int MAX_SOURCES = 131072;
     /** Radius, in 32-block columns, that is scanned and uploaded (2880 blocks). */
@@ -74,7 +76,7 @@ public final class VoxyLightCache {
     /** The camera may move this many columns before the table is rebuilt (the shader keeps this margin). */
     public static final int DRIFT_COLS = 8;
 
-    private static final int MAX_PER_COLUMN = 128;
+    private static final int MAX_PER_COLUMN = 512;
     private static final int SCAN_TOP_Y = 400;
     private static final int SCAN_BOTTOM_Y = -128;
     private static final int MIN_BRIGHTNESS = 8; // out of 255
@@ -86,7 +88,7 @@ public final class VoxyLightCache {
     private static final int[] NO_SOURCES = new int[0];
 
     private static final int FILE_MAGIC = 0x434C5658; // 'CLVX'
-    private static final int FILE_FORMAT = 3;         // 3: source lists (older far-light files are ignored)
+    private static final int FILE_FORMAT = 4;         // 4: only exposed lights are listed (older far-light files are ignored)
 
     /** Nearest-first list of column offsets inside {@link #WINDOW_COLS}. */
     private static final int[] SWEEP_DX;
@@ -297,38 +299,79 @@ public final class VoxyLightCache {
         fillState.set(FILL_IDLE);
     }
 
+    private int[] cellCount;
+    private int[] cellStart;
+    private int[] cellFill;
+
+    /**
+     * Regroups the per-column lists of the columns around the camera (nearest first) into 16x16-block cells: the
+     * shader looks at the 3x3 cells around a block, so a cell holds few sources even over a lava sea or a lamp
+     * field. Layout: cell table (first source, count) per cell, then the sources of all cells one after the other.
+     */
     private void build(long v, int camCx, int camCz) {
+        int cellTotal = GRID_CELLS * GRID_CELLS;
         if (cellBuf == null) {
-            cellBuf = ByteBuffer.allocateDirect(GRID_COLS * GRID_COLS * 2 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
+            cellBuf = ByteBuffer.allocateDirect(cellTotal * 2 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
             srcBuf = ByteBuffer.allocateDirect(MAX_SOURCES * 4 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
+            cellCount = new int[cellTotal];
+            cellStart = new int[cellTotal];
+            cellFill = new int[cellTotal];
         }
         cellBuf.clear();
         srcBuf.clear();
-        int cells = GRID_COLS * GRID_COLS * 2;
-        for (int i = 0; i < cells; i++)
-            cellBuf.put(i, 0);
+        Arrays.fill(cellCount, 0);
 
-        int count = 0;
-        for (int i = 0; i < SWEEP_DX.length; i++) {
-            int cx = camCx + SWEEP_DX[i];
-            int cz = camCz + SWEEP_DZ[i];
-            int[] src = columns.get(colKey(cx, cz));
-            if (src == null || src.length == 0)
+        // pass 1: how many sources each cell gets (nearest columns first, per-cell and total caps)
+        int total = 0;
+        int lastColumn = SWEEP_DX.length;
+        for (int i = 0; i < SWEEP_DX.length && total < MAX_SOURCES; i++) {
+            int[] src = columns.get(colKey(camCx + SWEEP_DX[i], camCz + SWEEP_DZ[i]));
+            if (src == null)
                 continue;
-            int n = src.length / 4;
-            if (count + n > MAX_SOURCES)
+            for (int j = 0; j < src.length && total < MAX_SOURCES; j += 4) {
+                int cell = cellIndex(src[j], src[j + 2]);
+                if (cellCount[cell] < PER_CELL_CAP) {
+                    cellCount[cell]++;
+                    total++;
+                }
+            }
+            lastColumn = i;
+        }
+
+        // prefix sums -> table
+        int running = 0;
+        for (int c = 0; c < cellTotal; c++) {
+            cellStart[c] = running;
+            cellFill[c] = 0;
+            cellBuf.put(c * 2, running);
+            cellBuf.put(c * 2 + 1, cellCount[c]);
+            running += cellCount[c];
+        }
+
+        // pass 2: the same walk, now writing the sources
+        for (int i = 0; i <= lastColumn && i < SWEEP_DX.length; i++) {
+            int[] src = columns.get(colKey(camCx + SWEEP_DX[i], camCz + SWEEP_DZ[i]));
+            if (src == null)
                 continue;
-            int cell = ((cx & (GRID_COLS - 1)) | ((cz & (GRID_COLS - 1)) * GRID_COLS)) * 2;
-            cellBuf.put(cell, count);
-            cellBuf.put(cell + 1, n);
-            srcBuf.position(count * 4);
-            srcBuf.put(src);
-            count += n;
+            for (int j = 0; j < src.length; j += 4) {
+                int cell = cellIndex(src[j], src[j + 2]);
+                if (cellFill[cell] >= cellCount[cell])
+                    continue;
+                int at = (cellStart[cell] + cellFill[cell]++) * 4;
+                srcBuf.put(at, src[j]);
+                srcBuf.put(at + 1, src[j + 1]);
+                srcBuf.put(at + 2, src[j + 2]);
+                srcBuf.put(at + 3, src[j + 3]);
+            }
         }
         fillStamp[0] = v;
         fillStamp[1] = camCx;
         fillStamp[2] = camCz;
-        fillStamp[3] = count;
+        fillStamp[3] = running;
+    }
+
+    private static int cellIndex(int x, int z) {
+        return ((x >> 4) & (GRID_CELLS - 1)) | (((z >> 4) & (GRID_CELLS - 1)) * GRID_CELLS);
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -527,6 +570,12 @@ public final class VoxyLightCache {
                                 continue;
                             int rgb = emitterRgb(engine, Mapper.getBlockId(id));
                             if (rgb == 0)
+                                continue;
+                            // a light buried inside other blocks (the inside of a lava sea) lights nothing visible
+                            if (lx > 0 && lx < 31 && ly > 0 && ly < 31 && lz > 0 && lz < 31
+                                    && !Mapper.isAir(data[WorldSection.getIndex(lx - 1, ly, lz)]) && !Mapper.isAir(data[WorldSection.getIndex(lx + 1, ly, lz)])
+                                    && !Mapper.isAir(data[WorldSection.getIndex(lx, ly - 1, lz)]) && !Mapper.isAir(data[WorldSection.getIndex(lx, ly + 1, lz)])
+                                    && !Mapper.isAir(data[WorldSection.getIndex(lx, ly, lz - 1)]) && !Mapper.isAir(data[WorldSection.getIndex(lx, ly, lz + 1)]))
                                 continue;
                             int x = sx * 32 + lx, y = sy * 32 + ly, z = sz * 32 + lz;
                             int brightness = Math.max(ColorLightUtil.r(rgb), Math.max(ColorLightUtil.g(rgb), ColorLightUtil.b(rgb)));

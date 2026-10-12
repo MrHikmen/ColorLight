@@ -245,13 +245,13 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setDefaultValue(config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
                     )
                     .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:dynamic_propagation"))
-                                .setName(Translatable.DYNAMIC_PROPAGATION)
-                                .setTooltip(Translatable.DYNAMIC_PROPAGATION_Tooltip)
-                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
-                                        parentScreen, Translatable.DYNAMIC_PROPAGATION,
-                                        () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
-                                        this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
-                        )
+                            .setName(Translatable.DYNAMIC_PROPAGATION)
+                            .setTooltip(Translatable.DYNAMIC_PROPAGATION_Tooltip)
+                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
+                                    parentScreen, Translatable.DYNAMIC_PROPAGATION,
+                                    () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
+                                    this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
+                    )
                     .addOption(builder.createIntegerOption(Identifier.parse("colorlight:entity_check_radius_chunks"))
                             .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
@@ -268,19 +268,19 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         if (voxy) {
             page.addOptionGroup(builder.createOptionGroup()
                     .setName(Translatable.VOXY)
-                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:voxy_light"))
-                                .setName(Translatable.VOXY_LIGHT)
-                                .setTooltip(Translatable.VOXY_LIGHT_Tooltip)
-                                .setStorageHandler(this::save)
-                                .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
-                                .setDefaultValue(config.VOXY_LIGHT)
-                        )
-                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:voxy_import"))
-                                .setName(Translatable.VOXY_IMPORT)
-                                .setTooltip(Translatable.VOXY_IMPORT_Tooltip)
-                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
-                                        new me.mrhikmen.colorlight.client.config.gui.screen.VoxyImportScreen(parentScreen)))
-                        )
+                    .addOption(builder.createBooleanOption(Identifier.parse("colorlight:voxy_light"))
+                            .setName(Translatable.VOXY_LIGHT)
+                            .setTooltip(Translatable.VOXY_LIGHT_Tooltip)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
+                            .setDefaultValue(config.VOXY_LIGHT)
+                    )
+                    .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:voxy_import"))
+                            .setName(Translatable.VOXY_IMPORT)
+                            .setTooltip(Translatable.VOXY_IMPORT_Tooltip)
+                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
+                                    new me.mrhikmen.colorlight.client.config.gui.screen.VoxyImportScreen(parentScreen)))
+                    )
             );
         }
         return page;

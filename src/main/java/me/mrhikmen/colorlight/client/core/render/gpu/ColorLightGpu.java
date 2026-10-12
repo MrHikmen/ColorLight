@@ -233,7 +233,7 @@ public final class ColorLightGpu {
 
     /** Once per frame, before any terrain pass. */
     public static void onFrameStart(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
-        // Voxy's LODs have their own pipeline and their own switch; they only need to know where the camera is
+        // Voxy's and Distant Horizons' LODs have their own pipelines and their own switches; they only need to know where the camera is
         VoxyLightBridge.onFrame(camBlockX, camBlockZ);
 
         prepareFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);

@@ -37,9 +37,9 @@ import java.util.Arrays;
 public final class VoxyLightBridge {
 
     private static final int HEADER_INTS = 16;
-    private static final int GRID_COLS = 256;
+    private static final int GRID_CELLS = 512; // 16x16-block cells per side of the toroidal table
     private static final int MAX_SOURCES = 131072;
-    private static final int CELL_INTS = GRID_COLS * GRID_COLS * 2;
+    private static final int CELL_INTS = GRID_CELLS * GRID_CELLS * 2;
     private static final int SOURCE_OFFSET_INTS = HEADER_INTS + CELL_INTS;
     private static final int TOTAL_INTS = SOURCE_OFFSET_INTS + MAX_SOURCES * 4;
     /** Rebuild the table once the camera has moved this many columns (the shader keeps the same margin). */
@@ -165,6 +165,8 @@ public final class VoxyLightBridge {
             return;
         buffer = GL45C.glCreateBuffers();
         GL45C.glNamedBufferStorage(buffer, (long) TOTAL_INTS * Integer.BYTES, GL44C.GL_DYNAMIC_STORAGE_BIT);
+        // a new buffer's contents are undefined: start from all zeros (no cells, no sources)
+        GL45C.glClearNamedBufferData(buffer, GL30C.GL_R32UI, GL30C.GL_RED_INTEGER, GL11C.GL_UNSIGNED_INT, (java.nio.ByteBuffer) null);
         headerBytes = MemoryUtil.memAllocInt(HEADER_INTS);
         headerWritten = false;
         headerBytes.clear();
@@ -183,7 +185,7 @@ public final class VoxyLightBridge {
         header[2] = enabled ? 1 : 0;
         header[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
         header[4] = Float.floatToRawIntBits(1.0f);
-        header[5] = Math.max(1, Math.min(32, ColorLightEngineHolder.getMaxRangeBlocks())); // light reach in blocks (the shader reads 3x3 columns)
+        header[5] = Math.max(1, Math.min(16, ColorLightEngineHolder.getMaxRangeBlocks())); // light reach in blocks (the shader reads the 3x3 cells of 16 blocks around a block)
 
         if (headerWritten && Arrays.equals(header, lastHeader))
             return;

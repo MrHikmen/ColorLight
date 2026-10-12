@@ -5,10 +5,10 @@
 // in Voxy's own saved level-0 data; the colour of every LOD block is worked out right here from the sources
 // around it - nothing is precomputed per distance or per LOD level):
 //   [0] camera block x   [1] camera block z   [2] enabled (1/0)
-//   [3] tint gamma (float bits)   [4] tint strength (float bits)   [5] light reach in blocks (1..32)
-//   [16 + ((col.x & 255) | (col.y & 255) * 256) * 2 + 0/1]: first source / source count of a 32x32-block column
-//   [16 + 131072 + i * 4 + 0..3]: source i = x, y, z, 0x00BBGGRR
-// The table is toroidal and valid out to 90 columns (2880 blocks) from where it was filled, with an 8 column margin
+//   [3] tint gamma (float bits)   [4] tint strength (float bits)   [5] light reach in blocks (1..16)
+//   [16 + ((cell.x & 511) | (cell.y & 511) * 512) * 2 + 0/1]: first source / source count of a 16x16-block cell
+//   [16 + 524288 + i * 4 + 0..3]: source i = x, y, z, 0x00BBGGRR
+// The table is toroidal and valid out to 180 cells (2880 blocks) from where it was filled, with a 16 cell margin
 // for the camera moving before the next refill. Keep the numbers in sync with VoxyLightCache / VoxyLightBridge.
 
 #ifdef LIGHTING_SAMPLER_BINDING
@@ -29,24 +29,23 @@ void cl_setQuad(vec3 sectionLocalPos, float lodScale, ivec3 baseSection, uint lo
 // near the player. Voxy's own light value for the quad still decides how bright the result is (see cl_getLighting).
 vec3 cl_light() {
     vec3 p = vec3(cl_quadBlock) + 0.5;
-    ivec2 col = ivec2(cl_quadBlock.x >> 5, cl_quadBlock.z >> 5);
-    ivec2 camCol = ivec2(clLod[0] >> 5, clLod[1] >> 5);
-    ivec2 away = abs(col - camCol);
-    if (away.x > 82 || away.y > 82) {
-        return vec3(0.0); // outside the part of the table that is valid (90 columns, minus the 8 column margin)
+    ivec2 cell = ivec2(cl_quadBlock.x >> 4, cl_quadBlock.z >> 4);
+    ivec2 camCell = ivec2(clLod[0] >> 4, clLod[1] >> 4);
+    ivec2 away = abs(cell - camCell);
+    if (away.x > 160 || away.y > 160) {
+        return vec3(0.0); // outside the part of the table that is valid (180 cells, minus the 16 cell margin)
     }
 
-    float reach = float(max(clLod[5], 1));
+    float reach = float(clamp(clLod[5], 1, 16)); // the 3x3 cells of 16 blocks around a block cover 16 blocks
     vec3 best = vec3(0.0);
-    int budget = 384; // most sources looked at per vertex, so a dense town cannot stall the vertex shader
     for (int dz = -1; dz <= 1; dz++) {
         for (int dx = -1; dx <= 1; dx++) {
-            ivec2 c = col + ivec2(dx, dz);
-            int cell = 16 + ((c.x & 255) | ((c.y & 255) << 8)) * 2;
-            int first = clLod[cell];
-            int count = clLod[cell + 1];
-            for (int i = 0; i < count && budget > 0; i++, budget--) {
-                int s = 16 + 131072 + (first + i) * 4;
+            ivec2 c = cell + ivec2(dx, dz);
+            int entry = 16 + ((c.x & 511) | ((c.y & 511) << 9)) * 2;
+            int first = clLod[entry];
+            int count = min(clLod[entry + 1], 96);
+            for (int i = 0; i < count; i++) {
+                int s = 16 + 524288 + (first + i) * 4;
                 float w = 1.0 - distance(p, vec3(clLod[s], clLod[s + 1], clLod[s + 2]) + 0.5) / reach;
                 if (w > 0.0) {
                     int rgb = clLod[s + 3];
@@ -105,7 +104,8 @@ vec4 cl_getLighting(uint lighting) {
     float retention = clamp(1.0 - tintGamma, 0.0, 1.0);
     float shaped = pow(max(lvl, 0.0001), exponent);
     float kept = smoothstep(0.0, 0.06, lvl);
-    float amount = clamp(tintStrength * mix(shaped, kept, retention) * daylight, 0.0, 1.0);
+    // a very faint colour (the far edge of a light's reach) only tints a little, instead of a full hue from nothing
+    float amount = clamp(tintStrength * mix(shaped, kept, retention) * daylight * smoothstep(0.0, 24.0, clPeak), 0.0, 1.0);
 
     vec3 lit = clamp(full + amount * (hue * peak * vivid - delta), vec3(0.0), vec3(1.0));
     return vec4(lit, vanilla.a);
