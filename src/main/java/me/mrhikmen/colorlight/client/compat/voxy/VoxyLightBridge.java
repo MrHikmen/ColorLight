@@ -46,7 +46,15 @@ public final class VoxyLightBridge {
     private static final int DRIFT_COLS = 8;
 
     private static volatile boolean patched;
+    private static volatile boolean vk;
     private static int binding = -1;
+
+    // Vulkan backend: CPU-side copy of the buffer (off-heap, same layout as the GL buffer), uploaded into the GPU buffer of
+    // the current frame by VoxyVkLight when Voxy records its terrain draws. Render thread only.
+    static final int[] vkHeader = new int[HEADER_INTS];
+    static long vkMirror;          // address of TOTAL_INTS ints, 0 until the first table arrives
+    static long vkStamp;           // bumped whenever cells/sources in the mirror change
+    static int vkSourceCount;      // sources currently in the mirror
 
     private static int buffer;
     private static final int[] header = new int[HEADER_INTS];
@@ -84,7 +92,10 @@ public final class VoxyLightBridge {
                 return null;
             }
 
-            int chosen = chooseBinding();
+            boolean useVk = isVulkanBackend();
+            // Vulkan: Voxy's terrain pipelines use bindings 0,1,3,4,5,8,9,10; ours is added next to them by VkTerrainRendererMixin.
+            // OpenGL: ask the driver. There is NO GL context at all while Minecraft runs on Vulkan, so never touch GL there.
+            int chosen = useVk ? VoxyVkLight.BINDING : chooseBinding();
             if (chosen < 0) {
                 ColorLightClient.LOGGER.warn("[ColorLight] Not enough shader storage bindings for far light colours");
                 return null;
@@ -98,10 +109,14 @@ public final class VoxyLightBridge {
             out = replaceFirst(out, ANCHOR_SETUP, "    cl_setQuad(extractPos(rawQuad), lodScale, baseSection, lodLevel);\n" + ANCHOR_SETUP);
 
             binding = chosen;
+            vk = useVk;
             patched = true;
-            ensureBuffer(); // so the very first draw already finds a bound (disabled) buffer
-            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer);
-            ColorLightClient.LOGGER.info("[ColorLight] Far light colours added to Voxy's LOD shader (SSBO binding {})", chosen);
+            if (!useVk) {
+                ensureBuffer(); // so the very first draw already finds a bound (disabled) buffer
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer);
+            }
+            ColorLightClient.LOGGER.info("[ColorLight] Far light colours added to Voxy's LOD shader ({} backend, SSBO binding {})",
+                    useVk ? "Vulkan" : "OpenGL", chosen);
             return out;
         } catch (Throwable t) {
             ColorLightClient.LOGGER.error("[ColorLight] Could not add far light colours to Voxy: {}", t.toString());
@@ -124,6 +139,21 @@ public final class VoxyLightBridge {
         }
     }
 
+    /** True when Voxy renders through Vulkan (it follows Minecraft's backend). Reflection: older Voxy has no such class. */
+    private static boolean isVulkanBackend() {
+        try {
+            Class<?> c = Class.forName("me.cortex.voxy.client.core.vk.VulkanBackend");
+            return (Boolean) c.getMethod("shouldUseVulkan").invoke(null);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** True once the Vulkan variant of the shader patch is in (the Vulkan mixins ask this). */
+    public static boolean isPatchedForVulkan() {
+        return patched && vk;
+    }
+
     /** A binding index high enough to stay clear of Voxy's own (it uses the low ones). */
     private static int chooseBinding() {
         int max = GL11C.glGetInteger(GL43C.GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS);
@@ -139,6 +169,17 @@ public final class VoxyLightBridge {
     public static void onFrame(int camBlockX, int camBlockZ) {
         if (!patched)
             return;
+
+        if (vk) {
+            try {
+                onFrameVulkan(camBlockX, camBlockZ);
+            } catch (Throwable t) {
+                ColorLightClient.LOGGER.error("[ColorLight] Far light colours for Voxy (Vulkan) turned off: {}", t.toString());
+                patched = false;
+                vkHeader[2] = 0;
+            }
+            return;
+        }
 
         try {
             ensureBuffer();
@@ -160,6 +201,59 @@ public final class VoxyLightBridge {
         }
     }
 
+    /**
+     * Vulkan: only updates the CPU mirror; VoxyVkLight copies it into this frame's GPU buffer at draw time. The table
+     * is built by the cache's filler thread exactly as for OpenGL; a finished one is copied into the mirror here.
+     */
+    private static void onFrameVulkan(int camX, int camZ) {
+        VoxyLightCache cache = LodLight.cache();
+        boolean enabled = cache != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
+                && ColorLightEngineHolder.get() != null;
+
+        fillHeader(vkHeader, camX, camZ, enabled);
+        if (!enabled)
+            return;
+
+        if (cache != lastCache) {
+            lastCache = cache;
+            uploadedVersion = -1L;
+        }
+
+        long now = System.nanoTime();
+        long[] stamp = new long[4];
+        if (now - lastUploadNanos >= MIN_UPLOAD_GAP_NANOS && cache.pollFilled(stamp)) {
+            if (vkMirror == 0L) {
+                vkMirror = MemoryUtil.nmemCalloc(TOTAL_INTS, Integer.BYTES);
+                if (vkMirror == 0L)
+                    throw new OutOfMemoryError("cannot allocate far light mirror");
+            }
+            MemoryUtil.memCopy(MemoryUtil.memAddress(cache.cellBuffer()), vkMirror + (long) HEADER_INTS * Integer.BYTES,
+                    (long) CELL_INTS * Integer.BYTES);
+            int count = (int) stamp[3];
+            if (count > 0)
+                MemoryUtil.memCopy(MemoryUtil.memAddress(cache.sourceBuffer(count)), vkMirror + (long) SOURCE_OFFSET_INTS * Integer.BYTES,
+                        (long) count * 4 * Integer.BYTES);
+            vkSourceCount = count;
+            vkStamp++;
+            uploadedVersion = stamp[0];
+            uploadedColX = (int) stamp[1];
+            uploadedColZ = (int) stamp[2];
+            cache.releaseFilled();
+            lastUploadNanos = now;
+        }
+
+        boolean stale = cache.version() != uploadedVersion
+                || Math.abs((camX >> 5) - uploadedColX) > DRIFT_COLS
+                || Math.abs((camZ >> 5) - uploadedColZ) > DRIFT_COLS;
+        if (stale)
+            cache.requestFill(camX, camZ);
+    }
+
+    static int headerInts() { return HEADER_INTS; }
+    static int cellInts() { return CELL_INTS; }
+    static int sourceOffsetInts() { return SOURCE_OFFSET_INTS; }
+    static int totalInts() { return TOTAL_INTS; }
+
     private static void ensureBuffer() {
         if (buffer != 0)
             return;
@@ -178,14 +272,18 @@ public final class VoxyLightBridge {
         lastCache = null;
     }
 
+    private static void fillHeader(int[] h, int camX, int camZ, boolean enabled) {
+        Arrays.fill(h, 0);
+        h[0] = camX;
+        h[1] = camZ;
+        h[2] = enabled ? 1 : 0;
+        h[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
+        h[4] = Float.floatToRawIntBits(1.0f);
+        h[5] = Math.max(1, Math.min(16, ColorLightEngineHolder.getMaxRangeBlocks())); // light reach in blocks (the shader reads the 3x3 cells of 16 blocks around a block)
+    }
+
     private static void writeHeader(int camX, int camZ, boolean enabled) {
-        Arrays.fill(header, 0);
-        header[0] = camX;
-        header[1] = camZ;
-        header[2] = enabled ? 1 : 0;
-        header[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
-        header[4] = Float.floatToRawIntBits(1.0f);
-        header[5] = Math.max(1, Math.min(16, ColorLightEngineHolder.getMaxRangeBlocks())); // light reach in blocks (the shader reads the 3x3 cells of 16 blocks around a block)
+        fillHeader(header, camX, camZ, enabled);
 
         if (headerWritten && Arrays.equals(header, lastHeader))
             return;

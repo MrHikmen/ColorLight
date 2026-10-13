@@ -3,6 +3,7 @@ package me.mrhikmen.colorlight.client.config.gui.sodium;
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
 import me.mrhikmen.colorlight.client.compat.voxy.ColorLightVoxyCompat;
+import me.mrhikmen.colorlight.client.compat.distanthorizons.ColorLightDistantHorizonsCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
@@ -32,14 +33,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         config.load();
         boolean ldl = ColorLightLambDynLightsCompat.isPresent();
         boolean voxy = ColorLightVoxyCompat.isPresent();
+        boolean distantHorizons = ColorLightDistantHorizonsCompat.isPresent();
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(Identifier.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl || voxy) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy));
+        if (ldl || voxy || distantHorizons) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -220,10 +222,10 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return built;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons) {
         Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
         Identifier entityFollowId = Identifier.parse("colorlight:entity_follow_render_distance");
-        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}.", ldl, voxy);
+        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}.", ldl, voxy, distantHorizons);
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.COMPATIBILITY);
         if (ldl) {
             page.addOptionGroup(builder.createOptionGroup()
@@ -245,13 +247,13 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setDefaultValue(config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
                     )
                     .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:dynamic_propagation"))
-                            .setName(Translatable.DYNAMIC_PROPAGATION)
-                            .setTooltip(Translatable.DYNAMIC_PROPAGATION_Tooltip)
-                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
-                                    parentScreen, Translatable.DYNAMIC_PROPAGATION,
-                                    () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
-                                    this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
-                    )
+                                .setName(Translatable.DYNAMIC_PROPAGATION)
+                                .setTooltip(Translatable.DYNAMIC_PROPAGATION_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
+                                        parentScreen, Translatable.DYNAMIC_PROPAGATION,
+                                        () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
+                                        this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
+                        )
                     .addOption(builder.createIntegerOption(Identifier.parse("colorlight:entity_check_radius_chunks"))
                             .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
@@ -268,19 +270,37 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         if (voxy) {
             page.addOptionGroup(builder.createOptionGroup()
                     .setName(Translatable.VOXY)
-                    .addOption(builder.createBooleanOption(Identifier.parse("colorlight:voxy_light"))
-                            .setName(Translatable.VOXY_LIGHT)
-                            .setTooltip(Translatable.VOXY_LIGHT_Tooltip)
-                            .setStorageHandler(this::save)
-                            .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
-                            .setDefaultValue(config.VOXY_LIGHT)
-                    )
-                    .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:voxy_import"))
-                            .setName(Translatable.VOXY_IMPORT)
-                            .setTooltip(Translatable.VOXY_IMPORT_Tooltip)
-                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
-                                    new me.mrhikmen.colorlight.client.config.gui.screen.VoxyImportScreen(parentScreen)))
-                    )
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:voxy_light"))
+                                .setName(Translatable.VOXY_LIGHT)
+                                .setTooltip(Translatable.VOXY_LIGHT_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
+                                .setDefaultValue(config.VOXY_LIGHT)
+                        )
+                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:voxy_import"))
+                                .setName(Translatable.VOXY_IMPORT)
+                                .setTooltip(Translatable.VOXY_IMPORT_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
+                                        new me.mrhikmen.colorlight.client.config.gui.screen.VoxyImportScreen(parentScreen)))
+                        )
+            );
+        }
+        if (distantHorizons) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.DISTANTHORIZONS)
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:dh_light"))
+                                .setName(Translatable.DH_LIGHT)
+                                .setTooltip(Translatable.DH_LIGHT_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.DH_LIGHT = value, () -> config.DH_LIGHT)
+                                .setDefaultValue(config.DH_LIGHT)
+                        )
+                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:dh_scan"))
+                                .setName(Translatable.DH_SCAN)
+                                .setTooltip(Translatable.DH_SCAN_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
+                                        new me.mrhikmen.colorlight.client.config.gui.screen.DhScanScreen(parentScreen)))
+                        )
             );
         }
         return page;

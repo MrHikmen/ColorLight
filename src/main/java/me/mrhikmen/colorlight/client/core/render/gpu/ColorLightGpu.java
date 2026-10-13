@@ -8,6 +8,7 @@ import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 
 import me.mrhikmen.colorlight.client.compat.voxy.VoxyLightBridge;
+import me.mrhikmen.colorlight.client.compat.distanthorizons.DhLightBridge;
 
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -233,8 +234,10 @@ public final class ColorLightGpu {
 
     /** Once per frame, before any terrain pass. */
     public static void onFrameStart(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
-        // Voxy's and Distant Horizons' LODs have their own pipelines and their own switches; they only need to know where the camera is
+        // Voxy's and Distant Horizons' LODs each have their own pipeline and their own switch; they only need to
+        // know where the camera is
         VoxyLightBridge.onFrame(camBlockX, camBlockZ);
+        DhLightBridge.onFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
 
         prepareFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
     }
@@ -270,6 +273,7 @@ public final class ColorLightGpu {
     public static void onDraw(RenderPass pass, int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
         // same as in the frame hook, for when that one did not run: cheap, it only uploads when something changed
         VoxyLightBridge.onFrame(camBlockX, camBlockZ);
+        DhLightBridge.onFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
 
         if (!pipelineInUse())
             return;

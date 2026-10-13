@@ -67,6 +67,16 @@
   "me.colorlight.compatibility.voxy_import.idle": "Ещё не импортировано.",
   "me.colorlight.compatibility.voxy_import.progress": "Чтение Voxy: %s / %s областей",
 
+  "me.colorlight.compatibility.distanthorizons": "Distant Horizons (LOD-террейн)",
+  "me.colorlight.compatibility.dh_light": "Цветной свет на LOD Distant Horizons",
+  "me.colorlight.compatibility.dh_light.tooltip": "Окрашивает свет на дальнем террейне Distant Horizons, читая его собственные сохранённые данные через публичный API в фоне (действует настолько далеко, насколько у Distant Horizons есть данные, а не только по загруженным чанкам). Изменённый источник света появляется в течение примерно 20 секунд. Нужен Distant Horizons.",
+  "me.colorlight.compatibility.dh_scan": "Сканировать Distant Horizons на источники света",
+  "me.colorlight.compatibility.dh_scan.tooltip": "Показывает фоновое сканирование, которое читает цветные источники света из сохранённых данных Distant Horizons, и позволяет запустить новое сканирование вокруг текущей позиции.",
+  "me.colorlight.compatibility.dh_scan.start": "Сканировать сейчас",
+  "me.colorlight.compatibility.dh_scan.idle": "Ещё не сканировалось.",
+  "me.colorlight.compatibility.dh_scan.done": "Сканирование завершено: известно источников света — %s.",
+  "me.colorlight.compatibility.dh_scan.progress": "Сканирование: %s / %s областей (найдено источников света: %s)",
+
   "me.colorlight.block_value.1": "%s блок",
   "me.colorlight.block_value.1-5": "%s блока",
   "me.colorlight.block_value": "%s блоков",

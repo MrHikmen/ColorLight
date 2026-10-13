@@ -8,7 +8,9 @@
   ],
   "client": [
     "RenderGenerationServiceMixin",
-    "ShaderLoaderMixin"
+    "ShaderLoaderMixin",
+    "VkTerrainRendererMixin",
+    "VkBinderMixin"
   ],
   "injectors": {
     "defaultRequire": 0

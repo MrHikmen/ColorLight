@@ -65,6 +65,16 @@
   "me.colorlight.compatibility.voxy_import.idle": "Not imported yet.",
   "me.colorlight.compatibility.voxy_import.progress": "Reading Voxy: %s / %s areas",
 
+  "me.colorlight.compatibility.distanthorizons": "Distant Horizons (LOD terrain)",
+  "me.colorlight.compatibility.dh_light": "Coloured light on Distant Horizons LODs",
+  "me.colorlight.compatibility.dh_light.tooltip": "Colours the light on Distant Horizons' distant terrain, read from its own saved data through its public API in the background (reaches as far as Distant Horizons' own data does, not just loaded chunks). A changed light shows up within about 20 seconds. Needs Distant Horizons.",
+  "me.colorlight.compatibility.dh_scan": "Scan Distant Horizons for light sources",
+  "me.colorlight.compatibility.dh_scan.tooltip": "Shows the background scan that reads coloured light sources out of Distant Horizons' saved data, and lets you start a fresh one centred on where you are standing right now.",
+  "me.colorlight.compatibility.dh_scan.start": "Scan now",
+  "me.colorlight.compatibility.dh_scan.idle": "Not scanned yet.",
+  "me.colorlight.compatibility.dh_scan.done": "Scan finished: %s coloured light source(s) known.",
+  "me.colorlight.compatibility.dh_scan.progress": "Scanning: %s / %s areas (%s light source(s) found so far)",
+
   "me.colorlight.block_value.1": "%s block",
   "me.colorlight.block_value.1-5": "%s blocks",
   "me.colorlight.block_value": "%s blocks",

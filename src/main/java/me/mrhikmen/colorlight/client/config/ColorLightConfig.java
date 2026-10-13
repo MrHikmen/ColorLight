@@ -46,6 +46,11 @@ public class ColorLightConfig {
      * remembered between sessions. Needs Voxy; ignored otherwise.
      */
     public boolean VOXY_LIGHT = true;
+    /**
+     * Colour the light on Distant Horizons' LOD terrain, read from Distant Horizons' own saved data through its
+     * public API (not just the chunks the client has loaded). Needs Distant Horizons; ignored otherwise.
+     */
+    public boolean DH_LIGHT = true;
     /** How many 16x16x16 light sections the GPU light volume can hold at once (16 KiB each). 64..4096. */
     public int GPU_LIGHT_SECTIONS = 768;
     /** Id of the propagation method blocks use by default, e.g. {@code colorlight:grid}. Legacy values GRID / SMOOTH still work. */
@@ -108,6 +113,9 @@ public class ColorLightConfig {
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
                 this.DYNAMIC_PROPAGATION = root.has("DYNAMIC_PROPAGATION") && loaded.DYNAMIC_PROPAGATION != null ? loaded.DYNAMIC_PROPAGATION : this.DYNAMIC_PROPAGATION;
                 this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
+
+                this.VOXY_LIGHT = loaded.VOXY_LIGHT;
+                this.DH_LIGHT = loaded.DH_LIGHT;
 
                 this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
                 this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;

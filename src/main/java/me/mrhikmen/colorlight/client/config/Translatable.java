@@ -64,6 +64,21 @@ public class Translatable {
         return Component.translatable("me.colorlight.compatibility.voxy_import.progress", done, total);
     }
 
+    public static Component DISTANTHORIZONS = Component.translatable("me.colorlight.compatibility.distanthorizons");
+    public static Component DH_LIGHT = Component.translatable("me.colorlight.compatibility.dh_light");
+    public static Component DH_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.dh_light.tooltip");
+
+    public static Component DH_SCAN = Component.translatable("me.colorlight.compatibility.dh_scan");
+    public static Component DH_SCAN_Tooltip = Component.translatable("me.colorlight.compatibility.dh_scan.tooltip");
+    public static Component DH_SCAN_Start = Component.translatable("me.colorlight.compatibility.dh_scan.start");
+    public static Component DH_SCAN_Idle = Component.translatable("me.colorlight.compatibility.dh_scan.idle");
+    public static Component DH_SCAN_Done(int sources) {
+        return Component.translatable("me.colorlight.compatibility.dh_scan.done", sources);
+    }
+    public static Component DH_SCAN_Progress(int done, int total, int sources) {
+        return Component.translatable("me.colorlight.compatibility.dh_scan.progress", done, total, sources);
+    }
+
     public static Component ENTITY_TRACKING = Component.translatable("me.colorlight.compatibility.entity_tracking");
     public static Component ENTITY_TRACKING_ENABLED = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled");
     public static Component ENTITY_TRACKING_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled.tooltip");
