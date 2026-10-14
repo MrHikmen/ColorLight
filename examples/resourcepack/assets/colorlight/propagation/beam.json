@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "colorlight:beam - light that carries far up and down but barely sideways (a lighthouse / pillar of light).",
+    "Use it from a block file:  \"minecraft:beacon\": { \"propagation\": \"colorlight:beam\" }"
+  ],
+
+  "name": "Vertical beam",
+  "scale": 1,
+  "neighbors": [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]],
+
+  "loss": {
+    "vertical_factor": 0.25,
+    "horizontal_factor": 2.5
+  }
+}
