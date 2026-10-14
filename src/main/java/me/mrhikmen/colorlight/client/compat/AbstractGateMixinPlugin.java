@@ -10,7 +10,7 @@ import java.util.Set;
 
 /**
  * Shared base for ColorLight's {@link IMixinConfigPlugin}s. Both {@link ColorLightSodiumPlugin} and
- * {@link me.mrhikmen.colorlight.client.compat.voxy.mixin.ColorLightVoxyPlugin} are plain all-or-nothing gates: they decide once, when their mixin config loads,
+ * {@link me.mrhikmen.colorlight.client.compat.lod.voxy.mixin.ColorLightVoxyPlugin} are plain all-or-nothing gates: they decide once, when their mixin config loads,
  * whether their whole mixin set should be applied, and never touch the rest of the mixin pipeline (no per-mixin
  * filtering, no target rewriting). This base class carries that shared no-op behaviour so each gate only needs
  * to implement {@link #decide()}.

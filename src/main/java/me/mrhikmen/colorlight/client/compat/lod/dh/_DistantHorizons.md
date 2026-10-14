@@ -14,7 +14,7 @@ own saved data through its public `DhApi`, not just the client's loaded chunks.
   `DhApi.Delayed.terrainRepo.getAllTerrainDataAtChunkPos` for the area around the camera (nearest first, 1024-block
   radius), which is DH's own stored LOD data - so it reaches as far as DH's data goes, not just the client's render
   distance. There is no "a chunk changed" event in the public API, so a finished sweep is simply repeated every
-  20 seconds instead of being nudged by a hint. Saved to `<game dir>/colorlight/dhlight/<uuid>.bin` every 30 seconds
+  20 seconds instead of being nudged by a hint. Saved to `<game dir>/colorlight/lodlight/<uuid>.bin (shared with Voxy)` every 30 seconds
   (a separate file per world and dimension).
 
 **Configuration:** `DH_LIGHT` (enabled by default).
@@ -46,7 +46,7 @@ any Distant Horizons version.
   собственные сохранённые LOD-данные DH, так что свет действует настолько далеко, насколько у DH есть данные, а не
   только в пределах дальности прорисовки клиента. В публичном API нет события «чанк изменился», поэтому вместо
   точечного обновления по подсказке законченный проход просто повторяется каждые 20 секунд. Сохраняется в
-  `<game dir>/colorlight/dhlight/<uuid>.bin` каждые 30 секунд (отдельный файл на мир и измерение).
+  `<game dir>/colorlight/lodlight/<uuid>.bin (общий файл с Voxy)` каждые 30 секунд (отдельный файл на мир и измерение).
 
 **Настройка:** `DH_LIGHT` (по умолчанию включено).
 

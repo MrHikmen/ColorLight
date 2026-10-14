@@ -1,6 +1,6 @@
-package me.mrhikmen.colorlight.client.compat.distanthorizons.mixin;
+package me.mrhikmen.colorlight.client.compat.lod.dh.mixin;
 
-import me.mrhikmen.colorlight.client.compat.distanthorizons.DhLightBridge;
+import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

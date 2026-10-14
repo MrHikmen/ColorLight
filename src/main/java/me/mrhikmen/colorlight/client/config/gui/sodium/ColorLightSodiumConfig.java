@@ -2,8 +2,8 @@ package me.mrhikmen.colorlight.client.config.gui.sodium;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
-import me.mrhikmen.colorlight.client.compat.voxy.ColorLightVoxyCompat;
-import me.mrhikmen.colorlight.client.compat.distanthorizons.ColorLightDistantHorizonsCompat;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.ColorLightVoxyCompat;
+import me.mrhikmen.colorlight.client.compat.lod.dh.ColorLightDistantHorizonsCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
@@ -267,6 +267,27 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                     )
             );
         }
+        if (voxy || distantHorizons) {
+            var group = builder.createOptionGroup()
+                    .setName(Translatable.LOD_IMPORT);
+            if (voxy) {
+                group.addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:lod_import_voxy"))
+                        .setName(Translatable.LOD_IMPORT_VOXY)
+                        .setTooltip(Translatable.LOD_IMPORT_VOXY_Tooltip)
+                        .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
+                                new me.mrhikmen.colorlight.client.config.gui.screen.LodImportScreen(parentScreen,
+                                        Translatable.LOD_IMPORT_VOXY, me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight.IMPORT))));
+            }
+            if (distantHorizons) {
+                group.addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:lod_import_dh"))
+                        .setName(Translatable.LOD_IMPORT_DH)
+                        .setTooltip(Translatable.LOD_IMPORT_DH_Tooltip)
+                        .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
+                                new me.mrhikmen.colorlight.client.config.gui.screen.LodImportScreen(parentScreen,
+                                        Translatable.LOD_IMPORT_DH, me.mrhikmen.colorlight.client.compat.lod.dh.DhLodLight.IMPORT))));
+            }
+            page.addOptionGroup(group);
+        }
         if (voxy) {
             page.addOptionGroup(builder.createOptionGroup()
                     .setName(Translatable.VOXY)
@@ -276,12 +297,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setStorageHandler(this::save)
                                 .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
                                 .setDefaultValue(config.VOXY_LIGHT)
-                        )
-                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:voxy_import"))
-                                .setName(Translatable.VOXY_IMPORT)
-                                .setTooltip(Translatable.VOXY_IMPORT_Tooltip)
-                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
-                                        new me.mrhikmen.colorlight.client.config.gui.screen.VoxyImportScreen(parentScreen)))
                         )
             );
         }
@@ -294,12 +309,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setStorageHandler(this::save)
                                 .setBinding(value -> config.DH_LIGHT = value, () -> config.DH_LIGHT)
                                 .setDefaultValue(config.DH_LIGHT)
-                        )
-                        .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:dh_scan"))
-                                .setName(Translatable.DH_SCAN)
-                                .setTooltip(Translatable.DH_SCAN_Tooltip)
-                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(
-                                        new me.mrhikmen.colorlight.client.config.gui.screen.DhScanScreen(parentScreen)))
                         )
             );
         }

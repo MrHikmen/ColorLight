@@ -7,8 +7,8 @@ import me.mrhikmen.colorlight.client.compat.nvidium.NvidiumBridge;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 
-import me.mrhikmen.colorlight.client.compat.voxy.VoxyLightBridge;
-import me.mrhikmen.colorlight.client.compat.distanthorizons.DhLightBridge;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge;
+import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 
 import net.fabricmc.loader.api.FabricLoader;
 

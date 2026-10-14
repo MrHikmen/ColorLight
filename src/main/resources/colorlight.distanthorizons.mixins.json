@@ -1,8 +1,8 @@
 {
   "required": false,
   "minVersion": "0.8",
-  "package": "me.mrhikmen.colorlight.client.compat.distanthorizons.mixin",
-  "plugin": "me.mrhikmen.colorlight.client.compat.distanthorizons.mixin.ColorLightDistantHorizonsPlugin",
+  "package": "me.mrhikmen.colorlight.client.compat.lod.dh.mixin",
+  "plugin": "me.mrhikmen.colorlight.client.compat.lod.dh.mixin.ColorLightDistantHorizonsPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
   ],

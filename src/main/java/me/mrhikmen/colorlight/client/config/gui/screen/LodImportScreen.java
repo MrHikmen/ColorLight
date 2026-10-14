@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.config.gui.screen;
 
-import me.mrhikmen.colorlight.client.compat.voxy.LodLight;
+import me.mrhikmen.colorlight.client.compat.lod.LodImport;
 import me.mrhikmen.colorlight.client.config.Translatable;
 
 import net.minecraft.client.gui.components.Button;
@@ -9,32 +9,36 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
- * Starts and shows the progress of reading the world's far light out of Voxy ({@link LodLight#startImport}).
- * Has no Voxy imports of its own: everything goes through {@link LodLight}. Closing the screen does not stop the
+ * Starts and shows the progress of reading the world's far light out of one LOD mod (Voxy or Distant Horizons).
+ * Works through {@link LodImport}, so it never loads a class of either mod. Closing the screen does not stop the
  * import - it carries on in the background; use the stop button for that.
  */
-public class VoxyImportScreen extends Screen {
+public class LodImportScreen extends Screen {
 
     private final Screen parent;
+    private final Component heading;
+    private final LodImport source;
     private StringWidget status;
     private Button action;
 
-    public VoxyImportScreen(Screen parent) {
-        super(Translatable.VOXY_IMPORT);
+    public LodImportScreen(Screen parent, Component heading, LodImport source) {
+        super(heading);
         this.parent = parent;
+        this.heading = heading;
+        this.source = source;
     }
 
     @Override
     protected void init() {
         int cx = this.width / 2;
-        this.addRenderableWidget(new StringWidget(cx - 150, 30, 300, 20, Translatable.VOXY_IMPORT, this.font));
+        this.addRenderableWidget(new StringWidget(cx - 150, 30, 300, 20, this.heading, this.font));
         this.status = this.addRenderableWidget(new StringWidget(cx - 150, 70, 300, 20, Component.empty(), this.font));
 
-        this.action = this.addRenderableWidget(Button.builder(Translatable.VOXY_IMPORT_Start, button -> {
-                    if (LodLight.isImporting())
-                        LodLight.cancelImport();
+        this.action = this.addRenderableWidget(Button.builder(Translatable.LOD_IMPORT_Start, button -> {
+                    if (this.source.running())
+                        this.source.cancel();
                     else
-                        LodLight.startImport();
+                        this.source.start();
                     this.refresh();
                 })
                 .pos(cx - 100, 100)
@@ -57,16 +61,16 @@ public class VoxyImportScreen extends Screen {
     private void refresh() {
         if (this.status == null)
             return;
-        boolean importing = LodLight.isImporting();
+        boolean running = this.source.running();
         Component text;
-        if (importing)
-            text = Translatable.VOXY_IMPORT_Progress(LodLight.importDone(), LodLight.importTotal());
-        else if (LodLight.hasImported())
-            text = Translatable.VOXY_IMPORT_Done;
+        if (running)
+            text = Translatable.LOD_IMPORT_Progress(this.source.done(), this.source.total(), this.source.sources());
+        else if (this.source.everDone())
+            text = Translatable.LOD_IMPORT_Done(this.source.sources());
         else
-            text = Translatable.VOXY_IMPORT_Idle;
+            text = Translatable.LOD_IMPORT_Idle;
         this.status.setMessage(text);
-        this.action.setMessage(importing ? Translatable.VOXY_IMPORT_Cancel : Translatable.VOXY_IMPORT_Start);
+        this.action.setMessage(running ? Translatable.LOD_IMPORT_Cancel : Translatable.LOD_IMPORT_Start);
     }
 
     @Override

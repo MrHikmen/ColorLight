@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.distanthorizons.mixin;
+package me.mrhikmen.colorlight.client.compat.lod.dh.mixin;
 
 import me.mrhikmen.colorlight.client.compat.AbstractGateMixinPlugin;
 import net.fabricmc.loader.api.FabricLoader;

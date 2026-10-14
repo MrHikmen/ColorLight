@@ -1,6 +1,6 @@
-package me.mrhikmen.colorlight.client.compat.voxy.mixin;
+package me.mrhikmen.colorlight.client.compat.lod.voxy.mixin;
 
-import me.mrhikmen.colorlight.client.compat.voxy.VoxyLightBridge;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

@@ -1,10 +1,12 @@
-package me.mrhikmen.colorlight.client.compat.voxy;
+package me.mrhikmen.colorlight.client.compat.lod.voxy;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
+
+import me.mrhikmen.colorlight.client.compat.lod.LodLightStore;
 
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
@@ -17,17 +19,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,8 +34,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * The list of coloured light sources of the world, for Voxy's distant LODs.
@@ -87,8 +76,6 @@ public final class VoxyLightCache {
     private static final long ENGINE_CHANGE_DELAY_MS = 2_500L;
     private static final int[] NO_SOURCES = new int[0];
 
-    private static final int FILE_MAGIC = 0x434C5658; // 'CLVX'
-    private static final int FILE_FORMAT = 4;         // 4: only exposed lights are listed (older far-light files are ignored)
 
     /** Nearest-first list of column offsets inside {@link #WINDOW_COLS}. */
     private static final int[] SWEEP_DX;
@@ -109,22 +96,32 @@ public final class VoxyLightCache {
         }
     }
 
-    /** Section column key (x,z of a level-0 section) -> flat {x, y, z, rgb} per source. Present (even empty) = scanned. */
-    private final ConcurrentHashMap<Long, int[]> columns = new ConcurrentHashMap<>();
-    private final AtomicLong version = new AtomicLong();
-    private final AtomicBoolean unsaved = new AtomicBoolean();
+    /** The shared store of the world: column key (x,z of a level-0 section) -> flat {x, y, z, rgb} per source. */
+    private final LodLightStore store;
+    private final LodLightStore.Channel channel;
+    private final ConcurrentHashMap<Long, int[]> columns;
+    private final AtomicLong version;
+    private final AtomicBoolean unsaved;
+    /** Set by {@link #startImport}: the next pass reads every column again instead of skipping the known ones. */
+    private volatile boolean forceAll;
+
+    public VoxyLightCache(LodLightStore store) {
+        this.store = store;
+        this.channel = store.newChannel(WINDOW_COLS, PER_CELL_CAP);
+        this.columns = store.columns;
+        this.version = store.version;
+        this.unsaved = store.unsaved;
+    }
+
+    public LodLightStore store() {
+        return store;
+    }
 
     private final ConcurrentHashMap<Long, Long> dirtyCols = new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<long[]> incomingEngineDirty = new ConcurrentLinkedQueue<>();
 
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "ColorLight Voxy Light Scanner");
-        t.setDaemon(true);
-        t.setPriority(Thread.MIN_PRIORITY);
-        return t;
-    });
-    private final ExecutorService filler = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "ColorLight Voxy Light Table");
         t.setDaemon(true);
         t.setPriority(Thread.MIN_PRIORITY);
         return t;
@@ -144,13 +141,6 @@ public final class VoxyLightCache {
     private volatile boolean sweepActive;
     private volatile int sweepIdx;
     private volatile int sweepCenterX = Integer.MIN_VALUE, sweepCenterZ;
-
-    // GPU table
-    private static final int FILL_IDLE = 0, FILL_REQUESTED = 1, FILL_READY = 2;
-    private final AtomicInteger fillState = new AtomicInteger(FILL_IDLE);
-    private final long[] fillStamp = new long[4];
-    private IntBuffer cellBuf;
-    private IntBuffer srcBuf;
 
     // ------------------------------------------------------------------------------------------------------
     // Status / control (main thread)
@@ -180,7 +170,7 @@ public final class VoxyLightCache {
 
     /** Forgets every list and reads all columns around the player again. */
     public void startImport() {
-        columns.clear();
+        forceAll = true; // the columns stay (other LOD mods share them); every one is read again and overwritten
         dirtyCols.clear();
         incomingEngineDirty.clear();
         memoStale = true;
@@ -228,6 +218,8 @@ public final class VoxyLightCache {
         var instance = VoxyCommon.getInstance();
         if (instance == null)
             return;
+        if (!store.loaded())
+            return; // the saved light is still being read
         WorldEngine engine = instance.getNullable(id);
         if (engine == null || !engine.isLive())
             return;
@@ -247,214 +239,27 @@ public final class VoxyLightCache {
     }
 
     // ------------------------------------------------------------------------------------------------------
-    // GPU table (render thread asks, filler thread builds, render thread uploads)
+    // GPU table: built by the shared store's channel for this mod's shader
     // ------------------------------------------------------------------------------------------------------
 
-    /**
-     * Asks the filler thread to build the "column -> sources" table and the source list around the camera (nearest
-     * columns first). Does nothing while one is being built or waits to be picked up. Cheap.
-     */
     public void requestFill(int camBlockX, int camBlockZ) {
-        if (!fillState.compareAndSet(FILL_IDLE, FILL_REQUESTED))
-            return;
-        long v = version.get();
-        try {
-            filler.execute(() -> {
-                try {
-                    build(v, camBlockX >> 5, camBlockZ >> 5);
-                    fillState.set(FILL_READY);
-                } catch (Throwable t) {
-                    fillState.set(FILL_IDLE);
-                }
-            });
-        } catch (RuntimeException shutDown) {
-            fillState.set(FILL_IDLE);
-        }
+        channel.requestFill(camBlockX, camBlockZ);
     }
 
-    /**
-     * @return true if a finished table is waiting; {@code stamp} gets {version, camCol x, camCol z, source count}.
-     *         Read {@link #cellBuffer} / {@link #sourceBuffer}, then call {@link #releaseFilled}.
-     */
     public boolean pollFilled(long[] stamp) {
-        if (fillState.get() != FILL_READY)
-            return false;
-        System.arraycopy(fillStamp, 0, stamp, 0, 4);
-        return true;
+        return channel.pollFilled(stamp);
     }
 
-    public IntBuffer cellBuffer() {
-        cellBuf.clear();
-        return cellBuf;
+    public java.nio.IntBuffer cellBuffer() {
+        return channel.cellBuffer();
     }
 
-    /** Positioned at 0 with its limit at {@code count * 4} ints. */
-    public IntBuffer sourceBuffer(int count) {
-        srcBuf.clear();
-        srcBuf.limit(count * 4);
-        return srcBuf;
+    public java.nio.IntBuffer sourceBuffer(int count) {
+        return channel.sourceBuffer(count);
     }
 
     public void releaseFilled() {
-        fillState.set(FILL_IDLE);
-    }
-
-    private int[] cellCount;
-    private int[] cellStart;
-    private int[] cellFill;
-
-    /**
-     * Regroups the per-column lists of the columns around the camera (nearest first) into 16x16-block cells: the
-     * shader looks at the 3x3 cells around a block, so a cell holds few sources even over a lava sea or a lamp
-     * field. Layout: cell table (first source, count) per cell, then the sources of all cells one after the other.
-     */
-    private void build(long v, int camCx, int camCz) {
-        int cellTotal = GRID_CELLS * GRID_CELLS;
-        if (cellBuf == null) {
-            cellBuf = ByteBuffer.allocateDirect(cellTotal * 2 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
-            srcBuf = ByteBuffer.allocateDirect(MAX_SOURCES * 4 * Integer.BYTES).order(ByteOrder.nativeOrder()).asIntBuffer();
-            cellCount = new int[cellTotal];
-            cellStart = new int[cellTotal];
-            cellFill = new int[cellTotal];
-        }
-        cellBuf.clear();
-        srcBuf.clear();
-        Arrays.fill(cellCount, 0);
-
-        // pass 1: how many sources each cell gets (nearest columns first, per-cell and total caps)
-        int total = 0;
-        int lastColumn = SWEEP_DX.length;
-        for (int i = 0; i < SWEEP_DX.length && total < MAX_SOURCES; i++) {
-            int[] src = columns.get(colKey(camCx + SWEEP_DX[i], camCz + SWEEP_DZ[i]));
-            if (src == null)
-                continue;
-            for (int j = 0; j < src.length && total < MAX_SOURCES; j += 4) {
-                int cell = cellIndex(src[j], src[j + 2]);
-                if (cellCount[cell] < PER_CELL_CAP) {
-                    cellCount[cell]++;
-                    total++;
-                }
-            }
-            lastColumn = i;
-        }
-
-        // prefix sums -> table
-        int running = 0;
-        for (int c = 0; c < cellTotal; c++) {
-            cellStart[c] = running;
-            cellFill[c] = 0;
-            cellBuf.put(c * 2, running);
-            cellBuf.put(c * 2 + 1, cellCount[c]);
-            running += cellCount[c];
-        }
-
-        // pass 2: the same walk, now writing the sources
-        for (int i = 0; i <= lastColumn && i < SWEEP_DX.length; i++) {
-            int[] src = columns.get(colKey(camCx + SWEEP_DX[i], camCz + SWEEP_DZ[i]));
-            if (src == null)
-                continue;
-            for (int j = 0; j < src.length; j += 4) {
-                int cell = cellIndex(src[j], src[j + 2]);
-                if (cellFill[cell] >= cellCount[cell])
-                    continue;
-                int at = (cellStart[cell] + cellFill[cell]++) * 4;
-                srcBuf.put(at, src[j]);
-                srcBuf.put(at + 1, src[j + 1]);
-                srcBuf.put(at + 2, src[j + 2]);
-                srcBuf.put(at + 3, src[j + 3]);
-            }
-        }
-        fillStamp[0] = v;
-        fillStamp[1] = camCx;
-        fillStamp[2] = camCz;
-        fillStamp[3] = running;
-    }
-
-    private static int cellIndex(int x, int z) {
-        return ((x >> 4) & (GRID_CELLS - 1)) | (((z >> 4) & (GRID_CELLS - 1)) * GRID_CELLS);
-    }
-
-    // ------------------------------------------------------------------------------------------------------
-    // Persistence
-    // ------------------------------------------------------------------------------------------------------
-
-    public boolean hasUnsavedChanges() {
-        return unsaved.get();
-    }
-
-    /** Writes every column's list (gzip, atomic replace). Safe from any thread. */
-    public void save(Path file) throws IOException {
-        unsaved.set(false); // cleared first: a change made while writing marks it again
-        try {
-            Files.createDirectories(file.getParent());
-            Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-            Object[] entries = columns.entrySet().toArray();
-            try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(new BufferedOutputStream(Files.newOutputStream(tmp))))) {
-                out.writeInt(FILE_MAGIC);
-                out.writeInt(FILE_FORMAT);
-                out.writeInt(entries.length);
-                for (Object o : entries) {
-                    @SuppressWarnings("unchecked")
-                    Map.Entry<Long, int[]> e = (Map.Entry<Long, int[]>) o;
-                    int[] a = e.getValue();
-                    out.writeLong(e.getKey());
-                    out.writeInt(a.length);
-                    for (int x : a)
-                        out.writeInt(x);
-                }
-            }
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException | RuntimeException e) {
-            unsaved.set(true);
-            throw e;
-        }
-    }
-
-    /** Adds the columns of a saved file (columns already read this session win). */
-    public void load(Path file) throws IOException {
-        try (DataInputStream in = new DataInputStream(new GZIPInputStream(new BufferedInputStream(Files.newInputStream(file))))) {
-            if (in.readInt() != FILE_MAGIC || in.readInt() != FILE_FORMAT)
-                return;
-            int n = in.readInt();
-            for (int i = 0; i < n; i++) {
-                long key = in.readLong();
-                int len = in.readInt();
-                if (len < 0 || len > MAX_PER_COLUMN * 4 || (len & 3) != 0)
-                    throw new IOException("bad column");
-                int[] a = len == 0 ? NO_SOURCES : new int[len];
-                for (int j = 0; j < len; j++)
-                    a[j] = in.readInt();
-                columns.putIfAbsent(key, a);
-            }
-            version.incrementAndGet();
-        }
-    }
-
-    public void saveAsync(Path file) {
-        try {
-            worker.execute(() -> {
-                try {
-                    save(file);
-                } catch (Throwable t) {
-                    ColorLightClient.LOGGER.warn("[ColorLight] Could not save far light file {}: {}", file, t.toString());
-                }
-            });
-        } catch (RuntimeException shutDown) {
-        }
-    }
-
-    public void loadAsync(Path file) {
-        try {
-            worker.execute(() -> {
-                try {
-                    load(file);
-                    ColorLightClient.LOGGER.info("[ColorLight] Loaded far light from {} ({} columns)", file, columns.size());
-                } catch (Throwable t) {
-                    ColorLightClient.LOGGER.warn("[ColorLight] Could not read far light file {}: {}", file, t.toString());
-                }
-            });
-        } catch (RuntimeException shutDown) {
-        }
+        channel.releaseFilled();
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -504,13 +309,14 @@ public final class VoxyLightCache {
             int cx = cx0 + SWEEP_DX[i];
             int cz = cz0 + SWEEP_DZ[i];
             sweepIdx = i + 1;
-            if (!columns.containsKey(colKey(cx, cz))) {
+            if (forceAll || !columns.containsKey(colKey(cx, cz))) {
                 scanAndStore(engine, cx, cz);
                 if (System.nanoTime() > deadline)
                     return sweepIdx < SWEEP_DX.length;
             }
         }
         sweepActive = false;
+        forceAll = false;
         return false;
     }
 
@@ -650,6 +456,5 @@ public final class VoxyLightCache {
     public void shutdown() {
         sweepActive = false;
         worker.shutdownNow();
-        filler.shutdownNow();
     }
 }

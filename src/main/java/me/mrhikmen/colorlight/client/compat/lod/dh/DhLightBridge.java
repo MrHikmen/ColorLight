@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.distanthorizons;
+package me.mrhikmen.colorlight.client.compat.lod.dh;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;

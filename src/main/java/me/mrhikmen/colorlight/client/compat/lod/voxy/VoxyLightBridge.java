@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.voxy;
+package me.mrhikmen.colorlight.client.compat.lod.voxy;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;

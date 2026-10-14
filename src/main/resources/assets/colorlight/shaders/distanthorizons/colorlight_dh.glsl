@@ -1,6 +1,6 @@
 // ColorLight: coloured light for Distant Horizons' LOD terrain. This text is inserted into DH's terrain fragment
 // shader (assets/distanthorizons/shaders/terrain/gl/frag.frag) by
-// me.mrhikmen.colorlight.client.compat.distanthorizons.DhLightBridge; __CL_BINDING__ is replaced with a free SSBO
+// me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge; __CL_BINDING__ is replaced with a free SSBO
 // binding. A matching pair of varyings (vClSkyLight / vClBlockLight) is added to vert.vert and frag.frag by the
 // same class, next to this block's declarations.
 //
@@ -28,8 +28,10 @@ layout(binding = __CL_BINDING__, std430) readonly buffer ColorLightDhBuffer {
 vec3 cl_dh_light(vec3 worldPos) {
     vec3 camF = vec3(intBitsToFloat(clDh[7]), intBitsToFloat(clDh[8]), intBitsToFloat(clDh[9]));
     vec3 t = camF + worldPos;
-    ivec3 ti = ivec3(floor(t));
-    vec3 f = t - vec3(ti);                          // position inside the block p
+    // the block in front of the surface; the small bias keeps a face lying exactly on a block boundary from flickering
+    // between two neighbouring blocks
+    ivec3 ti = ivec3(floor(t + 0.02));
+    vec3 f = vec3(0.5);                             // the block p is treated as a whole, at its centre
     ivec3 p = ivec3(clDh[0], clDh[6], clDh[1]) + ti;
 
     ivec2 cell = ivec2(p.x >> 4, p.z >> 4);
@@ -60,11 +62,16 @@ vec3 cl_dh_light(vec3 worldPos) {
             int first = clDh[entry];
             for (int i = 0; i < count; i++) {
                 int s = 16 + 524288 + (first + i) * 4;
-                vec3 d = abs(vec3(ivec3(clDh[s], clDh[s + 1], clDh[s + 2]) - p) + 0.5 - f);
-                // block-grid shape like Minecraft's own light (a diamond in the open), not a sphere
-                float w = 1.0 - (d.x + d.y + d.z) / reach;
+                int rgb = clDh[s + 3];
+                // every source has its own reach (a torch and a lantern do not spread equally far), capped by the
+                // light range setting; 0 = unknown (old data): the setting itself
+                float own = float((rgb >> 24) & 255);
+                float r = (own > 0.0) ? min(own, reach) : reach;
+                // whole blocks, like Minecraft's own light: the level drops by one per block of walking distance, so
+                // the light comes in steps (a diamond in the open) and is not smoothed out
+                ivec3 d = abs(ivec3(clDh[s], clDh[s + 1], clDh[s + 2]) - p);
+                float w = 1.0 - float(d.x + d.y + d.z) / r;
                 if (w > 0.0) {
-                    int rgb = clDh[s + 3];
                     best = max(best, vec3(float(rgb & 255), float((rgb >> 8) & 255), float((rgb >> 16) & 255)) * w);
                 }
             }

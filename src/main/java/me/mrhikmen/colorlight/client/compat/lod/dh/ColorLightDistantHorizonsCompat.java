@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.distanthorizons;
+package me.mrhikmen.colorlight.client.compat.lod.dh;
 
 import net.fabricmc.loader.api.FabricLoader;
 

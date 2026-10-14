@@ -1,5 +1,5 @@
 // ColorLight: coloured light for Voxy's LODs. This text is inserted into Voxy's vertex shader (quads3.vert) by
-// me.mrhikmen.colorlight.client.compat.voxy.VoxyLightBridge; __CL_BINDING__ is replaced with a free SSBO binding.
+// me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge; __CL_BINDING__ is replaced with a free SSBO binding.
 //
 // Buffer layout (ints), written by VoxyLightBridge, built by VoxyLightCache (a list of coloured light sources found
 // in Voxy's own saved level-0 data; the colour of every LOD block is worked out right here from the sources

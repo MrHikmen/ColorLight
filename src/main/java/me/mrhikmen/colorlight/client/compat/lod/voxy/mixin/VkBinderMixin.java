@@ -1,6 +1,6 @@
-package me.mrhikmen.colorlight.client.compat.voxy.mixin;
+package me.mrhikmen.colorlight.client.compat.lod.voxy.mixin;
 
-import me.mrhikmen.colorlight.client.compat.voxy.VoxyVkLight;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyVkLight;
 
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK10;
