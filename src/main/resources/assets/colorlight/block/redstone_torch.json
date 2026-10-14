@@ -1,0 +1,4 @@
+{
+  "minecraft:redstone_torch":{ "color": [255, 0, 0] },
+  "minecraft:redstone_wall_torch":{ "color": [255, 0, 0] }
+}

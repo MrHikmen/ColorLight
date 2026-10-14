@@ -1,0 +1,14 @@
+{
+  "_comment": [
+    "colorlight:cross - hops between the 6 face neighbours only, and fades 1.5x faster than grid.",
+    "Change the numbers in \"loss\" to get any other falloff."
+  ],
+
+  "name": "Cross",
+  "scale": 1,
+  "neighbors": "faces",
+
+  "loss": {
+    "multiplier": 1.5
+  }
+}
