@@ -7,9 +7,9 @@ import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
-import me.mrhikmen.colorlight.client.script.ScriptRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.DataRuntime;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -40,7 +40,7 @@ public final class ColorLightCommand {
                                                                     .executes(ctx -> addAtTarget(ctx, null))
                                                                     .then(ClientCommands.argument("method", StringArgumentType.greedyString())
                                                                             .suggests((ctx, builder) -> {
-                                                                                for (PropagationMethod method : PropagationMethodRegistry.all())
+                                                                                for (JsonPropagationMethod method : PropagationMethodRegistry.all())
                                                                                     builder.suggest(method.id().getPath());
                                                                                 return builder.buildFuture();
                                                                             })
@@ -54,7 +54,7 @@ public final class ColorLightCommand {
                             .executes(ColorLightCommand::clearAll))
 
                     .then(ClientCommands.literal("scripts")
-                            .executes(ColorLightCommand::listScripts))
+                            .executes(ColorLightCommand::listData))
             );
         });
     }
@@ -91,16 +91,16 @@ public final class ColorLightCommand {
         return 1;
     }
 
-    /** Lists the propagation methods and any script problems, so pack authors see what loaded. */
-    private static int listScripts(CommandContext<FabricClientCommandSource> ctx) {
-        for (PropagationMethod method : PropagationMethodRegistry.all()) {
-            String source = (method instanceof me.mrhikmen.colorlight.client.lua.ScriptedPropagationMethod scripted) ? scripted.source() : "mod (Java)";
+    /** Lists the propagation methods and any data problems, so pack authors see what loaded. */
+    private static int listData(CommandContext<FabricClientCommandSource> ctx) {
+        for (JsonPropagationMethod method : PropagationMethodRegistry.all()) {
+            String source = method.source();
             ctx.getSource().sendFeedback(Component.literal(method.id() + " - " + method.displayName() + "  [" + source + "]"));
         }
-        for (String problem : ScriptRuntime.problems())
+        for (String problem : DataRuntime.problems())
             ctx.getSource().sendError(Component.literal(problem));
-        if (ScriptRuntime.problems().isEmpty())
-            ctx.getSource().sendFeedback(Component.literal("No script problems."));
+        if (DataRuntime.problems().isEmpty())
+            ctx.getSource().sendFeedback(Component.literal("No data problems."));
         return 1;
     }
 

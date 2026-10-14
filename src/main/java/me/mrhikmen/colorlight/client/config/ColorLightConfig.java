@@ -1,7 +1,8 @@
 package me.mrhikmen.colorlight.client.config;
 
 import com.google.gson.*;
-import me.mrhikmen.colorlight.client.lua.SettingKey;
+import me.mrhikmen.colorlight.client.ColorLightClient;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.SettingKey;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
@@ -19,7 +20,7 @@ import java.util.Objects;
 /**
  * ColorLight's settings file ({@code config/colorlight.json}).
  * <p>
- * <b>Resource packs can provide defaults</b> ({@code assets/colorlight/settings.lua}, see {@link SettingKey}). The rule:
+ * <b>Resource packs can provide defaults</b> ({@code assets/colorlight/settings.json}, see {@link SettingKey}). The rule:
  * <ul>
  *     <li>a setting the player has changed in ColorLight's GUI is theirs - it is remembered in
  *     {@link #userOverrides} and the pack never touches it again;</li>
@@ -31,9 +32,27 @@ import java.util.Objects;
 public class ColorLightConfig {
 
     public boolean ENABLE = true;
-
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
+    /**
+     * Light the terrain per pixel in a shader (a copy of Sodium's terrain shader that reads a GPU light volume)
+     * instead of baking colours into the chunk meshes. Only works with a Sodium version ColorLight was written
+     * against, otherwise vertex colours are used. Switchable while playing; ignored while a shader pack is on.
+     */
+    public boolean GPU_PIPELINE = true;
+    /**
+     * Colour the light on Voxy's distant LODs. The engine only knows the chunks the client has loaded, so this uses a
+     * coarse far-light map (8x8 blocks at the finest level, doubling per level, highest light wins) that is
+     * remembered between sessions. Needs Voxy; ignored otherwise.
+     */
+    public boolean VOXY_LIGHT = true;
+    /**
+     * Colour the light on Distant Horizons' LOD terrain, read from Distant Horizons' own saved data through its
+     * public API (not just the chunks the client has loaded). Needs Distant Horizons; ignored otherwise.
+     */
+    public boolean DH_LIGHT = true;
+    /** How many 16x16x16 light sections the GPU light volume can hold at once (16 KiB each). 64..4096. */
+    public int GPU_LIGHT_SECTIONS = 768;
     /** Id of the propagation method blocks use by default, e.g. {@code colorlight:grid}. Legacy values GRID / SMOOTH still work. */
     public String PROPAGATION_MODE = "colorlight:grid";
     /** Id of the propagation method moving (entity) lights use. */
@@ -60,7 +79,7 @@ public class ColorLightConfig {
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
-    /** Lua keys of the settings the player changed by hand; resource packs leave these alone. */
+    /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
     public List<String> userOverrides = new ArrayList<>();
 
     public LinkedList<BlockSettings> blocks = new LinkedList<>();
@@ -89,9 +108,14 @@ public class ColorLightConfig {
                 mergeBlocks(loaded.blocks);
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
+                this.GPU_PIPELINE = root.has("GPU_PIPELINE") ? loaded.GPU_PIPELINE : this.GPU_PIPELINE;
+                this.GPU_LIGHT_SECTIONS = loaded.GPU_LIGHT_SECTIONS >= 64 ? Math.min(4096, loaded.GPU_LIGHT_SECTIONS) : this.GPU_LIGHT_SECTIONS;
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
                 this.DYNAMIC_PROPAGATION = root.has("DYNAMIC_PROPAGATION") && loaded.DYNAMIC_PROPAGATION != null ? loaded.DYNAMIC_PROPAGATION : this.DYNAMIC_PROPAGATION;
                 this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
+
+                this.VOXY_LIGHT = loaded.VOXY_LIGHT;
+                this.DH_LIGHT = loaded.DH_LIGHT;
 
                 this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
                 this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;
@@ -108,7 +132,7 @@ public class ColorLightConfig {
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
             } catch (IOException e) {
-                e.printStackTrace();
+                ColorLightClient.LOGGER.error("[ColorLight] Failed to read config file {}", PATH, e);
             }
         }
 
@@ -161,14 +185,14 @@ public class ColorLightConfig {
     private void applyPackDefaults() {
         // first undo what an earlier pack set, so a pack that no longer lists a key lets go of it
         for (Map.Entry<SettingKey, Object> e : appliedFromPack.entrySet()) {
-            if (!userOverrides.contains(e.getKey().luaKey) && fileValues.containsKey(e.getKey()))
+            if (!userOverrides.contains(e.getKey().jsonKey) && fileValues.containsKey(e.getKey()))
                 write(e.getKey(), fileValues.get(e.getKey()));
         }
         appliedFromPack.clear();
 
         for (Map.Entry<SettingKey, Object> e : packDefaults.entrySet()) {
             SettingKey key = e.getKey();
-            if (userOverrides.contains(key.luaKey))
+            if (userOverrides.contains(key.jsonKey))
                 continue;
             write(key, e.getValue());
             appliedFromPack.put(key, e.getValue());
@@ -191,20 +215,20 @@ public class ColorLightConfig {
         // Work out which pack-controlled settings the player changed since the pack applied them.
         for (Map.Entry<SettingKey, Object> e : appliedFromPack.entrySet()) {
             SettingKey key = e.getKey();
-            if (!Objects.equals(read(key), e.getValue()) && !userOverrides.contains(key.luaKey)) {
-                userOverrides.add(key.luaKey);
+            if (!Objects.equals(read(key), e.getValue()) && !userOverrides.contains(key.jsonKey)) {
+                userOverrides.add(key.jsonKey);
                 fileValues.put(key, read(key));
             }
         }
         for (SettingKey key : SettingKey.values()) {
-            if (userOverrides.contains(key.luaKey))
+            if (userOverrides.contains(key.jsonKey))
                 fileValues.put(key, read(key));
         }
 
         // Write the player's values, not the pack's, for everything the pack still controls.
         Map<SettingKey, Object> current = new EnumMap<>(SettingKey.class);
         for (SettingKey key : appliedFromPack.keySet()) {
-            if (userOverrides.contains(key.luaKey))
+            if (userOverrides.contains(key.jsonKey))
                 continue;
             current.put(key, read(key));
             write(key, fileValues.get(key));
@@ -214,7 +238,7 @@ public class ColorLightConfig {
         try (Writer writer = Files.newBufferedWriter(PATH)) {
             gson.toJson(this, writer);
         } catch (IOException e) {
-            e.printStackTrace();
+            ColorLightClient.LOGGER.error("[ColorLight] Failed to write config file {}", PATH, e);
         } finally {
             for (Map.Entry<SettingKey, Object> e : current.entrySet())
                 write(e.getKey(), e.getValue());

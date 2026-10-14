@@ -8,18 +8,22 @@ import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDaylightRefresher;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDirtyFlusher;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.script.ScriptRuntime;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.DataRuntime;
 import me.mrhikmen.colorlight.client.core.light.command.ColorLightCommand;
 import me.mrhikmen.colorlight.client.core.render.ModelPlugin;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.compat.lod.LodLightHub;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight;
+import me.mrhikmen.colorlight.client.compat.lod.dh.DhLodLight;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,16 +38,28 @@ public class ColorLightClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // The propagation methods themselves come from Lua files in resource packs (assets/colorlight/propagation).
+        // The propagation methods themselves come from JSON files in resource packs (assets/colorlight/propagation).
         // Until the first resource reload has run them, the two Java fallbacks keep "grid" and "smooth" resolvable.
-        ScriptRuntime.registerFallbacks();
+        DataRuntime.registerFallbacks();
 
         config.load();
 
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
+
         ColorLightBlockRegistry.load(config);
         ColorLightDaylightRefresher.register();
         ColorLightDirtyFlusher.register();
+
+        ClientTickEvents.END_CLIENT_TICK.register(ColorLightGpu::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(LodLightHub::tick); // before the mods below: they use its store
+        ClientTickEvents.END_CLIENT_TICK.register(LodLight::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(DhLodLight::tick);
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            ColorLightGpu.shutdown();
+            LodLight.shutdown();
+            DhLodLight.shutdown();
+            LodLightHub.shutdown();
+        });
 
         ModelLoadingPlugin.register(new ModelPlugin());
 

@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
 import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;

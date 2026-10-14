@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.config;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 
 import net.minecraft.resources.Identifier;
 
@@ -14,8 +14,8 @@ public class BlockSettings {
     public boolean edit;
 
     /**
-     * Id of the {@link me.mrhikmen.colorlight.api.propagation.PropagationMethod} this block spreads
-     * with, e.g. {@code "colorlight:smooth"} or a third-party mod's own id. Blank/absent means
+     * Id of the {@link me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod} this block spreads
+     * with, e.g. {@code "colorlight:smooth"} or a resource pack's own id. Blank/absent means
      * "use the engine-wide default" - existing configs without this field keep working unchanged.
      */
     public String propagation = "";

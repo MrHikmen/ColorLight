@@ -3,7 +3,7 @@ package me.mrhikmen.colorlight.client.core.light.propagation;
 /**
  * Constants shared by the propagation kernels and by the engine's darkening pass, plus the packing helpers for
  * fixed-point working values (three 16-bit channels in one long). The neighbour offsets and decay tables are not
- * here any more: they come from the resource pack's Lua propagation scripts.
+ * here any more: they come from the resource pack's propagation JSON files.
  *
  * <p>The engine's darkening pass and re-seeding always walk the full 26-neighbourhood, {@link #NEIGHBOR_COUNT}
  * offsets below - which is why a propagation script may only hop to cells within that neighbourhood.

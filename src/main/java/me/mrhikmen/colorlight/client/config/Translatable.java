@@ -15,49 +15,92 @@ public class Translatable {
 
     public static Component ENABLE = Component.translatable("me.colorlight.general.enable");
     public static Component ENABLE_Tooltip = Component.translatable("me.colorlight.general.enable.tooltip");
-
     public static Component LIGHT_RANGE = Component.translatable("me.colorlight.general.light_range");
     public static Component LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.general.light_range.tooltip");
     public static Component SMOOTH_LIGHTING = Component.translatable("me.colorlight.general.smooth_lighting");
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
-    public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
-    public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
-    public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
-    public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
     public static Component TINT_GAMMA = Component.translatable("me.colorlight.general.tint_gamma");
     public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
+    public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
+    public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
+
+    public static Component GPU_EXPERIMENTS = Component.translatable("me.colorlight.general.gpu_experiments");
+    public static Component GPU_PIPELINE = Component.translatable("me.colorlight.general.gpu_pipeline");
+    public static Component GPU_PIPELINE_Tooltip = Component.translatable("me.colorlight.general.gpu_pipeline.tooltip");
+    public static Component GPU_LIGHT_SECTIONS = Component.translatable("me.colorlight.general.gpu_light_sections");
+    public static Component GPU_LIGHT_SECTIONS_Tooltip = Component.translatable("me.colorlight.general.gpu_light_sections.tooltip");
+    public static Component SECTIONS_Value(int value) {
+        return Component.translatable("me.colorlight.general.gpu_light_sections.value", value, String.format("%.1f", value * 16 / 1024.0));
+    }
 
     public static Component WEIGHT = Component.translatable("me.colorlight.general.weight");
     public static Component BRIGHTNESS_WEIGHT = Component.translatable("me.colorlight.general.brightness_weight");
+    public static Component BRIGHTNESS_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.brightness_weight.tooltip");
     public static Component LOCAL_WEIGHT = Component.translatable("me.colorlight.general.local_weight");
+    public static Component LOCAL_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.local_weight.tooltip");
     public static Component REGION_WEIGHT = Component.translatable("me.colorlight.general.region_weight");
+    public static Component REGION_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.region_weight.tooltip");
     public static Component ALPHA_WEIGHT = Component.translatable("me.colorlight.general.alpha_weight");
+    public static Component ALPHA_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.alpha_weight.tooltip");
     public static Component ANOMALY_WEIGHT = Component.translatable("me.colorlight.general.anomaly_weight");
+    public static Component ANOMALY_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.anomaly_weight.tooltip");
     public static Component SATURATION_WEIGHT = Component.translatable("me.colorlight.general.saturation_weight");
+    public static Component SATURATION_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.saturation_weight.tooltip");
     public static Component GLOWCOLORSCORE_WEIGHT = Component.translatable("me.colorlight.general.glowcolorscore_weight");
+    public static Component GLOWCOLORSCORE_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.glowcolorscore_weight.tooltip");
     public static Component WHITEPENALTY_WEIGHT = Component.translatable("me.colorlight.general.whitepenalty_weight");
-    public static Component WEIGHT_Tooltip = Component.translatable("me.colorlight.general.weight.tooltip");
+    public static Component WHITEPENALTY_WEIGHT_Tooltip = Component.translatable("me.colorlight.general.whitepenalty_weight.tooltip");
+
+    public static Component LOD_IMPORT = Component.translatable("me.colorlight.compatibility.lod_import");
+    public static Component LOD_IMPORT_VOXY = Component.translatable("me.colorlight.compatibility.lod_import.voxy");
+    public static Component LOD_IMPORT_VOXY_Tooltip = Component.translatable("me.colorlight.compatibility.lod_import.voxy.tooltip");
+    public static Component LOD_IMPORT_DH = Component.translatable("me.colorlight.compatibility.lod_import.dh");
+    public static Component LOD_IMPORT_DH_Tooltip = Component.translatable("me.colorlight.compatibility.lod_import.dh.tooltip");
+    public static Component LOD_IMPORT_Start = Component.translatable("me.colorlight.compatibility.lod_import.start");
+    public static Component LOD_IMPORT_Cancel = Component.translatable("me.colorlight.compatibility.lod_import.cancel");
+    public static Component LOD_IMPORT_Idle = Component.translatable("me.colorlight.compatibility.lod_import.idle");
+    public static Component LOD_IMPORT_Done(int sources) {
+        return Component.translatable("me.colorlight.compatibility.lod_import.done", sources);
+    }
+    public static Component LOD_IMPORT_Progress(int done, int total, int sources) {
+        return Component.translatable("me.colorlight.compatibility.lod_import.progress", done, total, sources);
+    }
+    public static Component VOXY = Component.translatable("me.colorlight.compatibility.voxy");
+    public static Component VOXY_LIGHT = Component.translatable("me.colorlight.compatibility.voxy_light");
+    public static Component VOXY_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_light.tooltip");
+
+    public static Component DISTANTHORIZONS = Component.translatable("me.colorlight.compatibility.distanthorizons");
+    public static Component DH_LIGHT = Component.translatable("me.colorlight.compatibility.dh_light");
+    public static Component DH_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.dh_light.tooltip");
 
     public static Component ENTITY_TRACKING = Component.translatable("me.colorlight.compatibility.entity_tracking");
     public static Component ENTITY_TRACKING_ENABLED = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled");
     public static Component ENTITY_TRACKING_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled.tooltip");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE_Tooltip = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance.tooltip");
+    public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
+    public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS_Tooltip = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks.tooltip");
 
     public static Component BLOCKS_Value(int value) {
-        if (value == 1) return Component.translatable("me.colorlight.block_value.1", value);
-        if (value % 10 > 1 && value % 10 < 5 && !(value % 100 >= 12 && value % 100 <= 14))
-            return Component.translatable("me.colorlight.block_value.1-5", value);
-        return Component.translatable("me.colorlight.block_value", value);
+        return pluralValue("me.colorlight.block_value", value);
     }
 
     public static Component CHUNKS_Value(int value) {
-        if (value == 1) return Component.translatable("me.colorlight.chunks_value.1", value);
+        return pluralValue("me.colorlight.chunks_value", value);
+    }
+
+    /**
+     * Picks the Russian-style plural form for {@code baseKey} ("1" for one, "1-5" for the few-form, the bare
+     * key otherwise) and falls back to the bare key's own translation for languages that don't define the
+     * suffixed forms, such as English.
+     */
+    private static Component pluralValue(String baseKey, int value) {
+        if (value == 1) return Component.translatable(baseKey + ".1", value);
         if (value % 10 > 1 && value % 10 < 5 && !(value % 100 >= 12 && value % 100 <= 14))
-            return Component.translatable("me.colorlight.chunks_value.1-5", value);
-        return Component.translatable("me.colorlight.chunks_value", value);
+            return Component.translatable(baseKey + ".1-5", value);
+        return Component.translatable(baseKey, value);
     }
 
     public static Component WEIGHT_Value(int value) {

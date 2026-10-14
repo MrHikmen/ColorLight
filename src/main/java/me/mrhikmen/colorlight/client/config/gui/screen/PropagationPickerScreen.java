@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client.config.gui.screen;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -18,7 +18,7 @@ import java.util.function.Supplier;
 
 /**
  * Lets the player pick a propagation method from <b>everything registered right now</b> - the built-in ones, those from
- * Lua files in the active resource packs and those from other mods.
+ * JSON files in the active resource packs and those from other mods.
  * <p>
  * Sodium's option widgets are built once, when the game starts, so a fixed slider or list in the options page would
  * only ever show the methods that existed back then (a resource pack applied later would not appear until a restart).
@@ -38,7 +38,7 @@ public class PropagationPickerScreen extends Screen {
     private final Supplier<String> current;
     private final Consumer<String> choose;
     private final Runnable apply;
-    private final Predicate<PropagationMethod> allowed;
+    private final Predicate<JsonPropagationMethod> allowed;
     private final Identifier fallback;
 
     /**
@@ -49,7 +49,7 @@ public class PropagationPickerScreen extends Screen {
      * @param fallback what an empty or unknown config value means
      */
     public PropagationPickerScreen(Screen parent, Component heading, Supplier<String> current, Consumer<String> choose,
-                                   Runnable apply, Predicate<PropagationMethod> allowed, Identifier fallback) {
+                                   Runnable apply, Predicate<JsonPropagationMethod> allowed, Identifier fallback) {
         super(heading);
         this.parent = parent;
         this.heading = heading;
@@ -66,8 +66,8 @@ public class PropagationPickerScreen extends Screen {
         if (selected == null || !PropagationMethodRegistry.contains(selected))
             selected = this.fallback;
 
-        List<PropagationMethod> methods = new ArrayList<>();
-        for (PropagationMethod method : PropagationMethodRegistry.all()) {
+        List<JsonPropagationMethod> methods = new ArrayList<>();
+        for (JsonPropagationMethod method : PropagationMethodRegistry.all()) {
             if (this.allowed.test(method) || method.id().equals(selected))
                 methods.add(method);
         }
@@ -80,7 +80,7 @@ public class PropagationPickerScreen extends Screen {
         this.addRenderableWidget(new StringWidget(left, 16, totalWidth, 20, this.heading, this.font));
 
         for (int i = 0; i < methods.size(); i++) {
-            PropagationMethod method = methods.get(i);
+            JsonPropagationMethod method = methods.get(i);
             int column = i / rowsPerColumn;
             int row = i % rowsPerColumn;
             boolean isCurrent = method.id().equals(selected);

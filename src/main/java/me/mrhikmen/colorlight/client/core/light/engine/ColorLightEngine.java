@@ -1,7 +1,7 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
 import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
@@ -53,7 +53,7 @@ public class ColorLightEngine {
     /**
      * Set on a source cell that spreads with a propagation method other than the engine's default one -
      * which method exactly is looked up in {@link #customMethodByKey}, since an arbitrary number of
-     * methods (from Lua packs or other mods) can't each get their own bit here. A source without this
+     * methods (from resource pack JSON or other mods) can't each get their own bit here. A source without this
      * flag uses the default method.
      */
     static final int FLAG_CUSTOM = 1 << 26;
@@ -73,8 +73,8 @@ public class ColorLightEngine {
     private final Identifier dynamicMethodId;
 
     /**
-     * Propagators/queues for every {@link PropagationMethod} in use (the default one and whatever blocks or
-     * other mods asked for; see {@link me.mrhikmen.colorlight.api.propagation}), created lazily the first time
+     * Propagators/queues for every {@link JsonPropagationMethod} in use (the default one and whatever blocks
+     * asked for; see {@link me.mrhikmen.colorlight.client.core.light.propagation}), created lazily the first time
      * that method is actually used by this engine. Only touched while holding {@link #lock}.
      */
     private final Map<Identifier, LightPropagator> customPropagators = new HashMap<>();
@@ -277,8 +277,8 @@ public class ColorLightEngine {
      * Adds a source that spreads using the propagation method {@code methodId} identifies (see
      * {@link PropagationMethodRegistry}, and {@link me.mrhikmen.colorlight.client.config.BlockSettings#propagation}
      * for where a block's own choice usually comes from), independent of the engine's default.
-     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the mod
-     * providing it is missing) falls back to it too, so a stale config entry never breaks lighting.
+     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the pack
+     * providing it is disabled) falls back to it too, so a stale config entry never breaks lighting.
      * Re-adding an identical source is a no-op; re-adding it with a different colour/model first
      * removes the old one so stale light around it is cleaned up.
      */
@@ -421,6 +421,13 @@ public class ColorLightEngine {
             if (!hasStaticLightNear(x, y, z))
                 return;
 
+            // Remember the light around the block: if the re-flood ends with exactly the same light (a block that
+            // only looked like it could matter), nothing is published as dirty and nothing visibly rebuilds.
+            int radius = Math.min(maxRangeBlocks, 24) + 1;
+            boolean snapshot = dirtySections.isEmpty();
+            if (snapshot)
+                snapshotRegion(x, y, z, radius);
+
             long key = PosKey.pack(x, y, z);
             int old = cell & RGB_MASK;
             data.put(x, y, z, 0);
@@ -440,9 +447,35 @@ public class ColorLightEngine {
             }
 
             flushQueuesLocked();
+
+            if (snapshot && regionUnchanged(x, y, z, radius))
+                dirtySections.clear();
         } finally {
             unlock();
         }
+    }
+
+    private int[] regionSnapshot = new int[0];
+
+    private void snapshotRegion(int cx, int cy, int cz, int r) {
+        int side = 2 * r + 1;
+        if (regionSnapshot.length < side * side * side)
+            regionSnapshot = new int[side * side * side];
+        int i = 0;
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int z = cz - r; z <= cz + r; z++)
+                for (int x = cx - r; x <= cx + r; x++)
+                    regionSnapshot[i++] = data.get(x, y, z);
+    }
+
+    private boolean regionUnchanged(int cx, int cy, int cz, int r) {
+        int i = 0;
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int z = cz - r; z <= cz + r; z++)
+                for (int x = cx - r; x <= cx + r; x++)
+                    if (regionSnapshot[i++] != data.get(x, y, z))
+                        return false;
+        return true;
     }
 
     /**
@@ -560,7 +593,7 @@ public class ColorLightEngine {
     /** The propagator for {@code methodId}, created and cached on first use. Call only while holding {@link #lock}. */
     private LightPropagator propagatorFor(Identifier methodId) {
         return customPropagators.computeIfAbsent(methodId == null ? defaultMethodId : methodId, id -> {
-            PropagationMethod method = PropagationMethodRegistry.get(id);
+            JsonPropagationMethod method = PropagationMethodRegistry.get(id);
             if (method == null)
                 method = PropagationMethodRegistry.get(defaultMethodId); // unregistered in the meantime
             if (method == null)
@@ -804,6 +837,49 @@ public class ColorLightEngine {
         List<Long> keys = new java.util.ArrayList<>();
         old.data.forEachLitSection(keys::add);
         old.dynamic.storage().forEachLitSection(keys::add);
+        synchronized (externalDirty) {
+            for (long key : keys) {
+                int sx = PosKey.x(key), sy = PosKey.y(key), sz = PosKey.z(key);
+                for (int a = sx - 1; a <= sx + 1; a++) {
+                    for (int b = sy - 1; b <= sy + 1; b++) {
+                        for (int c = sz - 1; c <= sz + 1; c++) {
+                            externalDirty.put(PosKey.pack(a, b, c), 1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Calls {@code consumer} with a packed {@link PosKey} for every section that holds light (static or moving). */
+    public void forEachLitSection(java.util.function.LongConsumer consumer) {
+        data.forEachLitSection(consumer);
+        if (dynamic.isActive())
+            dynamic.storage().forEachLitSection(consumer);
+    }
+
+    /**
+     * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the colours of one section as the
+     * renderer sees them: static and moving light merged, flags stripped. Lock-free.
+     *
+     * @return false if the section holds no light at all
+     */
+    public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
+        boolean lit = data.copySection(sx, sy, sz, out);
+        if (dynamic.isActive())
+            lit |= dynamic.storage().mergeMaxInto(sx, sy, sz, out);
+        return lit;
+    }
+
+    /** Like {@link #copySectionColors} but only the static light (no moving lights). */
+    public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
+        return data.copySection(sx, sy, sz, out);
+    }
+
+    /** Hands every section that holds light, and its neighbours, to the mesh-rebuild queue. Never waits for a flood. */
+    public void markEverythingDirty() {
+        List<Long> keys = new java.util.ArrayList<>();
+        forEachLitSection(keys::add);
         synchronized (externalDirty) {
             for (long key : keys) {
                 int sx = PosKey.x(key), sy = PosKey.y(key), sz = PosKey.z(key);

@@ -3,13 +3,10 @@ package me.mrhikmen.colorlight.client.config.gui.screen;
 import me.mrhikmen.colorlight.client.config.Translatable;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.narration.NarratedElementType;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.util.Mth;
 
-public class HueBarWidget extends AbstractWidget {
+public class HueBarWidget extends ColorPickerWidget {
 
     private static final int[] STOPS = {
             0xFFFF0000,
@@ -21,13 +18,8 @@ public class HueBarWidget extends AbstractWidget {
             0xFFFF0000
     };
 
-    private final ColorPickerMath color;
-    private final Runnable onChange;
-
     public HueBarWidget(int x, int y, int width, int height, ColorPickerMath color, Runnable onChange) {
-        super(x, y, width, height, Translatable.SHADE);
-        this.color = color;
-        this.onChange = onChange;
+        super(x, y, width, height, Translatable.SHADE, color, onChange);
     }
 
     @Override
@@ -51,23 +43,9 @@ public class HueBarWidget extends AbstractWidget {
     }
 
     @Override
-    public void onClick(MouseButtonEvent event, boolean doubleClick) {
-        applyFromMouse(event);
-    }
-
-    @Override
-    protected void onDrag(MouseButtonEvent event, double dx, double dy) {
-        applyFromMouse(event);
-    }
-
-    private void applyFromMouse(MouseButtonEvent event) {
+    protected void applyFromMouse(MouseButtonEvent event) {
         float relY = (float) ((event.y() - this.getY()) / (double) this.getHeight());
         this.color.onHueBarClick(Mth.clamp(relY, 0f, 1f));
         this.onChange.run();
-    }
-
-    @Override
-    public void updateWidgetNarration(NarrationElementOutput output) {
-        output.add(NarratedElementType.TITLE, this.getMessage());
     }
 }

@@ -5,8 +5,8 @@ import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 /**
  * A model for how light spreads outwards from cells that already hold light.
  *
- * @see TablePropagator the data-driven kernel behind the grid / smooth Lua methods
- * @see ScriptPropagator a propagator written entirely in Lua
+ * @see TablePropagator the data-driven kernel behind every propagation method (grid, smooth, and any JSON file
+ *      a resource pack supplies)
  */
 public interface LightPropagator {
 

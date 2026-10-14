@@ -2,7 +2,7 @@
 
 ColorLight is a mod that automatically determines how a block should glow and generates colored lighting based on that.
 
-**Resource-pack driven:** how light spreads (`assets/colorlight/propagation/*.lua`) and default settings (`assets/colorlight/settings.lua`) are Lua scripts; block colours (`assets/colorlight/block/*.json`) are plain JSON with hex or rgb colours. The mod's own grid/smooth shapes are two such files. See [API.md](examples/API.md) and `examples/resourcepack`.
+**Resource-pack driven:** how light spreads (`assets/colorlight/propagation/*.json`) and default settings (`assets/colorlight/settings.json`) are Lua scripts; block colours (`assets/colorlight/block/*.json`) are plain JSON with hex or rgb colours. The mod's own grid/smooth shapes are two such files. See [API.md](examples/API.md) and `examples/resourcepack`.
 
 <details>
 <summary>Versions</summary>
@@ -28,11 +28,11 @@ Many optimization mods are supported because the mod only colors the block rathe
 
 If a mod adds features that differ from vanilla Minecraft, a separate compatibility layer will have to be written for it. The following are such mods:
 
-| Mod                 |    Support     |                      How it works                       |
-| :------------------ |:--------------:|:-------------------------------------------------------:|
-| - LambDynamicLights |      Yes       | A lighting marker is placed at the entity's coordinates |
-| - Voxy              | In development |                Currently being developed                |
-| - Distant Horizon   | In development |                Currently being developed                |
+| Mod                 | Support |                                          How it works                                           |
+| :------------------ |:-------:|:-----------------------------------------------------------------------------------------------:|
+| - LambDynamicLights |   Yes   |                     A lighting marker is placed at the entity's coordinates                     |
+| - Voxy              |   Yes   |          [Voxy](src/main/java/me/mrhikmen/colorlight/client/compat/lod/voxy/_Voxy.md)           |
+| - Distant Horizon   |   Yes   | [Distant Horizon](src/main/java/me/mrhikmen/colorlight/client/compat/lod/dh/_DistantHorizon.md) |
 
 </details>
 
@@ -52,7 +52,7 @@ If a mod adds features that differ from vanilla Minecraft, a separate compatibil
 
 ColorLight — это мод, который автоматически определяет, как должен светиться блок, и на основе этого генерирует цветное освещение.
 
-**Работа на основе ресурс-паков:** параметры распространения света (`assets/colorlight/propagation/*.lua`) и настройки по умолчанию (`assets/colorlight/settings.lua`) задаются Lua-скриптами, а цвета блоков (`assets/colorlight/block/*.json`) описываются в формате JSON с использованием цветов в виде hex-кодов или RGB-значений. Встроенные в мод формы (сеточные или сглаженные) также определяются подобными файлами. Подробности см. в [API.md](examples/API.md) и папке `examples/resourcepack`.
+**Работа на основе ресурс-паков:** параметры распространения света (`assets/colorlight/propagation/*.json`) и настройки по умолчанию (`assets/colorlight/settings.json`) задаются Lua-скриптами, а цвета блоков (`assets/colorlight/block/*.json`) описываются в формате JSON с использованием цветов в виде hex-кодов или RGB-значений. Встроенные в мод формы (сеточные или сглаженные) также определяются подобными файлами. Подробности см. в [API.md](examples/API.md) и папке `examples/resourcepack`.
 
 <details>
 <summary>Версии</summary>
@@ -77,11 +77,11 @@ ColorLight — это мод, который автоматически опре
 
 Если мод добавляет специфические особенности отличные от ванильного Майнкрафта, то под него придётся писать отдельный слой совместимостей. Вот подобные моды:
 
-| Мод                 |  Поддержка   |                  Как работает                   |
-|:--------------------|:------------:|:-----------------------------------------------:|
-| - LambDynamicLights |     Есть     | Метка освещение ставиться на координатах энтити |
-| - Voxy              | В разработке |              Пока разрабатывается               |
-| - Distant Horizon   | В разработке |              Пока разрабатывается               |
+| Мод                 | Поддержка |                                          Как работает                                           |
+|:--------------------|:---------:|:-----------------------------------------------------------------------------------------------:|
+| - LambDynamicLights |   Есть    |                         Метка освещение ставиться на координатах энтити                         |
+| - Voxy              |   Есть    |          [Voxy](src/main/java/me/mrhikmen/colorlight/client/compat/lod/voxy/_Voxy.md)           |
+| - Distant Horizon   |   Есть    | [Distant Horizon](src/main/java/me/mrhikmen/colorlight/client/compat/lod/dh/_DistantHorizon.md) |
 </details>
 
 <details>
