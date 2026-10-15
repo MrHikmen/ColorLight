@@ -62,7 +62,7 @@ dependencies {
     compileOnly "maven.modrinth:uCdwusMi:QHxoccsN"
 
     //Nvidium
-    implementation "maven.modrinth:SfMw2IZN:VqbIfKxa"
+    compileOnly "maven.modrinth:SfMw2IZN:VqbIfKxa"
 }
 
 processResources {
