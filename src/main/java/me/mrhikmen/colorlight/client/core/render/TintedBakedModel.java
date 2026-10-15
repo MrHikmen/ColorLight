@@ -4,6 +4,7 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 
 import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
 import net.fabricmc.fabric.api.renderer.v1.model.FabricBlockStateModel;
@@ -41,9 +42,15 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
         return wrapped.particleIcon();
     }
 
-    // emitQuads переопределяет default-метод из FabricBlockStateModel (не из BlockStateModel!)
+    // emitQuads overrides the default method from FabricBlockStateModel (not from BlockStateModel!)
     @Override
     public void emitQuads(QuadEmitter emitter, BlockAndTintGetter blockView, BlockPos pos, BlockState state, RandomSource random, Predicate<Direction> cullTest) {
+
+        // The GPU pipeline lights the terrain per pixel in the shader: meshes must stay uncoloured.
+        if (ColorLightGpu.isActive()) {
+            wrapped.emitQuads(emitter, blockView, pos, state, random, cullTest);
+            return;
+        }
 
         ColorLightEngine engine = ColorLightEngineHolder.get();
 
@@ -192,6 +199,7 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
                 default -> { coordA = vx; coordB = vy; }
             }
 
+            // grid index 1 is the cell straight in front of the face; a vertex uses the 2x2 block nearest to it
             int a0 = coordA < 0.5f ? 0 : 1;
             int b0 = coordB < 0.5f ? 0 : 1;
 
@@ -225,8 +233,8 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
             int fy = py + face.getStepY();
             int fz = pz + face.getStepZ();
 
-            int ax, ay, az;
-            int bx, by, bz;
+            int ax, ay, az; // step along axis A
+            int bx, by, bz; // step along axis B
             switch (face.getAxis()) {
                 case X -> { ax = 0; ay = 1; az = 0; bx = 0; by = 0; bz = 1; }
                 case Y -> { ax = 1; ay = 0; az = 0; bx = 0; by = 0; bz = 1; }
@@ -247,6 +255,8 @@ public class TintedBakedModel implements BlockStateModel, FabricBlockStateModel 
                 }
             }
 
+            // Opacity only matters for excluding samples from the average; with no light in the whole
+            // 3x3 patch every vertex averages to zero regardless, so don't even look at the blocks.
             for (int ia = 0; ia < 3; ia++) {
                 for (int ib = 0; ib < 3; ib++) {
                     int oa = ia - 1;

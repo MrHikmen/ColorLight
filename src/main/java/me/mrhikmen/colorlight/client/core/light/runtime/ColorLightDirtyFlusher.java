@@ -5,7 +5,9 @@ import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
-import me.mrhikmen.colorlight.client.core.util.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.client.core.render.ColorLightRenderUtil;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -26,7 +28,18 @@ import java.util.Arrays;
  */
 public final class ColorLightDirtyFlusher {
 
-    private static final int MAX_SECTIONS_PER_TICK = 128;
+    /**
+     * Was 128. Too low for a single interactive edit: removing (or placing) one static source in an
+     * open/low-opacity area floods {@code maxRangeBlocks} blocks in every direction, which easily touches
+     * several hundred sections in one {@link ColorLightEngine} operation (see {@code darkenAndCollectSeeds}).
+     * At 128/tick that burst used to be spread over many ticks; nearest-first order meant sections near the
+     * player updated first and far ones kept showing the old (stale) colour for several more ticks, i.e. a
+     * visible wavefront of flicker/patchy colour radiating outward every time a light source was removed or
+     * added - not a single bad frame, but a glitch lasting up to a second or more. Raised so a normal
+     * interactive edit finishes in one tick; {@link #MAX_NANOS_PER_TICK} remains the real safety valve against
+     * pathological bursts (e.g. thousands of sections right after joining a world).
+     */
+    private static final int MAX_SECTIONS_PER_TICK = 2048;
     /** Hard time cap per tick on top of the count cap; whatever is left simply waits for the next tick. */
     private static final long MAX_NANOS_PER_TICK = 1_500_000L;
     private static final int MAX_FAILED_TICKS = 200;
@@ -51,13 +64,32 @@ public final class ColorLightDirtyFlusher {
                 lastEngine = engine;
             }
 
-            for (long key : engine.drainDirtySections()) {
+            long[] drained = engine.drainDirtySections();
+
+            // GPU pipeline: the shader reads light straight from the light volume, so no mesh depends on it
+            // (except right after the pipeline switched on or off, when every mesh has to be built again).
+            if (drained.length > 0)
+                LodLight.markDirty(drained); // far-away light (Voxy), kept whatever way the terrain is lit
+
+            boolean gpu = ColorLightGpu.isActive();
+            if (gpu && drained.length > 0)
+                ColorLightGpu.onSectionsChanged(drained);
+            if (gpu && !ColorLightGpu.meshRebuildPending()) {
+                PENDING.clear();
+                return;
+            }
+
+            for (long key : drained) {
                 PENDING.put(key, 1);
             }
-            if (PENDING.isEmpty())
+            if (PENDING.isEmpty()) {
+                ColorLightGpu.meshRebuildDone();
                 return;
+            }
 
             flush(level, client.player.blockPosition());
+            if (PENDING.isEmpty())
+                ColorLightGpu.meshRebuildDone();
         });
     }
 
