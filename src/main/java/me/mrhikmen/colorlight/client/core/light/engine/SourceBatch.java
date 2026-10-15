@@ -46,6 +46,36 @@ public final class SourceBatch {
         size++;
     }
 
+    /**
+     * Reorders the entries so the ones closest to ({@code px}, {@code py}, {@code pz}) come first; the engine
+     * floods them in this order, so light appears around the player before it appears further away.
+     */
+    public void sortByDistance(int px, int py, int pz) {
+        if (size < 2)
+            return;
+
+        long[] order = new long[size]; // (squared distance << 20) | index: sorts by distance, ties by index
+        for (int i = 0; i < size; i++) {
+            long dx = PosKey.x(keys[i]) - px, dy = PosKey.y(keys[i]) - py, dz = PosKey.z(keys[i]) - pz;
+            long dist = Math.min(dx * dx + dy * dy + dz * dz, (1L << 40) - 1);
+            order[i] = (dist << 20) | i;
+        }
+        Arrays.sort(order, 0, size);
+
+        long[] newKeys = new long[keys.length];
+        int[] newColors = new int[colors.length];
+        Identifier[] newMethods = new Identifier[methods.length];
+        for (int i = 0; i < size; i++) {
+            int from = (int) (order[i] & 0xFFFFF);
+            newKeys[i] = keys[from];
+            newColors[i] = colors[from];
+            newMethods[i] = methods[from];
+        }
+        keys = newKeys;
+        colors = newColors;
+        methods = newMethods;
+    }
+
     public int size() {
         return size;
     }

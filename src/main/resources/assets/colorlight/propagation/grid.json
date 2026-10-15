@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "colorlight:grid  -  diamond (ромб)",
+    "",
+    "Light hops between the 6 face-adjacent blocks and loses the same amount at every hop, so the reach is counted",
+    "in blocks walked along the axes (\"Manhattan distance\"): a diamond from above, an octahedron in 3D. Cheap, and",
+    "looks like vanilla block light.",
+    "",
+    "Copy this file to your own resource pack (same path) to change how ALL grid light behaves, or save it under",
+    "another name (assets/colorlight/propagation/<name>.json) to add a new method, id \"colorlight:<name>\"."
+  ],
+
+  "name": "Grid (diamond)",
+
+  "scale": 1,
+  "preserve_hue": true,
+  "max_opacity": 15,
+
+  "neighbors": "faces",
+
+  "loss": {
+    "distance": false,
+    "opacity_factor": 1.0
+  }
+}

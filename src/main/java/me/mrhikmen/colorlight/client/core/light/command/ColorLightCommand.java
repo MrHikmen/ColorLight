@@ -7,7 +7,12 @@ import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.light.propagation.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.script.DataRuntime;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -15,7 +20,6 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
@@ -28,16 +32,19 @@ public final class ColorLightCommand {
                             .executes(ColorLightCommand::debugDaylight))
 
                     .then(ClientCommands.literal("target")
-
                             .then(ClientCommands.literal("set")
                                     .then(ClientCommands.argument("r", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                             .then(ClientCommands.argument("g", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                     .then(ClientCommands.argument("b", IntegerArgumentType.integer(0, ColorLightUtil.MAX))
                                                             .then(ClientCommands.argument("strength", IntegerArgumentType.integer(1, 32))
-                                                                    .then(ClientCommands.literal("grid")
-                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.GRID)))
-                                                                    .then(ClientCommands.literal("smooth")
-                                                                            .executes(ctx -> addAtTarget(ctx, ColorLightPropagationMode.SMOOTH))))))))
+                                                                    .executes(ctx -> addAtTarget(ctx, null))
+                                                                    .then(ClientCommands.argument("method", StringArgumentType.greedyString())
+                                                                            .suggests((ctx, builder) -> {
+                                                                                for (JsonPropagationMethod method : PropagationMethodRegistry.all())
+                                                                                    builder.suggest(method.id().getPath());
+                                                                                return builder.buildFuture();
+                                                                            })
+                                                                            .executes(ctx -> addAtTarget(ctx, StringArgumentType.getString(ctx, "method")))))))))
 
                             .then(ClientCommands.literal("reset")
                                     .executes(ColorLightCommand::removeAtTarget))
@@ -45,6 +52,9 @@ public final class ColorLightCommand {
 
                     .then(ClientCommands.literal("clear")
                             .executes(ColorLightCommand::clearAll))
+
+                    .then(ClientCommands.literal("scripts")
+                            .executes(ColorLightCommand::listData))
             );
         });
     }
@@ -81,7 +91,20 @@ public final class ColorLightCommand {
         return 1;
     }
 
-    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx, ColorLightPropagationMode mode) {
+    /** Lists the propagation methods and any data problems, so pack authors see what loaded. */
+    private static int listData(CommandContext<FabricClientCommandSource> ctx) {
+        for (JsonPropagationMethod method : PropagationMethodRegistry.all()) {
+            String source = method.source();
+            ctx.getSource().sendFeedback(Component.literal(method.id() + " - " + method.displayName() + "  [" + source + "]"));
+        }
+        for (String problem : DataRuntime.problems())
+            ctx.getSource().sendError(Component.literal(problem));
+        if (DataRuntime.problems().isEmpty())
+            ctx.getSource().sendFeedback(Component.literal("No data problems."));
+        return 1;
+    }
+
+    private static int addAtTarget(CommandContext<FabricClientCommandSource> ctx, String methodName) {
 
         ColorLightCommand.removeAtTarget(ctx);
 
@@ -102,7 +125,17 @@ public final class ColorLightCommand {
         int b = IntegerArgumentType.getInteger(ctx, "b");
         int strength = IntegerArgumentType.getInteger(ctx, "strength");
 
-        engine.addSource(pos, r, g, b, strength, mode);
+        Identifier method = PropagationMethodRegistry.parse(methodName);
+        if (methodName != null && !methodName.contains(":") && !PropagationMethodRegistry.contains(method)) {
+            Identifier own = PropagationMethodRegistry.parse("colorlight:" + methodName.trim());
+            if (own != null)
+                method = own;
+        }
+        if (methodName != null && !PropagationMethodRegistry.contains(method)) {
+            ctx.getSource().sendError(Component.literal("Unknown propagation method '" + methodName + "'. Try /colorlight scripts"));
+            return 0;
+        }
+        engine.addSource(pos, r, g, b, strength, method);
 
         ctx.getSource().sendFeedback(Translatable.LIGHT_ADD);
         return 1;
