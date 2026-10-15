@@ -111,7 +111,7 @@ public final class NvidiumBridge {
 
         String id = anchor.startsWith("OUT[outId]") ? "OUT[outId]" : "OUT[id]";
         String add = anchor + "\n"
-                + "    " + id + ".v_CLColor = decodeVertexColour(V).rgb;\n"
+                + "    " + id + ".v_CLColor = decodeVertexColour(V).rgb * decodeVertexColour(V).w;\n"
                 + "    " + id + ".v_CLLight = decodeLightUV(V);\n"
                 + "    " + id + ".v_CLRel = " + relExpr + "; // vector camera -> vertex\n";
         return src.replace(anchor, add);
@@ -121,10 +121,15 @@ public final class NvidiumBridge {
         src = removeBarycentric(src);
         src = addMembers(src, "\\};");
 
-        String useAnchor = "color.rgb *= v_colour;";
-        if (!src.contains(useAnchor))
+        // Nvidium 26.2 spells it "colour", older builds "color": accept both
+        java.util.regex.Matcher use = java.util.regex.Pattern
+                .compile("(colou?r)\\.rgb\\s*\\*=\\s*v_colour\\s*;").matcher(src);
+        if (!use.find())
             throw new IllegalStateException("fragment anchor not found");
-        src = src.replace(useAnchor, "#ifndef OIT_ALPHA_ONLY\n        color.rgb *= cl_multiplier(v_colour);\n#else\n        color.rgb *= v_colour;\n#endif");
+        String var = use.group(1);
+        src = src.substring(0, use.start())
+                + var + ".rgb *= cl_multiplier(v_colour);"
+                + src.substring(use.end());
 
         int main = src.lastIndexOf("void main()");
         if (main < 0)
