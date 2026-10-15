@@ -121,10 +121,14 @@ public final class NvidiumBridge {
         src = removeBarycentric(src);
         src = addMembers(src, "\\};");
 
-        String useAnchor = "color.rgb *= v_colour;";
-        if (!src.contains(useAnchor))
+        // the output variable is called "colour" in Nvidium 26.1 ("color" in older builds)
+        java.util.regex.Matcher use = java.util.regex.Pattern.compile("(colou?r)\\.rgb \\*= v_colour;").matcher(src);
+        if (!use.find())
             throw new IllegalStateException("fragment anchor not found");
-        src = src.replace(useAnchor, "#ifndef OIT_ALPHA_ONLY\n        color.rgb *= cl_multiplier(v_colour);\n#else\n        color.rgb *= v_colour;\n#endif");
+        String out = use.group(1);
+        src = src.substring(0, use.start())
+                + "#ifndef OIT_ALPHA_ONLY\n        " + out + ".rgb *= cl_multiplier(v_colour);\n#else\n        " + out + ".rgb *= v_colour;\n#endif"
+                + src.substring(use.end());
 
         int main = src.lastIndexOf("void main()");
         if (main < 0)

@@ -2,8 +2,9 @@ package me.mrhikmen.colorlight.client.compat.nvidium.mixin;
 
 import me.mrhikmen.colorlight.client.compat.nvidium.NvidiumBridge;
 
-import net.minecraft.client.renderer.ShaderDefines;
 import net.minecraft.resources.Identifier;
+
+import java.util.function.Consumer;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,9 +19,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "me.cortex.nvidium.sodiumCompat.ShaderLoader", remap = false)
 public abstract class NvidiumShaderLoaderMixin {
 
-    @Inject(method = "parse(Lnet/minecraft/resources/Identifier;Lnet/minecraft/client/renderer/ShaderDefines$Builder;)Ljava/lang/String;",
+    @Inject(method = "parse(Lnet/minecraft/resources/Identifier;Ljava/util/function/Consumer;)Ljava/lang/String;",
             at = @At("RETURN"), cancellable = true, require = 0, remap = false)
-    private static void colorlight$patch(Identifier path, ShaderDefines.Builder builder,
+    private static void colorlight$patch(Identifier path, Consumer<?> builder,
                                          CallbackInfoReturnable<String> cir) {
         cir.setReturnValue(NvidiumBridge.patchShader(path.getPath(), cir.getReturnValue()));
     }
