@@ -1,0 +1,106 @@
+package me.mrhikmen.colorlight.client.core.light.propagation;
+
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+
+import net.minecraft.resources.ResourceLocation;
+
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Where {@link JsonPropagationMethod}s live: the single place the engine, the config and the GUI agree on what
+ * {@code "colorlight:grid"}, {@code "colorlight:smooth"} or {@code "colorlight:beam"} mean.
+ * <p>
+ * Every entry comes from a JSON file in a resource pack (or the built-in fallback) and the registry is refilled on
+ * every resource reload ({@link #clear()} + {@link #register}).
+ */
+public final class PropagationMethodRegistry {
+
+    /** Id of the diamond-shaped method. Its definition is {@code assets/colorlight/propagation/grid.json} in the mod's own pack. */
+    public static final ResourceLocation GRID = ResourceLocation.fromNamespaceAndPath("colorlight", "grid");
+    /** Id of the round method. Its definition is {@code assets/colorlight/propagation/smooth.json} in the mod's own pack. */
+    public static final ResourceLocation SMOOTH = ResourceLocation.fromNamespaceAndPath("colorlight", "smooth");
+
+    /** Insertion-ordered so a GUI listing methods gets a stable, predictable order. */
+    private static final Map<ResourceLocation, JsonPropagationMethod> METHODS = new LinkedHashMap<>();
+
+    public static synchronized void register(JsonPropagationMethod method) {
+        if (method == null || method.id() == null)
+            throw new IllegalArgumentException("A propagation method and its id must not be null");
+        METHODS.put(method.id(), method);
+    }
+
+    /** Drops every registered method; called on each resource reload before the packs' methods are registered again. */
+    public static synchronized void clear() {
+        METHODS.clear();
+    }
+
+    public static synchronized JsonPropagationMethod get(ResourceLocation id) {
+        return (id != null) ? METHODS.get(id) : null;
+    }
+
+    public static synchronized boolean contains(ResourceLocation id) {
+        return id != null && METHODS.containsKey(id);
+    }
+
+    /** Every registered method, in registration order. Safe to iterate without external locking. */
+    public static synchronized Collection<JsonPropagationMethod> all() {
+        return List.copyOf(METHODS.values());
+    }
+
+    /**
+     * The table-driven kernel of method {@code id} for the given decay, or - when {@code id} is unknown or not
+     * table-driven - of {@code fallback}, then of {@link #SMOOTH}, then of {@link #GRID}. {@code null} only if
+     * nothing at all is registered.
+     */
+    public static TablePropagator tableFor(ResourceLocation id, ResourceLocation fallback, float decayPerOpacityUnit) {
+        for (ResourceLocation candidate : new ResourceLocation[]{id, fallback, SMOOTH, GRID}) {
+            JsonPropagationMethod method = get(candidate);
+            if (method == null)
+                continue;
+            TablePropagator table = method.createTable(decayPerOpacityUnit);
+            if (table != null)
+                return table;
+        }
+        return null;
+    }
+
+    /**
+     * Parses a config value into an id. Accepts a full {@code namespace:path} id (e.g.
+     * {@code "colorlight:beam"}) and, for configs written before methods had ids at all, the bare legacy
+     * tokens {@code GRID}/{@code SMOOTH} (case-insensitive). Does <b>not</b> check the id is actually
+     * registered - callers resolve that separately so a config written with a pack's method still
+     * parses cleanly if that pack is temporarily disabled.
+     *
+     * @return the parsed id, or {@code null} for a blank value (meaning "use the engine default")
+     */
+    public static ResourceLocation parse(String raw) {
+        if (raw == null)
+            return null;
+
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty())
+            return null;
+
+        switch (trimmed.toUpperCase(Locale.ROOT)) {
+            case "GRID":
+                return GRID;
+            case "SMOOTH":
+                return SMOOTH;
+            default:
+                break;
+        }
+
+        try {
+            return ResourceLocation.parse(trimmed);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private PropagationMethodRegistry() {
+    }
+}

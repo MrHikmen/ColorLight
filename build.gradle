@@ -12,18 +12,29 @@ base {
 }
 
 repositories {
-    maven { // Sodium
+    mavenCentral()
+    maven {
         name = "CaffeineMC"
         url = "https://maven.caffeinemc.net/releases/"
     }
-
-    maven { // ModMenu
+    maven {
         name = "TerraformersMC"
         url = "https://maven.terraformersmc.com/releases/"
     }
-    maven { // LDL
+    maven {
         name = "Gegy"
         url = "https://maven.gegy.dev"
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
     }
 }
 
@@ -35,60 +46,64 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
-
     modImplementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
 
+    //LDL compat
     modCompileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
 
+    //voxy compat
+    // TODO: put the Voxy 1.21.1 backport jar (0.2.x) into libs/ (it is not on Modrinth's maven); change the name if needed
+    modCompileOnly files("libs/voxy-1.21.1.jar")
+
+    //dh compat
+    modCompileOnly "maven.modrinth:uCdwusMi:9w34y8ai" // Distant Horizons 3.3.3 for 1.21.1
+
+    //nvidium compat
+    modCompileOnly "maven.modrinth:SfMw2IZN:BIQFSOIx" // Nvidium 0.4.1-beta10 for 1.21.1
 }
 
 processResources {
-    inputs.property "version", project.version
+    def version = project.version
+    inputs.property "version", version
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "loader_version", project.loader_version
     inputs.property "sodium_version", project.sodium_version
     inputs.property "fabric_version", project.fabric_version
-    filteringCharset "UTF-8"
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version,
-                "sodium_version": project.sodium_version,
-                "fabric_version": project.fabric_version
+        expand "version": version,
+        "minecraft_version": project.minecraft_version,
+        "loader_version": project.loader_version,
+        "sodium_version": project.sodium_version,
+        "fabric_version": project.fabric_version
     }
 }
 
-def targetJavaVersion = 21
 tasks.withType(JavaCompile).configureEach {
-    it.options.encoding = "UTF-8"
-    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
-        it.options.release.set(targetJavaVersion)
-    }
+    it.options.release = 21
 }
 
 java {
-    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
-    if (JavaVersion.current() < javaVersion) {
-        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
-    }
     withSourcesJar()
+
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 jar {
+    def projectName = project.name
+    inputs.property "projectName", projectName
+
     from("LICENSE") {
-        rename { "${it}_${project.archives_base_name}" }
+        rename { "${it}_$projectName"}
     }
 }
-
 publishing {
     publications {
         create("mavenJava", MavenPublication) {
-            artifactId = project.archives_base_name
             from components.java
         }
     }
-
     repositories {
     }
 }

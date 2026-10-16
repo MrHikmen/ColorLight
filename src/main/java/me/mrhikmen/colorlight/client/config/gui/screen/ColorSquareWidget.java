@@ -2,22 +2,14 @@ package me.mrhikmen.colorlight.client.config.gui.screen;
 
 import me.mrhikmen.colorlight.client.config.Translatable;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.narration.NarratedElementType;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.util.Mth;
 
-public class ColorSquareWidget extends AbstractWidget {
+public class ColorSquareWidget extends ColorPickerWidget {
 
     private static final int COLUMN_STEP = 2;
 
-    private final ColorPickerMath color;
-    private final Runnable onChange;
-
     public ColorSquareWidget(int x, int y, int width, int height, ColorPickerMath color, Runnable onChange) {
-        super(x, y, width, height, Translatable.COLORED_LIGHTING_2);
-        this.color = color;
-        this.onChange = onChange;
+        super(x, y, width, height, Translatable.COLORED_LIGHTING_2, color, onChange);
     }
 
     @Override
@@ -45,25 +37,11 @@ public class ColorSquareWidget extends AbstractWidget {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
-        applyFromMouse(mouseX, mouseY);
-    }
-
-    @Override
-    protected void onDrag(double mouseX, double mouseY, double dragX, double dragY) {
-        applyFromMouse(mouseX, mouseY);
-    }
-
-    private void applyFromMouse(double mouseX, double mouseY) {
+    protected void applyFromMouse(double mouseX, double mouseY) {
         float relX = (float) ((mouseX - this.getX()) / (double) this.getWidth());
         float relY = (float) ((mouseY - this.getY()) / (double) this.getHeight());
         this.color.onSquareClick(Mth.clamp(relX, 0f, 1f), Mth.clamp(relY, 0f, 1f));
         this.onChange.run();
-    }
-
-    @Override
-    public void updateWidgetNarration(NarrationElementOutput output) {
-        output.add(NarratedElementType.TITLE, this.getMessage());
     }
 
     private static int lerpArgb(int a, int b, float t) {

@@ -1,12 +1,9 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
-import me.mrhikmen.colorlight.api.propagation.PropagationMethod;
-import me.mrhikmen.colorlight.api.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
-import me.mrhikmen.colorlight.client.core.light.propagation.ColorLightPropagationMode;
-import me.mrhikmen.colorlight.client.core.light.propagation.GridPropagator;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
-import me.mrhikmen.colorlight.client.core.light.propagation.SmoothPropagator;
 import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
 import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
@@ -53,11 +50,11 @@ public class ColorLightEngine {
     protected static final int VANILLA_MAX_OPACITY = MAX_OPACITY;
 
     static final int FLAG_SOURCE = 1 << 24;
-    static final int FLAG_SMOOTH = 1 << 25;
     /**
-     * Set on a source cell that spreads with a propagation method other than the two built-in ones -
+     * Set on a source cell that spreads with a propagation method other than the engine's default one -
      * which method exactly is looked up in {@link #customMethodByKey}, since an arbitrary number of
-     * third-party methods can't each get their own bit here.
+     * methods (from resource pack JSON or other mods) can't each get their own bit here. A source without this
+     * flag uses the default method.
      */
     static final int FLAG_CUSTOM = 1 << 26;
 
@@ -70,22 +67,19 @@ public class ColorLightEngine {
     private final int maxRangeBlocks;
     protected final float decayPerOpacityUnit;
     protected final LevelAccessor level;
-    private final ColorLightPropagationMode propagationMode;
-    /** {@link #propagationMode} as an id ({@link PropagationMethodRegistry#GRID}/{@code SMOOTH}) - what a source without its own override actually spreads with. */
+    /** What a source without its own override actually spreads with (setting {@code propagation}). */
     private final ResourceLocation defaultMethodId;
-
-    /** The two built-in ways light spreads - see the {@code propagation} package. Kept as dedicated fields (rather than only living in the maps below) so the common case never pays for a map lookup. */
-    private final GridPropagator gridPropagator;
-    private final SmoothPropagator smoothPropagator;
+    /** Method moving (entity) lights spread with (setting {@code dynamic_propagation}); must be table-driven, else the default smooth one is used. */
+    private final ResourceLocation dynamicMethodId;
 
     /**
-     * Propagators/queues for any additional {@link PropagationMethod} a block config or another mod
-     * asked for (see {@link me.mrhikmen.colorlight.api.propagation}), created lazily the first time
+     * Propagators/queues for every {@link JsonPropagationMethod} in use (the default one and whatever blocks
+     * asked for; see {@link me.mrhikmen.colorlight.client.core.light.propagation}), created lazily the first time
      * that method is actually used by this engine. Only touched while holding {@link #lock}.
      */
     private final Map<ResourceLocation, LightPropagator> customPropagators = new HashMap<>();
     private final Map<ResourceLocation, LongQueue> customQueues = new HashMap<>();
-    /** key -> propagation method id, for sources whose method isn't one of the two built-ins. Guarded by {@link #lock}. */
+    /** key -> propagation method id, for sources whose method isn't the engine default. Guarded by {@link #lock}. */
     private final Map<Long, ResourceLocation> customMethodByKey = new HashMap<>();
 
     private final LightStorage data = new LightStorage();
@@ -107,8 +101,6 @@ public class ColorLightEngine {
 
     // ---- scratch state, only touched while holding the lock ----
     private final PassMap seedSeen = new PassMap(1 << 10);
-    private final LongQueue gridQueue = new LongQueue(1 << 10);
-    private final LongQueue smoothQueue = new LongQueue(1 << 10);
     private final LongQueue darkenKeys = new LongQueue(1 << 10);
     private final IntQueue darkenColors = new IntQueue(1 << 10);
 
@@ -136,18 +128,20 @@ public class ColorLightEngine {
     }
 
     public ColorLightEngine(LevelAccessor level, int maxRangeBlocks) {
-        this(level, maxRangeBlocks, ColorLightPropagationMode.GRID);
+        this(level, maxRangeBlocks, PropagationMethodRegistry.GRID, PropagationMethodRegistry.SMOOTH);
     }
 
-    public ColorLightEngine(LevelAccessor level, int maxRangeBlocks, ColorLightPropagationMode propagationMode) {
+    /**
+     * @param defaultMethodId externally configurable id of the method plain block sources spread with; an id that is not
+     *                        registered falls back to {@code colorlight:grid}
+     * @param dynamicMethodId method for moving lights, see {@link #newDynamicWorker()}
+     */
+    public ColorLightEngine(LevelAccessor level, int maxRangeBlocks, ResourceLocation defaultMethodId, ResourceLocation dynamicMethodId) {
         this.level = level;
         this.maxRangeBlocks = Math.max(1, maxRangeBlocks); // защита от 0/отрицательных значений из конфига
         this.decayPerOpacityUnit = ColorLightUtil.MAX / (float) this.maxRangeBlocks;
-        this.propagationMode = (propagationMode != null) ? propagationMode : ColorLightPropagationMode.GRID;
-        this.defaultMethodId = (this.propagationMode == ColorLightPropagationMode.SMOOTH)
-                ? PropagationMethodRegistry.SMOOTH : PropagationMethodRegistry.GRID;
-        this.gridPropagator = new GridPropagator(decayPerOpacityUnit);
-        this.smoothPropagator = new SmoothPropagator(decayPerOpacityUnit);
+        this.defaultMethodId = PropagationMethodRegistry.contains(defaultMethodId) ? defaultMethodId : PropagationMethodRegistry.GRID;
+        this.dynamicMethodId = (dynamicMethodId != null) ? dynamicMethodId : PropagationMethodRegistry.SMOOTH;
         this.staticField = new WorldLightField(level, data, this::markDirty);
         this.dynamic = new DynamicLightLayer(this::markDirty);
     }
@@ -160,9 +154,9 @@ public class ColorLightEngine {
         return maxRangeBlocks;
     }
 
-    /** The engine-wide default model (what plain block sources use). Individual sources may override it. */
-    public ColorLightPropagationMode getPropagationMode() {
-        return propagationMode;
+    /** The engine-wide default method (what plain block sources use). Individual sources may override it. */
+    public ResourceLocation getDefaultMethodId() {
+        return defaultMethodId;
     }
 
     public float getDecayPerOpacityUnit() {
@@ -199,8 +193,7 @@ public class ColorLightEngine {
     }
 
     protected int getOpacity(BlockPos pos) {
-        net.minecraft.world.level.block.state.BlockState state = level.getBlockState(pos);
-        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, state.getLightBlock(level, pos)));
+        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, level.getBlockState(pos).getLightBlock(level, pos)));
     }
 
     /**
@@ -281,22 +274,11 @@ public class ColorLightEngine {
     }
 
     /**
-     * Adds a source that spreads using {@code mode} specifically, independent of the engine's default.
-     * Re-adding an identical source is a no-op; re-adding it with a different colour/model first
-     * removes the old one so stale light around it is cleaned up.
-     */
-    public void addSource(BlockPos pos, int r, int g, int b, int strength, ColorLightPropagationMode mode) {
-        ResourceLocation id = (mode == ColorLightPropagationMode.SMOOTH)
-                ? PropagationMethodRegistry.SMOOTH : PropagationMethodRegistry.GRID;
-        addSource(pos, r, g, b, strength, id);
-    }
-
-    /**
      * Adds a source that spreads using the propagation method {@code methodId} identifies (see
      * {@link PropagationMethodRegistry}, and {@link me.mrhikmen.colorlight.client.config.BlockSettings#propagation}
      * for where a block's own choice usually comes from), independent of the engine's default.
-     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the mod
-     * providing it is missing) falls back to it too, so a stale config entry never breaks lighting.
+     * {@code null} keeps the engine's default, and an id that isn't currently registered (e.g. the pack
+     * providing it is disabled) falls back to it too, so a stale config entry never breaks lighting.
      * Re-adding an identical source is a no-op; re-adding it with a different colour/model first
      * removes the old one so stale light around it is cleaned up.
      */
@@ -340,8 +322,6 @@ public class ColorLightEngine {
             int to = Math.min(total, from + BATCH_GROUP_SIZE);
             lock.lock();
             try {
-                gridQueue.clear();
-                smoothQueue.clear();
                 clearCustomQueuesLocked();
                 for (int i = from; i < to; i++) {
                     long key = batch.key(i);
@@ -357,8 +337,6 @@ public class ColorLightEngine {
     }
 
     private void addSourceLocked(int x, int y, int z, int packed, ResourceLocation methodId) {
-        gridQueue.clear();
-        smoothQueue.clear();
         clearCustomQueuesLocked();
         placeSourceLocked(x, y, z, packed, methodId);
         flushQueuesLocked();
@@ -443,6 +421,13 @@ public class ColorLightEngine {
             if (!hasStaticLightNear(x, y, z))
                 return;
 
+            // Remember the light around the block: if the re-flood ends with exactly the same light (a block that
+            // only looked like it could matter), nothing is published as dirty and nothing visibly rebuilds.
+            int radius = Math.min(maxRangeBlocks, 24) + 1;
+            boolean snapshot = dirtySections.isEmpty();
+            if (snapshot)
+                snapshotRegion(x, y, z, radius);
+
             long key = PosKey.pack(x, y, z);
             int old = cell & RGB_MASK;
             data.put(x, y, z, 0);
@@ -452,8 +437,8 @@ public class ColorLightEngine {
             darkenAndCollectSeeds(key, old);
 
             seedOnce(defaultMethodId, key);
-            for (int n = 0; n < SMOOTH_COUNT; n++) {
-                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
+            for (int n = 0; n < NEIGHBOR_COUNT; n++) {
+                int nx = x + NEIGHBOR_DX[n], ny = y + NEIGHBOR_DY[n], nz = z + NEIGHBOR_DZ[n];
                 int nCell = data.get(nx, ny, nz);
                 if ((nCell & RGB_MASK) == 0 && (nCell & FLAG_SOURCE) == 0)
                     continue; // nothing there that could spread into the changed cell
@@ -462,9 +447,35 @@ public class ColorLightEngine {
             }
 
             flushQueuesLocked();
+
+            if (snapshot && regionUnchanged(x, y, z, radius))
+                dirtySections.clear();
         } finally {
             unlock();
         }
+    }
+
+    private int[] regionSnapshot = new int[0];
+
+    private void snapshotRegion(int cx, int cy, int cz, int r) {
+        int side = 2 * r + 1;
+        if (regionSnapshot.length < side * side * side)
+            regionSnapshot = new int[side * side * side];
+        int i = 0;
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int z = cz - r; z <= cz + r; z++)
+                for (int x = cx - r; x <= cx + r; x++)
+                    regionSnapshot[i++] = data.get(x, y, z);
+    }
+
+    private boolean regionUnchanged(int cx, int cy, int cz, int r) {
+        int i = 0;
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int z = cz - r; z <= cz + r; z++)
+                for (int x = cx - r; x <= cx + r; x++)
+                    if (regionSnapshot[i++] != data.get(x, y, z))
+                        return false;
+        return true;
     }
 
     /**
@@ -563,45 +574,37 @@ public class ColorLightEngine {
     // Flood fill
     // =====================================================================================
 
-    /** Which method's bit(s) to set on a source cell for {@code methodId} - see {@link #FLAG_CUSTOM}. */
-    private static int methodFlags(ResourceLocation methodId) {
-        if (methodId == null || PropagationMethodRegistry.GRID.equals(methodId))
+    /** Which flag bit(s) to set on a source cell for {@code methodId} - none for the default method, see {@link #FLAG_CUSTOM}. */
+    private int methodFlags(ResourceLocation methodId) {
+        if (methodId == null || defaultMethodId.equals(methodId))
             return 0;
-        if (PropagationMethodRegistry.SMOOTH.equals(methodId))
-            return FLAG_SMOOTH;
         return FLAG_CUSTOM;
     }
 
-    /** The propagation method a stored cell actually spreads with; {@code key} is only consulted for a custom (non-built-in) source. */
+    /** The propagation method a stored cell actually spreads with; {@code key} is only consulted for a non-default source. */
     private ResourceLocation methodIdOf(int cell, long key) {
         if ((cell & FLAG_SOURCE) == 0)
             return defaultMethodId; // an ordinary (non-source) cell always falls back to the engine default
         if ((cell & FLAG_CUSTOM) != 0)
             return customMethodByKey.getOrDefault(key, defaultMethodId);
-        return (cell & FLAG_SMOOTH) != 0 ? PropagationMethodRegistry.SMOOTH : PropagationMethodRegistry.GRID;
+        return defaultMethodId;
     }
 
-    /** The propagator for {@code methodId}, creating and caching it on first use for anything beyond the two built-ins. Call only while holding {@link #lock}. */
+    /** The propagator for {@code methodId}, created and cached on first use. Call only while holding {@link #lock}. */
     private LightPropagator propagatorFor(ResourceLocation methodId) {
-        if (methodId == null || PropagationMethodRegistry.GRID.equals(methodId))
-            return gridPropagator;
-        if (PropagationMethodRegistry.SMOOTH.equals(methodId))
-            return smoothPropagator;
-        return customPropagators.computeIfAbsent(methodId, id -> {
-            PropagationMethod method = PropagationMethodRegistry.get(id);
-            // the method was validated by resolveMethod()/methodFlags() already; this is only a
-            // last-resort guard against it having been unregistered in the meantime
-            return (method != null) ? method.create(decayPerOpacityUnit) : gridPropagator;
+        return customPropagators.computeIfAbsent(methodId == null ? defaultMethodId : methodId, id -> {
+            JsonPropagationMethod method = PropagationMethodRegistry.get(id);
+            if (method == null)
+                method = PropagationMethodRegistry.get(defaultMethodId); // unregistered in the meantime
+            if (method == null)
+                method = PropagationMethodRegistry.get(PropagationMethodRegistry.GRID);
+            return method.create(decayPerOpacityUnit);
         });
     }
 
-    /** The seed queue for {@code methodId}, creating it on first use for anything beyond the two built-ins. Call only while holding {@link #lock}. */
+    /** The seed queue for {@code methodId}, created on first use. Call only while holding {@link #lock}. */
     private LongQueue queueFor(ResourceLocation methodId) {
-        if (methodId == null || PropagationMethodRegistry.GRID.equals(methodId))
-            return gridQueue;
-        if (PropagationMethodRegistry.SMOOTH.equals(methodId))
-            return smoothQueue;
-        return customQueues.computeIfAbsent(methodId, id -> new LongQueue(1 << 8));
+        return customQueues.computeIfAbsent(methodId == null ? defaultMethodId : methodId, id -> new LongQueue(1 << 8));
     }
 
     private void clearCustomQueuesLocked() {
@@ -613,10 +616,6 @@ public class ColorLightEngine {
     }
 
     private void flushQueuesLocked() {
-        if (!gridQueue.isEmpty())
-            gridPropagator.propagate(gridQueue, staticField);
-        if (!smoothQueue.isEmpty())
-            smoothPropagator.propagate(smoothQueue, staticField);
         if (!customQueues.isEmpty()) {
             for (Map.Entry<ResourceLocation, LongQueue> entry : customQueues.entrySet()) {
                 LongQueue queue = entry.getValue();
@@ -649,8 +648,6 @@ public class ColorLightEngine {
      * </ul>
      */
     private void darkenAndCollectSeeds(long startKey, int oldColorAtStart) {
-        gridQueue.clear();
-        smoothQueue.clear();
         clearCustomQueuesLocked();
         darkenKeys.clear();
         darkenColors.clear();
@@ -669,8 +666,8 @@ public class ColorLightEngine {
 
             int x = PosKey.x(curKey), y = PosKey.y(curKey), z = PosKey.z(curKey);
 
-            for (int n = 0; n < SMOOTH_COUNT; n++) {
-                int nx = x + SMOOTH_DX[n], ny = y + SMOOTH_DY[n], nz = z + SMOOTH_DZ[n];
+            for (int n = 0; n < NEIGHBOR_COUNT; n++) {
+                int nx = x + NEIGHBOR_DX[n], ny = y + NEIGHBOR_DY[n], nz = z + NEIGHBOR_DZ[n];
                 int nCell = data.get(nx, ny, nz);
 
                 int nr = nCell & 0xFF, ng = (nCell >> 8) & 0xFF, nb = (nCell >> 16) & 0xFF;
@@ -737,7 +734,7 @@ public class ColorLightEngine {
      * worker thread its own instance.
      */
     public DynamicLightWorker newDynamicWorker() {
-        return new DynamicLightWorker(new DynamicFlood(level, decayPerOpacityUnit));
+        return new DynamicLightWorker(new DynamicFlood(level, decayPerOpacityUnit, dynamicMethodId, defaultMethodId));
     }
 
     /** Thread-confined handle used to (re)compute and apply one dynamic light at a time. */
@@ -854,6 +851,49 @@ public class ColorLightEngine {
         }
     }
 
+    /** Calls {@code consumer} with a packed {@link PosKey} for every section that holds light (static or moving). */
+    public void forEachLitSection(java.util.function.LongConsumer consumer) {
+        data.forEachLitSection(consumer);
+        if (dynamic.isActive())
+            dynamic.storage().forEachLitSection(consumer);
+    }
+
+    /**
+     * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the colours of one section as the
+     * renderer sees them: static and moving light merged, flags stripped. Lock-free.
+     *
+     * @return false if the section holds no light at all
+     */
+    public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
+        boolean lit = data.copySection(sx, sy, sz, out);
+        if (dynamic.isActive())
+            lit |= dynamic.storage().mergeMaxInto(sx, sy, sz, out);
+        return lit;
+    }
+
+    /** Like {@link #copySectionColors} but only the static light (no moving lights). */
+    public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
+        return data.copySection(sx, sy, sz, out);
+    }
+
+    /** Hands every section that holds light, and its neighbours, to the mesh-rebuild queue. Never waits for a flood. */
+    public void markEverythingDirty() {
+        List<Long> keys = new java.util.ArrayList<>();
+        forEachLitSection(keys::add);
+        synchronized (externalDirty) {
+            for (long key : keys) {
+                int sx = PosKey.x(key), sy = PosKey.y(key), sz = PosKey.z(key);
+                for (int a = sx - 1; a <= sx + 1; a++) {
+                    for (int b = sy - 1; b <= sy + 1; b++) {
+                        for (int c = sz - 1; c <= sz + 1; c++) {
+                            externalDirty.put(PosKey.pack(a, b, c), 1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Returns and clears the packed section coordinates ({@link PosKey}) that need a mesh rebuild.
      * Only touches {@link #externalDirty}'s own monitor, so it never waits for a flood.
@@ -934,7 +974,7 @@ public class ColorLightEngine {
         float timeFactor = computeTimeOfDayFactor(realLevel);
         float finalFactor = getDaylightFactor(pos);
 
-        return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime + " rawSky=" + rawSky + " skyExposure=" + skyExposure + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor + " defaultPropagationMode=" + propagationMode;
+        return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime + " rawSky=" + rawSky + " skyExposure=" + skyExposure + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor + " defaultPropagationMethod=" + defaultMethodId;
     }
 
     public int sampleFlatColor(BlockPos pos, net.minecraft.core.Direction face) {

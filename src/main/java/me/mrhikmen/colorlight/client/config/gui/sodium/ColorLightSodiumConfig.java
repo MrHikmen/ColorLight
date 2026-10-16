@@ -2,14 +2,15 @@ package me.mrhikmen.colorlight.client.config.gui.sodium;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.ColorLightVoxyCompat;
+import me.mrhikmen.colorlight.client.compat.lod.dh.ColorLightDistantHorizonsCompat;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.config.gui.screen.ColorLightBlockConfigScreen;
-import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
-import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
-import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.light.propagation.ColorLightPropagationMode;
+import me.mrhikmen.colorlight.client.config.gui.screen.PropagationPickerScreen;
+import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.ColorLightApply;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
@@ -31,14 +32,16 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     public void registerConfigLate(ConfigBuilder builder) {
         config.load();
         boolean ldl = ColorLightLambDynLightsCompat.isPresent();
+        boolean voxy = ColorLightVoxyCompat.isPresent();
+        boolean distantHorizons = ColorLightDistantHorizonsCompat.isPresent();
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(ResourceLocation.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl));
+        if (ldl || voxy || distantHorizons) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -71,21 +74,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setBinding(value -> config.SMOOTH_LIGHTING = value, () -> config.SMOOTH_LIGHTING)
                                 .setDefaultValue(config.SMOOTH_LIGHTING)
                         )
-                        .addOption(builder.createEnumOption(ResourceLocation.parse("colorlight:propagation_mode"), ColorLightPropagationMode.class)
-                                .setName(Translatable.PROPAGATION_MODE)
-                                .setTooltip(Translatable.PROPAGATION_MODE_Tooltip)
-                                .setElementNameProvider(mode -> switch (mode) {
-                                    case GRID -> Translatable.PROPAGATION_MODE_GRID;
-                                    case SMOOTH -> Translatable.PROPAGATION_MODE_SMOOTH;
-                                })
-                                .setStorageHandler(this::save)
-                                .setImpact(OptionImpact.VARIES)
-                                .setBinding(
-                                        value -> config.PROPAGATION_MODE = value.name(),
-                                        () -> ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE)
-                                )
-                                .setDefaultValue(ColorLightPropagationMode.GRID)
-                        )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:tint_gamma"))
                                 .setName(Translatable.TINT_GAMMA)
                                 .setTooltip(Translatable.TINT_GAMMA_Tooltip)
@@ -98,12 +86,39 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 )
                                 .setDefaultValue(Math.round(config.TINT_GAMMA * 100f))
                         )
+                        .addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:propagation_mode"))
+                                .setName(Translatable.PROPAGATION_MODE)
+                                .setTooltip(Translatable.PROPAGATION_MODE_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(new PropagationPickerScreen(
+                                        parentScreen, Translatable.PROPAGATION_MODE,
+                                        () -> config.PROPAGATION_MODE, value -> config.PROPAGATION_MODE = value,
+                                        this::applyImmediately, method -> true, PropagationMethodRegistry.GRID)))
+                        )
+                )
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Translatable.GPU_EXPERIMENTS)
+                        .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:gpu_pipeline"))
+                                .setName(Translatable.GPU_PIPELINE)
+                                .setTooltip(Translatable.GPU_PIPELINE_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.GPU_PIPELINE = value, () -> config.GPU_PIPELINE)
+                                .setDefaultValue(config.GPU_PIPELINE)
+                        )
+                        .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:gpu_light_sections"))
+                                .setName(Translatable.GPU_LIGHT_SECTIONS)
+                                .setTooltip(Translatable.GPU_LIGHT_SECTIONS_Tooltip)
+                                .setRange(64, 4096, 64)
+                                .setValueFormatter(value -> Translatable.SECTIONS_Value(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.GPU_LIGHT_SECTIONS = value, () -> config.GPU_LIGHT_SECTIONS)
+                                .setDefaultValue(config.GPU_LIGHT_SECTIONS)
+                        )
                 )
                 .addOptionGroup(builder.createOptionGroup()
                         .setName(Translatable.WEIGHT)
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:brightness_weight"))
                                 .setName(Translatable.BRIGHTNESS_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.BRIGHTNESS_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -113,7 +128,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:local_weight"))
                                 .setName(Translatable.LOCAL_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.LOCAL_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -123,7 +138,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:region_weight"))
                                 .setName(Translatable.REGION_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.REGION_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -133,7 +148,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:alpha_weight"))
                                 .setName(Translatable.ALPHA_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.ALPHA_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -143,7 +158,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:anomaly_weight"))
                                 .setName(Translatable.ANOMALY_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.ANOMALY_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -153,7 +168,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:saturation_weight"))
                                 .setName(Translatable.SATURATION_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.SATURATION_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -163,7 +178,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:glowcolorscore_weight"))
                                 .setName(Translatable.GLOWCOLORSCORE_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.GLOWCOLORSCORE_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -173,7 +188,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:whitepenalty_weight"))
                                 .setName(Translatable.WHITEPENALTY_WEIGHT)
-                                .setTooltip(Translatable.WEIGHT_Tooltip)
+                                .setTooltip(Translatable.WHITEPENALTY_WEIGHT_Tooltip)
                                 .setRange(0, 100, 1)
                                 .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
                                 .setStorageHandler(this::save)
@@ -193,16 +208,24 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:block_" + block.getPath()))
                                     .setName(Component.translatable("block." + block.toLanguageKey()))
                                     .setTooltip(Translatable.BLOCK_Tooltip)
-                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(new ColorLightBlockConfigScreen(parentScreen, entry, this::save, this::applyImmediately)))
+                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(new ColorLightBlockConfigScreen(parentScreen, liveEntry(entry), this::save, this::applyImmediately)))
                             )
             );
         }
         return page;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl) {
+    /** The entry the config holds for this block right now (a reload may have replaced the one this page was built with). */
+    private static BlockSettings liveEntry(BlockSettings built) {
+        for (BlockSettings e : ColorLightClient.config.blocks) {
+            if (e.block.equals(built.block))
+                return e;
+        }
+        return built;
+    }
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons) {
         ResourceLocation entityEnabledId = ResourceLocation.parse("colorlight:entity_tracking_enabled");
         ResourceLocation entityFollowId = ResourceLocation.parse("colorlight:entity_follow_render_distance");
-        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}.", ldl);
+        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}.", ldl, voxy, distantHorizons);
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.COMPATIBILITY);
         if (ldl) {
             page.addOptionGroup(builder.createOptionGroup()
@@ -223,6 +246,14 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setBinding(value -> config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = value, () -> config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
                             .setDefaultValue(config.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE)
                     )
+                    .addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:dynamic_propagation"))
+                                .setName(Translatable.DYNAMIC_PROPAGATION)
+                                .setTooltip(Translatable.DYNAMIC_PROPAGATION_Tooltip)
+                                .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(new PropagationPickerScreen(
+                                        parentScreen, Translatable.DYNAMIC_PROPAGATION,
+                                        () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
+                                        this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
+                        )
                     .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:entity_check_radius_chunks"))
                             .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
@@ -234,6 +265,51 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setBinding(value -> config.ENTITY_CHECK_RADIUS_CHUNKS = value, () -> config.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setDefaultValue(config.ENTITY_CHECK_RADIUS_CHUNKS)
                     )
+            );
+        }
+        if (voxy || distantHorizons) {
+            var group = builder.createOptionGroup()
+                    .setName(Translatable.LOD_IMPORT);
+            if (voxy) {
+                group.addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:lod_import_voxy"))
+                        .setName(Translatable.LOD_IMPORT_VOXY)
+                        .setTooltip(Translatable.LOD_IMPORT_VOXY_Tooltip)
+                        .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(
+                                new me.mrhikmen.colorlight.client.config.gui.screen.LodImportScreen(parentScreen,
+                                        Translatable.LOD_IMPORT_VOXY, me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight.IMPORT))));
+            }
+            if (distantHorizons) {
+                group.addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:lod_import_dh"))
+                        .setName(Translatable.LOD_IMPORT_DH)
+                        .setTooltip(Translatable.LOD_IMPORT_DH_Tooltip)
+                        .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(
+                                new me.mrhikmen.colorlight.client.config.gui.screen.LodImportScreen(parentScreen,
+                                        Translatable.LOD_IMPORT_DH, me.mrhikmen.colorlight.client.compat.lod.dh.DhLodLight.IMPORT))));
+            }
+            page.addOptionGroup(group);
+        }
+        if (voxy) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.VOXY)
+                        .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:voxy_light"))
+                                .setName(Translatable.VOXY_LIGHT)
+                                .setTooltip(Translatable.VOXY_LIGHT_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
+                                .setDefaultValue(config.VOXY_LIGHT)
+                        )
+            );
+        }
+        if (distantHorizons) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.DISTANTHORIZONS)
+                        .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:dh_light"))
+                                .setName(Translatable.DH_LIGHT)
+                                .setTooltip(Translatable.DH_LIGHT_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.DH_LIGHT = value, () -> config.DH_LIGHT)
+                                .setDefaultValue(config.DH_LIGHT)
+                        )
             );
         }
         return page;
@@ -261,21 +337,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         this.applySaveNow();
     }
     private void applySaveNow() {
-        config.save();
-        ColorLightEngineHolder.configure(config.lightRangeBlocks, ColorLightPropagationMode.fromConfigString(config.PROPAGATION_MODE));
-        ColorLightBlockRegistry.load(config);
-        var client = net.minecraft.client.Minecraft.getInstance();
-        if (client.level != null) {
-            var oldEngine = ColorLightEngineHolder.get();
-            ColorLightEngineHolder.set(client.level);
-            var newEngine = ColorLightEngineHolder.get();
-            // the old engine's light is gone: rebuild exactly the sections it had lit (no whole-render-distance rebuild)
-            if (newEngine != null && oldEngine != null) {
-                newEngine.inheritDirtyFrom(oldEngine);
-            }
-            if (config.ENABLE) {
-                ColorLightChunkScanner.rescanAll(client.level);
-            }
-        }
+        ColorLightApply.everything(true);
     }
 }
