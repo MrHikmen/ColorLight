@@ -59,6 +59,10 @@
     {
       "config": "colorlight.distanthorizons.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "colorlight.sable.mixins.json",
+      "environment": "client"
     }
   ],
   "depends": {
@@ -71,6 +75,7 @@
     "lambdynlights": ">=4.0.0",
     "voxy": ">=0.2.0",
     "nvidium": ">=0.4.0",
-    "distanthorizons": ">=3.0.0"
+    "distanthorizons": ">=3.0.0",
+    "sable": ">=2.0.0"
   }
 }

@@ -1,0 +1,15 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "me.mrhikmen.colorlight.client.compat.sable.mixin",
+  "plugin": "me.mrhikmen.colorlight.client.compat.sable.mixin.ColorLightSablePlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+    "VanillaChunkedSubLevelRenderDataMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

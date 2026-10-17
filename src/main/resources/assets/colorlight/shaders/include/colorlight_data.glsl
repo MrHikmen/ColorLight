@@ -11,15 +11,31 @@
 // Header ints: 0..2 camera block (ints), 3 enabled (1/0), 4..6 camera fraction (float bits),
 //              7 tint strength (float bits), 8 tint gamma (float bits), 9 smooth lighting (1/0).
 
+// CL_PLOT: sub-level (Sable) variant. The window is not the camera's: it is a 31x31x31 section window around a per-draw
+// anchor in the sub-level's plot space, and its page table is a 32768-page region of u_CLData selected by u_CLPageBase.
+#ifdef CL_PLOT
+#define CL_SECTION_RADIUS_XZ 15
+#define CL_SECTION_RADIUS_Y 15
+uniform ivec3 u_CLAnchor;   // anchor block (multiple of 16), plot space
+uniform vec3 u_CLCamOff;    // camera position in plot space minus the anchor block
+uniform int u_CLPageBase;   // first page of this window in u_CLData
+#else
 #define CL_SECTION_RADIUS_XZ 31
 #define CL_SECTION_RADIUS_Y 15
+#endif
 const int CL_OPAQUE_BIT = 1 << 24;
 
 uniform isamplerBuffer u_CLHeader;
 
+#ifdef CL_PLOT
+ivec3 cl_cameraBlock() {
+    return u_CLAnchor;
+}
+#else
 ivec3 cl_cameraBlock() {
     return ivec3(texelFetch(u_CLHeader, 0).r, texelFetch(u_CLHeader, 1).r, texelFetch(u_CLHeader, 2).r);
 }
+#endif
 
 bool cl_enabled() {
     return texelFetch(u_CLHeader, 3).r == 1;
@@ -33,9 +49,15 @@ float cl_headerFloat(int index) {
     return intBitsToFloat(texelFetch(u_CLHeader, index).r);
 }
 
+#ifdef CL_PLOT
+vec3 cl_cameraFrac() {
+    return u_CLCamOff;
+}
+#else
 vec3 cl_cameraFrac() {
     return vec3(cl_headerFloat(4), cl_headerFloat(5), cl_headerFloat(6));
 }
+#endif
 
 #ifdef CL_FRAGMENT
 
@@ -51,7 +73,11 @@ int cl_cellRaw(ivec3 cell, ivec3 camSection) {
         return -1;
     }
 
+#ifdef CL_PLOT
+    int page = u_CLPageBase + ((section.x & 31) | ((section.z & 31) << 5) | ((section.y & 31) << 10));
+#else
     int page = (section.x & 63) | ((section.z & 63) << 6) | ((section.y & 31) << 12);
+#endif
     int slot = texelFetch(u_CLData, page).r;
     if (slot < 0) {
         return -1;

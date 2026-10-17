@@ -8,6 +8,8 @@ import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge;
 import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 
+import me.mrhikmen.colorlight.client.compat.sable.SableLightVolume;
+
 import net.fabricmc.loader.api.FabricLoader;
 
 import net.minecraft.client.Minecraft;
@@ -58,6 +60,9 @@ public final class ColorLightGpu {
     private static volatile boolean frameHooked;
 
     private static GpuLightVolume volume;
+
+    /** Sable sub-levels get their own light windows (compat.sable); only touched when Sable is installed. */
+    private static final boolean SABLE = FabricLoader.getInstance().isModLoaded("sable");
 
     /** Section of the camera in the last rendered frame; the volume is centred on it. */
     private static int camSx, camSy, camSz;
@@ -397,8 +402,19 @@ public final class ColorLightGpu {
 
     /** The engine reported these sections as changed. */
     public static void onSectionsChanged(long[] sectionKeys) {
-        if (isActive())
+        if (isActive()) {
             volume().markDirty(sectionKeys);
+            if (SABLE)
+                SableLightVolume.onSectionsChanged(sectionKeys);
+        }
+    }
+
+    /** OpenGL name of the main volume's header buffer (enabled flag, tint settings), or 0. Used by the Sable compat. */
+    public static int mainHeaderBuffer() {
+        if (failed || volume == null)
+            return 0;
+        int[] names = volume.glBufferNames();
+        return names == null ? 0 : names[0];
     }
 
     public static void tick(Minecraft client) {
@@ -421,6 +437,8 @@ public final class ColorLightGpu {
         if (level == null || client.player == null || engine == null) {
             if (volume != null)
                 volume.reset();
+            if (SABLE)
+                SableLightVolume.reset();
             camKnown = false;
             return;
         }
@@ -436,12 +454,18 @@ public final class ColorLightGpu {
         if (volumeNeedsReset) {
             volumeNeedsReset = false;
             volume().reset();
+            if (SABLE)
+                SableLightVolume.reset();
         }
 
         volume().tick(engine, level, sx, sy, sz);
+        if (SABLE)
+            SableLightVolume.tick(engine, level);
     }
 
     public static void shutdown() {
+        if (SABLE)
+            SableLightVolume.shutdown();
         if (volume != null) {
             volume.close();
             volume = null;
