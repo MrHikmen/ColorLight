@@ -15,6 +15,11 @@ public final class ColorLightSableBridge {
         return ColorLightSableCompat.prepare(renderData, original, modelView, camX, camY, camZ);
     }
 
+    /** The sub-level draw used texture units 5..7 for its own buffers; give them back to the terrain. */
+    public static void restoreTerrainBindings() {
+        me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu.rebindMainUnits();
+    }
+
     public static void failed(Throwable t) {
         if (!reported) {
             reported = true;

@@ -25,7 +25,14 @@ uniform int u_CLPageBase;   // first page of this window in u_CLData
 #endif
 const int CL_OPAQUE_BIT = 1 << 24;
 
-uniform isamplerBuffer u_CLHeader;
+// CL_BIND_UNITS (Sodium terrain shaders): the buffers sit on fixed texture units 5..7, so no program uniform is needed.
+#ifdef CL_BIND_UNITS
+#define CL_BINDING(n) layout(binding = n)
+#else
+#define CL_BINDING(n)
+#endif
+
+CL_BINDING(5) uniform isamplerBuffer u_CLHeader;
 
 #ifdef CL_PLOT
 ivec3 cl_cameraBlock() {
@@ -61,8 +68,8 @@ vec3 cl_cameraFrac() {
 
 #ifdef CL_FRAGMENT
 
-uniform isamplerBuffer u_CLData;
-uniform isamplerBuffer u_CLPool;
+CL_BINDING(6) uniform isamplerBuffer u_CLData;
+CL_BINDING(7) uniform isamplerBuffer u_CLPool;
 
 // Raw cell value, or -1 when nothing is known about the cell: its section is outside the window or holds no light,
 // so it has no light data and, above all, no solid/air information.

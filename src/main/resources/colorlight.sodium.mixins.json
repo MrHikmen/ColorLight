@@ -9,6 +9,7 @@
   "client": [
     "DefaultChunkRendererMixin",
     "ShaderChunkRendererMixin",
+    "ShaderLoaderMixin",
     "SodiumWorldRendererMixin"
   ],
   "injectors": {

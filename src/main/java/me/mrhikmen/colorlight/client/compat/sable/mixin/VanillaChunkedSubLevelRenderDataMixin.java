@@ -40,6 +40,7 @@ public abstract class VanillaChunkedSubLevelRenderDataMixin {
             original.call(layer, ours, modelView, camX, camY, camZ);
         } finally {
             ours.clear();
+            ColorLightSableBridge.restoreTerrainBindings();
         }
     }
 }

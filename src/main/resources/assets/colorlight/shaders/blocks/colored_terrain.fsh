@@ -1,4 +1,6 @@
 #version 330 core
+#extension GL_ARB_shading_language_420pack : enable
+#define CL_BIND_UNITS
 
 // ColorLight copy of sodium:blocks/block_layer_opaque.fsh (Sodium 0.8.13 / Minecraft 1.21.1, plain OpenGL).
 // Everything marked COLORLIGHT is ours; the rest must stay identical to Sodium's shader.
