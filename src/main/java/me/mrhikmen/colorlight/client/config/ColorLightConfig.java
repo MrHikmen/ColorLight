@@ -79,6 +79,11 @@ public class ColorLightConfig {
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
+    /** Sable: lights of sub-levels light the terrain and terrain lights light sub-levels (see SableLightLinker). */
+    public boolean SABLE_CROSS_LIGHT = true;
+    /** How far (blocks) the light of a sub-level reaches into the world; never more than {@code lightRangeBlocks}. */
+    public int SABLE_LIGHT_RANGE_BLOCKS = 15;
+
     /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
     public List<String> userOverrides = new ArrayList<>();
 
@@ -129,6 +134,8 @@ public class ColorLightConfig {
                 this.ENTITY_TRACKING_ENABLED = root.has("ENTITY_TRACKING_ENABLED") ? loaded.ENTITY_TRACKING_ENABLED : this.ENTITY_TRACKING_ENABLED;
                 this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
                 this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
+                this.SABLE_CROSS_LIGHT = root.has("SABLE_CROSS_LIGHT") ? loaded.SABLE_CROSS_LIGHT : this.SABLE_CROSS_LIGHT;
+                this.SABLE_LIGHT_RANGE_BLOCKS = loaded.SABLE_LIGHT_RANGE_BLOCKS > 0 ? Math.min(32, loaded.SABLE_LIGHT_RANGE_BLOCKS) : this.SABLE_LIGHT_RANGE_BLOCKS;
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
             } catch (IOException e) {

@@ -71,7 +71,7 @@ final class SableAccess {
         return (Field) cached;
     }
 
-    private static Object call(Object target, String name) throws Exception {
+    static Object call(Object target, String name) throws Exception {
         Class<?> cls = target.getClass();
         Object cached = CACHE.computeIfAbsent("m:" + cls.getName() + "#" + name, k -> {
             try {

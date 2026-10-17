@@ -46,6 +46,11 @@
   "me.colorlight.general.whitepenalty_weight": "White clipping strength",
   "me.colorlight.general.whitepenalty_weight.tooltip": "Lowers the score of washed-out, near-white pixels (low saturation, high brightness), steering the pick toward colored pixels instead of white highlights.",
 
+  "me.colorlight.compatibility.sable": "Sable",
+  "me.colorlight.compatibility.sable_cross_light": "Light between the world and sub-levels",
+  "me.colorlight.compatibility.sable_cross_light.tooltip": "Lights of Sable sub-levels (ships, contraptions) light the terrain around them, and terrain lights close to a sub-level light it. Uses dynamic lights; the terrain-to-sub-level direction needs the GPU pipeline. Nothing is calculated while no sub-level is nearby.",
+  "me.colorlight.compatibility.sable_light_range": "Sub-level light distance",
+  "me.colorlight.compatibility.sable_light_range.tooltip": "How far, in blocks, the light of a sub-level spreads into the world. It is the same as dimming the light, so it cannot go beyond the general light range; lower values are cheaper.",
   "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
   "me.colorlight.compatibility.entity_tracking_enabled": "Enable LDL compatibility",
   "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Master switch for scanning entities for glowing blocks LDL. Disable it to turn this feature off completely.",

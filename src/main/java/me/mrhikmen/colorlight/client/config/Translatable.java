@@ -78,6 +78,11 @@ public class Translatable {
     public static Component ENTITY_TRACKING_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled.tooltip");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE_Tooltip = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance.tooltip");
+    public static Component SABLE = Component.translatable("me.colorlight.compatibility.sable");
+    public static Component SABLE_CROSS_LIGHT = Component.translatable("me.colorlight.compatibility.sable_cross_light");
+    public static Component SABLE_CROSS_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.sable_cross_light.tooltip");
+    public static Component SABLE_LIGHT_RANGE = Component.translatable("me.colorlight.compatibility.sable_light_range");
+    public static Component SABLE_LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.compatibility.sable_light_range.tooltip");
     public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
     public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks");

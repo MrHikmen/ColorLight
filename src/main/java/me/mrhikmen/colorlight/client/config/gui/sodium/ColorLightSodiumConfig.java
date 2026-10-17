@@ -34,14 +34,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         boolean ldl = ColorLightLambDynLightsCompat.isPresent();
         boolean voxy = ColorLightVoxyCompat.isPresent();
         boolean distantHorizons = ColorLightDistantHorizonsCompat.isPresent();
+        boolean sable = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("sable");
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(ResourceLocation.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl || voxy || distantHorizons) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons));
+        if (ldl || voxy || distantHorizons || sable) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, sable));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -222,7 +223,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return built;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean sable) {
         ResourceLocation entityEnabledId = ResourceLocation.parse("colorlight:entity_tracking_enabled");
         ResourceLocation entityFollowId = ResourceLocation.parse("colorlight:entity_follow_render_distance");
         ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}.", ldl, voxy, distantHorizons);
@@ -264,6 +265,31 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setStorageHandler(this::save)
                             .setBinding(value -> config.ENTITY_CHECK_RADIUS_CHUNKS = value, () -> config.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setDefaultValue(config.ENTITY_CHECK_RADIUS_CHUNKS)
+                    )
+            );
+        }
+        if (sable) {
+            ResourceLocation sableCrossId = ResourceLocation.parse("colorlight:sable_cross_light");
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.SABLE)
+                    .addOption(builder.createBooleanOption(sableCrossId)
+                            .setName(Translatable.SABLE_CROSS_LIGHT)
+                            .setTooltip(Translatable.SABLE_CROSS_LIGHT_Tooltip)
+                            .setImpact(OptionImpact.MEDIUM)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.SABLE_CROSS_LIGHT = value, () -> config.SABLE_CROSS_LIGHT)
+                            .setDefaultValue(config.SABLE_CROSS_LIGHT)
+                    )
+                    .addOption(builder.createIntegerOption(ResourceLocation.parse("colorlight:sable_light_range"))
+                            .setName(Translatable.SABLE_LIGHT_RANGE)
+                            .setTooltip(Translatable.SABLE_LIGHT_RANGE_Tooltip)
+                            .setImpact(OptionImpact.MEDIUM)
+                            .setEnabledProvider(state -> state.readBooleanOption(sableCrossId), sableCrossId)
+                            .setRange(1, 32, 1)
+                            .setValueFormatter(value -> Translatable.BLOCKS_Value(value))
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.SABLE_LIGHT_RANGE_BLOCKS = value, () -> config.SABLE_LIGHT_RANGE_BLOCKS)
+                            .setDefaultValue(config.SABLE_LIGHT_RANGE_BLOCKS)
                     )
             );
         }

@@ -5,6 +5,7 @@ import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import java.util.Arrays;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.LongConsumer;
 
@@ -55,6 +56,28 @@ public final class LightStorage {
 
     private final AtomicReferenceArray<Column> columns = new AtomicReferenceArray<>(COLUMN_WINDOW * COLUMN_WINDOW);
 
+    /**
+     * Columns that lost their ring slot to a column of another place with the same low 7 bits. Terrain never gets
+     * here (everything loaded fits the 128x128 window), but Sable sub-levels live in a plot ~20M blocks away, and
+     * their chunk coordinates can land on the slot of any terrain column: without this, the first terrain chunk to
+     * write light into that slot silently deleted the sub-level's light (and the other way round). Almost always
+     * empty, so the lock-free read path only pays one {@code volatile} read.
+     */
+    private final ConcurrentHashMap<Long, Column> overflow = new ConcurrentHashMap<>();
+    private volatile boolean hasOverflow;
+
+    private static long overflowKey(int cx, int cz) {
+        return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
+    }
+
+    /** The column of chunk (cx, cz), from its ring slot or the overflow; null if there is none. */
+    private Column columnOrNull(int cx, int cz) {
+        Column col = columns.get(columnIndex(cx, cz));
+        if (col != null && col.cx == cx && col.cz == cz)
+            return col;
+        return hasOverflow ? overflow.get(overflowKey(cx, cz)) : null;
+    }
+
     private static int columnIndex(int cx, int cz) {
         return (cx & COLUMN_MASK) | ((cz & COLUMN_MASK) << COLUMN_BITS);
     }
@@ -64,8 +87,8 @@ public final class LightStorage {
     }
 
     private Section sectionOrNull(int sx, int sy, int sz) {
-        Column col = columns.get(columnIndex(sx, sz));
-        if (col == null || col.cx != sx || col.cz != sz)
+        Column col = columnOrNull(sx, sz);
+        if (col == null)
             return null;
         int idx = sy + SECTION_Y_OFFSET;
         if ((idx & ~(SECTION_Y_COUNT - 1)) != 0)
@@ -88,13 +111,18 @@ public final class LightStorage {
         if ((yIdx & ~(SECTION_Y_COUNT - 1)) != 0)
             return;
 
-        int ci = columnIndex(sx, sz);
-        Column col = columns.get(ci);
-        if (col == null || col.cx != sx || col.cz != sz) {
+        Column col = columnOrNull(sx, sz);
+        if (col == null) {
             if (value == 0)
                 return;
             col = new Column(sx, sz);
-            columns.set(ci, col);
+            int ci = columnIndex(sx, sz);
+            if (columns.get(ci) == null) {
+                columns.set(ci, col);
+            } else { // the slot belongs to another place: keep both instead of evicting it
+                overflow.put(overflowKey(sx, sz), col);
+                hasOverflow = true;
+            }
         }
 
         Section s = col.sections.get(yIdx);
@@ -164,6 +192,8 @@ public final class LightStorage {
         Column col = columns.get(ci);
         if (col != null && col.cx == cx && col.cz == cz)
             columns.set(ci, null);
+        else if (hasOverflow)
+            overflow.remove(overflowKey(cx, cz));
     }
 
     public void clear() {
@@ -171,19 +201,28 @@ public final class LightStorage {
             if (columns.get(i) != null)
                 columns.set(i, null);
         }
+        overflow.clear();
+        hasOverflow = false;
     }
 
     /** Calls {@code consumer} with a packed {@link PosKey} of (sectionX, sectionY, sectionZ) for every section holding light. */
     public void forEachLitSection(LongConsumer consumer) {
         for (int i = 0; i < COLUMN_WINDOW * COLUMN_WINDOW; i++) {
             Column col = columns.get(i);
-            if (col == null)
-                continue;
-            for (int yIdx = 0; yIdx < SECTION_Y_COUNT; yIdx++) {
-                Section s = col.sections.get(yIdx);
-                if (s != null && s.nonEmpty > 0)
-                    consumer.accept(PosKey.pack(col.cx, yIdx - SECTION_Y_OFFSET, col.cz));
-            }
+            if (col != null)
+                forEachLitSection(col, consumer);
+        }
+        if (hasOverflow) {
+            for (Column col : overflow.values())
+                forEachLitSection(col, consumer);
+        }
+    }
+
+    private static void forEachLitSection(Column col, LongConsumer consumer) {
+        for (int yIdx = 0; yIdx < SECTION_Y_COUNT; yIdx++) {
+            Section s = col.sections.get(yIdx);
+            if (s != null && s.nonEmpty > 0)
+                consumer.accept(PosKey.pack(col.cx, yIdx - SECTION_Y_OFFSET, col.cz));
         }
     }
 }

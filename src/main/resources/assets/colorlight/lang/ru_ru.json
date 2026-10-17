@@ -48,6 +48,11 @@
   "me.colorlight.general.whitepenalty_weight": "Сила подавления белого",
   "me.colorlight.general.whitepenalty_weight.tooltip": "Снижает оценку выцветших, почти белых пикселей (низкая насыщенность, высокая яркость), направляя выбор на цветные пиксели вместо белых бликов.",
 
+  "me.colorlight.compatibility.sable": "Sable",
+  "me.colorlight.compatibility.sable_cross_light": "Свет между миром и sublevel",
+  "me.colorlight.compatibility.sable_cross_light.tooltip": "Свет от sublevel Sable (корабли, механизмы) освещает окружающий террейн, а свет террейна рядом с sublevel освещает его. Использует динамический свет; направление «террейн → sublevel» требует GPU-пайплайн. Пока рядом нет ни одного sublevel, ничего не считается.",
+  "me.colorlight.compatibility.sable_light_range": "Дистанция света sublevel",
+  "me.colorlight.compatibility.sable_light_range.tooltip": "На сколько блоков свет от sublevel распространяется в мир. Это то же самое, что приглушить свет, поэтому значение не может быть больше общей дальности света; меньшие значения дешевле.",
   "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
   "me.colorlight.compatibility.entity_tracking_enabled": "Включить совместимость с LDL",
   "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Основной переключатель для поиска у сущностей светящихся блоков LDL. Отключите его, чтобы полностью выключить эту функцию.",

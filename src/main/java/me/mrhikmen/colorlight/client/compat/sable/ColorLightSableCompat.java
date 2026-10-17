@@ -9,6 +9,7 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.CoreShaderRegistrationCallback;
 
 import net.minecraft.client.Minecraft;
@@ -56,6 +57,9 @@ public final class ColorLightSableCompat {
             context.register(CUTOUT_ID, DefaultVertexFormat.BLOCK, s -> cutout = s);
             context.register(TRANSLUCENT_ID, DefaultVertexFormat.BLOCK, s -> translucent = s);
         });
+        // light between the world and sub-levels (dynamic layer); runs after the engine tick of the same frame
+        ClientTickEvents.END_CLIENT_TICK.register(SablePlotScanner::tick); // lights that were on a sub-level before it arrived
+        ClientTickEvents.END_CLIENT_TICK.register(SableLightLinker::tick);
         ColorLightClient.LOGGER.info("[ColorLight] Sable compat initialized");
     }
 
