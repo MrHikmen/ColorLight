@@ -56,6 +56,8 @@ public final class SableLightLinker {
     private static final int MAX_OWN_PER_SUBLEVEL = 16;
     /** Nearest terrain lights that light one sub-level. */
     private static final int MAX_WORLD_PER_SUBLEVEL = 16;
+    /** Nearest lights of one sub-level that light another sub-level. */
+    private static final int MAX_SUB_PER_PAIR = 8;
     /** Floods requested per tick, all links together. */
     private static final int MAX_UPDATES_PER_TICK = 8;
     /** A link is recomputed after its light moved this fraction of a block (1/4). */
@@ -93,7 +95,15 @@ public final class SableLightLinker {
     private static int rescanIn;
     private static int scannedVersion = -1;
     private static int lastScanTick;
-    private static int budget;
+    /**
+     * Floods allowed this tick per kind of link (0 sub-level -> world, 1 world -> sub-level, 2 sub-level -> sub-level):
+     * one shared budget let a spinning light on one sub-level spend it all every tick, so the links to the other
+     * sub-levels never got created. New links also have a small budget of their own that updates cannot use up.
+     */
+    private static final int[] UPDATE_BUDGET = new int[3];
+    private static final int[] NEW_BUDGET = new int[3];
+    private static final int[] UPDATE_SHARE = {3, 2, 5};
+    private static final int[] NEW_SHARE = {2, 2, 3};
     /** Dynamic light ids: negative, so they never meet an entity id. */
     private static int nextId = -1;
     private static final Vector3d SCRATCH = new Vector3d();
@@ -108,7 +118,11 @@ public final class SableLightLinker {
         return thread;
     });
     private static ColorLightEngine workerEngine;
+    private static net.minecraft.resources.ResourceLocation workerMethod;
     private static ColorLightEngine.DynamicLightWorker worker;
+    /** Method the worker should spread with (the Sable / Flywheel setting); written on the game thread. */
+    private static volatile net.minecraft.resources.ResourceLocation wantedMethod;
+    private static net.minecraft.resources.ResourceLocation lastMethod;
     private static boolean loggedFailure;
 
     public static void tick(Minecraft client) {
@@ -128,6 +142,14 @@ public final class SableLightLinker {
             CANDIDATES.clear();
             rescanIn = 0;
             scannedVersion = -1;
+            trackedEngine = engine;
+        }
+
+        net.minecraft.resources.ResourceLocation method = config.sablePropagationId();
+        wantedMethod = method;
+        if (!java.util.Objects.equals(method, lastMethod)) { // the setting changed: every light is spread again with the new method
+            lastMethod = method;
+            dropAll(engine);
             trackedEngine = engine;
         }
 
@@ -153,7 +175,8 @@ public final class SableLightLinker {
         }
 
         SEEN.clear();
-        budget = MAX_UPDATES_PER_TICK;
+        System.arraycopy(UPDATE_SHARE, 0, UPDATE_BUDGET, 0, 3);
+        System.arraycopy(NEW_SHARE, 0, NEW_BUDGET, 0, 3);
         boolean gpu = ColorLightGpu.isActive();
         double reach = ColorLightEngineHolder.getMaxRangeBlocks() + 1;
         double reachSq = reach * reach;
@@ -183,6 +206,54 @@ public final class SableLightLinker {
                         Src src = best[(i + tickCounter) % count];
                         body.toPlot(src.x() + 0.5, src.y() + 0.5, src.z() + 0.5, SCRATCH);
                         track(engine, new LinkKey(body.id(), null, src.key()), SCRATCH.x, SCRATCH.y, SCRATCH.z, src.color());
+                    }
+                }
+            }
+
+            // sub-level -> sub-level: the lights of every OTHER nearby sub-level that reach this one, in this one's plot
+            // space (so this sub-level's own blocks shade them). Same GPU-only reason as the world -> sub-level light.
+            if (gpu && config.SABLE_SUBLEVEL_LIGHT && near.size() > 1) {
+                for (Body owner : near) {
+                    if (owner == body)
+                        continue;
+                    List<Src> lights = OWN.getOrDefault(owner.id(), List.of());
+                    if (lights.isEmpty())
+                        continue;
+                    // nearest lights of the owner (world space) to this sub-level, at most MAX_SUB_PER_PAIR
+                    Src[] best = new Src[MAX_SUB_PER_PAIR];
+                    double[] bestDist = new double[MAX_SUB_PER_PAIR];
+                    double[][] bestWorld = new double[MAX_SUB_PER_PAIR][];
+                    int count = 0;
+                    for (int i = 0, n = lights.size(); i < n; i++) {
+                        Src src = lights.get(i);
+                        owner.toWorld(src.x() + 0.5, src.y() + 0.5, src.z() + 0.5, SCRATCH);
+                        double d = body.distSqToBounds(SCRATCH.x, SCRATCH.y, SCRATCH.z);
+                        if (d > reachSq)
+                            continue;
+                        int at = count;
+                        if (count == best.length) {
+                            if (d >= bestDist[count - 1])
+                                continue;
+                            at = count - 1;
+                        } else {
+                            count++;
+                        }
+                        while (at > 0 && bestDist[at - 1] > d) {
+                            best[at] = best[at - 1];
+                            bestDist[at] = bestDist[at - 1];
+                            bestWorld[at] = bestWorld[at - 1];
+                            at--;
+                        }
+                        best[at] = src;
+                        bestDist[at] = d;
+                        bestWorld[at] = new double[]{SCRATCH.x, SCRATCH.y, SCRATCH.z};
+                    }
+                    for (int i = 0; i < count; i++) {
+                        int k = (i + tickCounter) % count;
+                        double[] w = bestWorld[k];
+                        body.toPlot(w[0], w[1], w[2], SCRATCH);
+                        track(engine, new LinkKey(body.id(), owner.id(), best[k].key()), SCRATCH.x, SCRATCH.y, SCRATCH.z,
+                                scaleColor(best[k].color(), rangeFactor));
                     }
                 }
             }
@@ -319,9 +390,14 @@ public final class SableLightLinker {
         long qy = Math.round(y * STEPS_PER_BLOCK);
         long qz = Math.round(z * STEPS_PER_BLOCK);
 
+        int kind = key.target() == null ? 0 : key.owner() == null ? 1 : 2;
         Tracked tracked = TRACKED.get(key);
         if (tracked == null) {
-            if (budget <= 0)
+            if (NEW_BUDGET[kind] > 0)
+                NEW_BUDGET[kind]--;
+            else if (UPDATE_BUDGET[kind] > 0)
+                UPDATE_BUDGET[kind]--;
+            else
                 return;
             tracked = new Tracked();
             tracked.id = nextId--;
@@ -330,10 +406,10 @@ public final class SableLightLinker {
             if (tracked.qx == qx && tracked.qy == qy && tracked.qz == qz && tracked.color == color
                     && !engine.isDynamicStale(tracked.id))
                 return;
-            if (budget <= 0)
+            if (UPDATE_BUDGET[kind] <= 0)
                 return;
+            UPDATE_BUDGET[kind]--;
         }
-        budget--;
 
         tracked.qx = qx;
         tracked.qy = qy;
@@ -413,9 +489,11 @@ public final class SableLightLinker {
 
     private static void apply(Request request) {
         ColorLightEngine engine = request.engine();
-        if (workerEngine != engine) {
+        net.minecraft.resources.ResourceLocation method = wantedMethod;
+        if (workerEngine != engine || !java.util.Objects.equals(workerMethod, method)) {
             workerEngine = engine;
-            worker = engine.newDynamicWorker();
+            workerMethod = method;
+            worker = engine.newDynamicWorker(method);
         }
 
         if (request.remove())

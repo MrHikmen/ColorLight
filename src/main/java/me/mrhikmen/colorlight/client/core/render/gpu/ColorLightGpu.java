@@ -106,11 +106,6 @@ public final class ColorLightGpu {
         return !failed && !shaderPackActive && gpuMode() && ColorLightClient.config.GPU_PIPELINE;
     }
 
-    /** True while an Iris shader pack is on. Asked fresh, for the settings screen. */
-    public static boolean shaderPackInUse() {
-        return queryShaderPack();
-    }
-
     // ------------------------------------------------------------------------------------------------------
     // Switching between the shader pipeline and vertex colours while playing. Whatever flips isActive() (the
     // config switch, a shader pack, a failure) changes how meshes have to be built, so every lit section is built

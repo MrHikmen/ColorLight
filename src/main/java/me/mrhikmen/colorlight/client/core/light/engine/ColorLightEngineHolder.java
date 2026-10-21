@@ -48,14 +48,6 @@ public final class ColorLightEngineHolder {
         return maxRangeBlocks;
     }
 
-    public static ResourceLocation getDefaultMethod() {
-        return defaultMethod;
-    }
-
-    public static ResourceLocation getDynamicMethod() {
-        return dynamicMethod;
-    }
-
     public static void tick() {
 
     }

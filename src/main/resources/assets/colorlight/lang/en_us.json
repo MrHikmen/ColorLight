@@ -46,6 +46,9 @@
   "me.colorlight.general.whitepenalty_weight": "White clipping strength",
   "me.colorlight.general.whitepenalty_weight.tooltip": "Lowers the score of washed-out, near-white pixels (low saturation, high brightness), steering the pick toward colored pixels instead of white highlights.",
 
+  "me.colorlight.compatibility.create": "Create",
+  "me.colorlight.compatibility.create_contraption_light": "Light of contraptions",
+  "me.colorlight.compatibility.create_contraption_light.tooltip": "Light-emitting blocks on moving Create contraptions become dynamic lights that follow the contraption, so they light the terrain around it and the contraption itself. Nothing is calculated while no contraption is nearby.",
   "me.colorlight.compatibility.sable": "Sable",
   "me.colorlight.compatibility.sable_cross_light": "Light between the world and sub-levels",
   "me.colorlight.compatibility.sable_cross_light.tooltip": "Lights of Sable sub-levels (ships, contraptions) light the terrain around them, and terrain lights close to a sub-level light it. Uses dynamic lights; the terrain-to-sub-level direction needs the GPU pipeline. Nothing is calculated while no sub-level is nearby.",
@@ -98,5 +101,9 @@
   "me.colorlight.block.propagation": "Propagation",
   "me.colorlight.block.propagation.default": "Engine default",
   "me.colorlight.compatibility.dynamic_propagation": "Moving light method",
-  "me.colorlight.compatibility.dynamic_propagation.tooltip": "How the light of moving sources (e.g. entities with LambDynamicLights) spreads. Only methods defined by a table (not a custom propagate function) can be used; otherwise Smooth is used."
+  "me.colorlight.compatibility.dynamic_propagation.tooltip": "How the light of moving sources (e.g. entities with LambDynamicLights) spreads. Only methods defined by a table (not a custom propagate function) can be used; otherwise Smooth is used.",
+  "me.colorlight.compatibility.sable_sublevel_light": "Light between sub-levels",
+  "me.colorlight.compatibility.sable_sublevel_light.tooltip": "Lights of one Sable sub-level also light the other sub-levels they reach (a lamp on one ship lights the ship next to it). Needs the GPU pipeline and \"Light between the world and sub-levels\".",
+  "me.colorlight.compatibility.sable_propagation": "Sable / Flywheel light method",
+  "me.colorlight.compatibility.sable_propagation.tooltip": "How the light that crosses between the world and Sable sub-levels, and the light of Create contraptions drawn by Flywheel, spreads. By default it is the same as the moving light method. Only methods defined by a table can be used; otherwise Smooth is used."
 }

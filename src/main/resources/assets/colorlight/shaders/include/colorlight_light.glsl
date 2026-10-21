@@ -10,8 +10,8 @@
 //  - the block level is the smooth (trilinear) level from the volume, not vanilla's stepped 0..15
 //  - sky light is left alone, so daylight washes the tint out the way it should
 vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
-    float tintStrength = cl_headerFloat(7);
-    float tintGamma = cl_headerFloat(8);
+    float tintStrength = cl_tintStrength();
+    float tintGamma = cl_tintGamma();
 
     // Sodium encodes light levels 0..15 as (level * 16 + 8) / 256
     float vanillaBlock = clamp((lightUV.x * 256.0 - 8.0) / 240.0, 0.0, 1.0);
@@ -20,6 +20,12 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
 
     float blockLevel = max(lvl, fullBright);
     vec2 uv = vec2((blockLevel * 240.0 + 8.0) / 256.0, lightUV.y);
+
+    // No volume light here (most of the world): the result below reduces exactly to the plain lightmap lookup
+    // (coverage = 0 -> amount = 0), so skip the other three lightmap fetches and the pow/smoothstep maths.
+    if (lvl <= 0.0) {
+        return clamp(textureLod(CL_LIGHT_TEX, uv, 0.0).rgb, vec3(0.0), vec3(1.0));
+    }
 
     vec3 full = textureLod(CL_LIGHT_TEX, uv, 0.0).rgb;
     vec3 base = textureLod(CL_LIGHT_TEX, vec2(8.0 / 256.0, 8.0 / 256.0), 0.0).rgb;      // block 0, sky 0

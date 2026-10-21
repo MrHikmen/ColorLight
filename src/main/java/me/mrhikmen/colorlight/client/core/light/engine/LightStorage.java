@@ -218,6 +218,28 @@ public final class LightStorage {
         }
     }
 
+    /**
+     * Like {@link #forEachLitSection(LongConsumer)} but only for sections within the given radii of a centre section.
+     * Looks the few hundred columns of the window up directly instead of walking the whole 128x128 ring and all 256
+     * section slots of every column, which is what made the periodic rescan a visible hitch.
+     */
+    public void forEachLitSectionNear(int csx, int csy, int csz, int radiusXZ, int radiusY, LongConsumer consumer) {
+        int yMin = Math.max(0, csy - radiusY + SECTION_Y_OFFSET);
+        int yMax = Math.min(SECTION_Y_COUNT - 1, csy + radiusY + SECTION_Y_OFFSET);
+        for (int cx = csx - radiusXZ; cx <= csx + radiusXZ; cx++) {
+            for (int cz = csz - radiusXZ; cz <= csz + radiusXZ; cz++) {
+                Column col = columnOrNull(cx, cz);
+                if (col == null)
+                    continue;
+                for (int yIdx = yMin; yIdx <= yMax; yIdx++) {
+                    Section s = col.sections.get(yIdx);
+                    if (s != null && s.nonEmpty > 0)
+                        consumer.accept(PosKey.pack(cx, yIdx - SECTION_Y_OFFSET, cz));
+                }
+            }
+        }
+    }
+
     private static void forEachLitSection(Column col, LongConsumer consumer) {
         for (int yIdx = 0; yIdx < SECTION_Y_COUNT; yIdx++) {
             Section s = col.sections.get(yIdx);

@@ -41,7 +41,7 @@
   },
   "mixins" : [
     {
-      "config": "colorlighting.mixins.json",
+      "config": "colorlight.mixins.json",
       "environment": "client"
     },
     {
@@ -62,6 +62,10 @@
     },
     {
       "config": "colorlight.sable.mixins.json",
+      "environment": "client"
+    },
+    {
+      "config": "colorlight.flywheel.mixins.json",
       "environment": "client"
     }
   ],

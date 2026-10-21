@@ -34,6 +34,17 @@ final class SableBodies {
             return x >= pMinX && x <= pMaxX && y >= pMinY && y <= pMaxY && z >= pMinZ && z <= pMaxZ;
         }
 
+        /**
+         * Like {@link #inPlot} for a point (an entity, a contraption) that is allowed to be up to {@code pad} blocks
+         * outside the plot's block box: the box only covers placed blocks, and a piston, a gantry or a carriage of a
+         * contraption mounted on the sub-level moves beyond it while still being in the sub-level's plot space.
+         */
+        boolean inPlotPadded(double x, double y, double z, int pad) {
+            return x >= pMinX - pad && x < pMaxX + 1 + pad
+                    && y >= pMinY - pad && y < pMaxY + 1 + pad
+                    && z >= pMinZ - pad && z < pMaxZ + 1 + pad;
+        }
+
         /** Squared distance from a world-space point to the sub-level's global bounding box (0 inside). */
         double distSqToBounds(double x, double y, double z) {
             double dx = Math.max(Math.max(gMinX - x, 0.0), x - gMaxX);

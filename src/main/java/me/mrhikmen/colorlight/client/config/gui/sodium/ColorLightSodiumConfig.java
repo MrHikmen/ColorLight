@@ -35,14 +35,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         boolean voxy = ColorLightVoxyCompat.isPresent();
         boolean distantHorizons = ColorLightDistantHorizonsCompat.isPresent();
         boolean sable = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("sable");
+        boolean create = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("create");
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(ResourceLocation.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl || voxy || distantHorizons || sable) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, sable));
+        if (ldl || voxy || distantHorizons || sable || create) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, sable, create));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -223,7 +224,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return built;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean sable) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean sable, boolean create) {
         ResourceLocation entityEnabledId = ResourceLocation.parse("colorlight:entity_tracking_enabled");
         ResourceLocation entityFollowId = ResourceLocation.parse("colorlight:entity_follow_render_distance");
         ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}.", ldl, voxy, distantHorizons);
@@ -290,6 +291,46 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setStorageHandler(this::save)
                             .setBinding(value -> config.SABLE_LIGHT_RANGE_BLOCKS = value, () -> config.SABLE_LIGHT_RANGE_BLOCKS)
                             .setDefaultValue(config.SABLE_LIGHT_RANGE_BLOCKS)
+                    )
+                    .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:sable_sublevel_light"))
+                            .setName(Translatable.SABLE_SUBLEVEL_LIGHT)
+                            .setTooltip(Translatable.SABLE_SUBLEVEL_LIGHT_Tooltip)
+                            .setImpact(OptionImpact.MEDIUM)
+                            .setEnabledProvider(state -> state.readBooleanOption(sableCrossId), sableCrossId)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.SABLE_SUBLEVEL_LIGHT = value, () -> config.SABLE_SUBLEVEL_LIGHT)
+                            .setDefaultValue(config.SABLE_SUBLEVEL_LIGHT)
+                    )
+                    .addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:sable_propagation"))
+                            .setName(Translatable.SABLE_PROPAGATION)
+                            .setTooltip(Translatable.SABLE_PROPAGATION_Tooltip)
+                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(new PropagationPickerScreen(
+                                    parentScreen, Translatable.SABLE_PROPAGATION,
+                                    () -> (config.SABLE_PROPAGATION == null || config.SABLE_PROPAGATION.isBlank()) ? config.DYNAMIC_PROPAGATION : config.SABLE_PROPAGATION,
+                                    value -> config.SABLE_PROPAGATION = value,
+                                    this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
+                    )
+            );
+        }
+        if (create) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.CREATE)
+                    .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:create_contraption_light"))
+                            .setName(Translatable.CREATE_CONTRAPTION_LIGHT)
+                            .setTooltip(Translatable.CREATE_CONTRAPTION_LIGHT_Tooltip)
+                            .setImpact(OptionImpact.LOW)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.CREATE_CONTRAPTION_LIGHT = value, () -> config.CREATE_CONTRAPTION_LIGHT)
+                            .setDefaultValue(config.CREATE_CONTRAPTION_LIGHT)
+                    )
+                    .addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:create_propagation"))
+                            .setName(Translatable.SABLE_PROPAGATION)
+                            .setTooltip(Translatable.SABLE_PROPAGATION_Tooltip)
+                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreen(new PropagationPickerScreen(
+                                    parentScreen, Translatable.SABLE_PROPAGATION,
+                                    () -> (config.SABLE_PROPAGATION == null || config.SABLE_PROPAGATION.isBlank()) ? config.DYNAMIC_PROPAGATION : config.SABLE_PROPAGATION,
+                                    value -> config.SABLE_PROPAGATION = value,
+                                    this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
                     )
             );
         }

@@ -47,8 +47,6 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
  */
 public class ColorLightEngine {
 
-    protected static final int VANILLA_MAX_OPACITY = MAX_OPACITY;
-
     static final int FLAG_SOURCE = 1 << 24;
     /**
      * Set on a source cell that spreads with a propagation method other than the engine's default one -
@@ -65,7 +63,7 @@ public class ColorLightEngine {
     private static final long TIME_FACTOR_TTL_NANOS = 50_000_000L;
 
     private final int maxRangeBlocks;
-    protected final float decayPerOpacityUnit;
+    private final float decayPerOpacityUnit;
     protected final LevelAccessor level;
     /** What a source without its own override actually spreads with (setting {@code propagation}). */
     private final ResourceLocation defaultMethodId;
@@ -154,11 +152,6 @@ public class ColorLightEngine {
         return maxRangeBlocks;
     }
 
-    /** The engine-wide default method (what plain block sources use). Individual sources may override it. */
-    public ResourceLocation getDefaultMethodId() {
-        return defaultMethodId;
-    }
-
     public float getDecayPerOpacityUnit() {
         return decayPerOpacityUnit;
     }
@@ -178,22 +171,9 @@ public class ColorLightEngine {
         return color;
     }
 
-    /** Static (block) light only - what block edits can affect. */
-    public int getStaticColor(BlockPos pos) {
-        return data.get(pos.getX(), pos.getY(), pos.getZ()) & RGB_MASK;
-    }
-
     /** Lock-free: reads the source flag stored with the cell. */
     public boolean hasSource(BlockPos pos) {
         return (data.get(pos.getX(), pos.getY(), pos.getZ()) & FLAG_SOURCE) != 0;
-    }
-
-    public boolean isOpaque(BlockPos pos) {
-        return getOpacity(pos) >= VANILLA_MAX_OPACITY;
-    }
-
-    protected int getOpacity(BlockPos pos) {
-        return Math.max(0, Math.min(VANILLA_MAX_OPACITY, level.getBlockState(pos).getLightBlock(level, pos)));
     }
 
     /**
@@ -258,10 +238,6 @@ public class ColorLightEngine {
         } finally {
             lock.unlock(); // read-only: nothing to publish
         }
-    }
-
-    public List<BlockPos> getSourcePositions() {
-        return getSourceSnapshot().positions();
     }
 
     // =====================================================================================
@@ -514,11 +490,6 @@ public class ColorLightEngine {
         }
     }
 
-    /** See {@link #removeChunks(long[])}. */
-    public void removeChunk(int chunkX, int chunkZ) {
-        removeChunks(new long[]{chunkKey(chunkX, chunkZ)});
-    }
-
     /** Packs chunk coordinates for {@link #removeChunks(long[])}. */
     public static long chunkKey(int chunkX, int chunkZ) {
         return PosKey.pack(chunkX, 0, chunkZ);
@@ -734,7 +705,12 @@ public class ColorLightEngine {
      * worker thread its own instance.
      */
     public DynamicLightWorker newDynamicWorker() {
-        return new DynamicLightWorker(new DynamicFlood(level, decayPerOpacityUnit, dynamicMethodId, defaultMethodId));
+        return newDynamicWorker(null);
+    }
+
+    /** Like {@link #newDynamicWorker()}, spreading with {@code methodId} instead of the moving-light method (null = that one). */
+    public DynamicLightWorker newDynamicWorker(ResourceLocation methodId) {
+        return new DynamicLightWorker(new DynamicFlood(level, decayPerOpacityUnit, methodId != null ? methodId : dynamicMethodId, defaultMethodId));
     }
 
     /** Thread-confined handle used to (re)compute and apply one dynamic light at a time. */
@@ -777,10 +753,6 @@ public class ColorLightEngine {
     /** Flags dynamic lights near a changed block for recomputation without touching static light. Lock-free. */
     public void invalidateDynamicAround(BlockPos pos) {
         dynamic.markStaleAround(pos.getX(), pos.getY(), pos.getZ());
-    }
-
-    public boolean hasDynamic(int id) {
-        return dynamic.has(id);
     }
 
     // =====================================================================================
@@ -858,6 +830,13 @@ public class ColorLightEngine {
             dynamic.storage().forEachLitSection(consumer);
     }
 
+    /** {@link #forEachLitSection} restricted to sections within the radii of a centre section (cheap; for periodic rescans). */
+    public void forEachLitSectionNear(int csx, int csy, int csz, int radiusXZ, int radiusY, java.util.function.LongConsumer consumer) {
+        data.forEachLitSectionNear(csx, csy, csz, radiusXZ, radiusY, consumer);
+        if (dynamic.isActive())
+            dynamic.storage().forEachLitSectionNear(csx, csy, csz, radiusXZ, radiusY, consumer);
+    }
+
     /**
      * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the colours of one section as the
      * renderer sees them: static and moving light merged, flags stripped. Lock-free.
@@ -869,11 +848,6 @@ public class ColorLightEngine {
         if (dynamic.isActive())
             lit |= dynamic.storage().mergeMaxInto(sx, sy, sz, out);
         return lit;
-    }
-
-    /** Like {@link #copySectionColors} but only the static light (no moving lights). */
-    public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
-        return data.copySection(sx, sy, sz, out);
     }
 
     /** Hands every section that holds light, and its neighbours, to the mesh-rebuild queue. Never waits for a flood. */
@@ -975,10 +949,5 @@ public class ColorLightEngine {
         float finalFactor = getDaylightFactor(pos);
 
         return "dayTimeRaw=" + dayTimeRaw + " dayTime%24000=" + dayTime + " rawSky=" + rawSky + " skyExposure=" + skyExposure + " timeFactor=" + timeFactor + " finalDaylightFactor=" + finalFactor + " defaultPropagationMethod=" + defaultMethodId;
-    }
-
-    public int sampleFlatColor(BlockPos pos, net.minecraft.core.Direction face) {
-        BlockPos facePos = (face != null) ? pos.relative(face) : pos;
-        return ColorLightUtil.max(getColor(pos), getColor(facePos));
     }
 }

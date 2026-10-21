@@ -88,6 +88,11 @@ public class ColorLightClient implements ClientModInitializer {
         if (FabricLoader.getInstance().isModLoaded("sable"))
             ColorLightSableCompat.register();
 
+        if (FabricLoader.getInstance().isModLoaded("create")) {
+            ClientTickEvents.END_CLIENT_TICK.register(me.mrhikmen.colorlight.client.compat.create.CreateContraptionLightLinker::tick);
+            ColorLightClient.LOGGER.info("[ColorLight] Create contraption light initialized");
+        }
+
         ColorLightClient.LOGGER.info("[ColorLight] Mod initialized");
 
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ReloadListener());

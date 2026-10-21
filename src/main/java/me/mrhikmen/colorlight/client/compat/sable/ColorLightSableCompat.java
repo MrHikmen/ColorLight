@@ -13,7 +13,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.CoreShaderRegistrationCallback;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
 
@@ -115,41 +114,65 @@ public final class ColorLightSableCompat {
         ours.apply();
 
         int program = ours.getId();
-        bindBuffers(program, new int[]{header, data[0], data[1]});
-        set3i(program, "u_CLAnchor", anchorX, anchorY, anchorZ);
-        set3f(program, "u_CLCamOff", (float) (camPlot.x - anchorX), (float) (camPlot.y - anchorY), (float) (camPlot.z - anchorZ));
-        int loc = GL20C.glGetUniformLocation(program, "u_CLPageBase");
-        if (loc >= 0)
-            GL41C.glProgramUniform1i(program, loc, window.pageBase());
+        ProgramLocs locs = locsOf(ours, program);
+        bindBuffers(locs, header, data[0], data[1]);
+        if (locs.anchor >= 0)
+            GL41C.glProgramUniform3i(program, locs.anchor, anchorX, anchorY, anchorZ);
+        if (locs.camOff >= 0)
+            GL41C.glProgramUniform3f(program, locs.camOff, (float) (camPlot.x - anchorX), (float) (camPlot.y - anchorY), (float) (camPlot.z - anchorZ));
+        if (locs.pageBase >= 0)
+            GL41C.glProgramUniform1i(program, locs.pageBase, window.pageBase());
 
         return ours;
     }
 
-    private static void set3i(int program, String name, int x, int y, int z) {
-        int loc = GL20C.glGetUniformLocation(program, name);
-        if (loc >= 0)
-            GL41C.glProgramUniform3i(program, loc, x, y, z);
+    /**
+     * Uniform locations of one of our programs, looked up once instead of with glGetUniformLocation (a string lookup
+     * in the driver) several times per sub-level per draw. Keyed by the ShaderInstance itself and checked against its
+     * program id, so a reloaded shader never reuses stale locations.
+     */
+    private static final class ProgramLocs {
+        int program = -1;
+        int anchor, camOff, pageBase;
+        final int[] samplers = new int[UNIFORMS.length];
+        boolean samplersSet;
     }
 
-    private static void set3f(int program, String name, float x, float y, float z) {
-        int loc = GL20C.glGetUniformLocation(program, name);
-        if (loc >= 0)
-            GL41C.glProgramUniform3f(program, loc, x, y, z);
+    private static final java.util.Map<ShaderInstance, ProgramLocs> LOCS = new java.util.IdentityHashMap<>();
+
+    private static ProgramLocs locsOf(ShaderInstance shader, int program) {
+        ProgramLocs l = LOCS.get(shader);
+        if (l == null) {
+            l = new ProgramLocs();
+            LOCS.put(shader, l);
+        }
+        if (l.program != program) {
+            l.program = program;
+            l.anchor = GL20C.glGetUniformLocation(program, "u_CLAnchor");
+            l.camOff = GL20C.glGetUniformLocation(program, "u_CLCamOff");
+            l.pageBase = GL20C.glGetUniformLocation(program, "u_CLPageBase");
+            for (int i = 0; i < UNIFORMS.length; i++)
+                l.samplers[i] = GL20C.glGetUniformLocation(program, UNIFORMS[i]);
+            l.samplersSet = false;
+        }
+        return l;
     }
 
-    private static void bindBuffers(int program, int[] names) {
+    private static void bindBuffers(ProgramLocs locs, int header, int data, int pool) {
         if (textures == null) {
             textures = new int[UNIFORMS.length];
             for (int i = 0; i < textures.length; i++)
                 textures[i] = GL45C.glCreateTextures(GL31C.GL_TEXTURE_BUFFER);
         }
+        int program = locs.program;
         for (int i = 0; i < UNIFORMS.length; i++) {
-            GL45C.glTextureBuffer(textures[i], GL30C.GL_R32I, names[i]);
+            int name = i == 0 ? header : i == 1 ? data : pool;
+            GL45C.glTextureBuffer(textures[i], GL30C.GL_R32I, name); // always: a recreated buffer can reuse its GL name
             GL45C.glBindTextureUnit(FIRST_UNIT + i, textures[i]);
-            int location = GL20C.glGetUniformLocation(program, UNIFORMS[i]);
-            if (location >= 0)
-                GL41C.glProgramUniform1i(program, location, FIRST_UNIT + i);
+            if (!locs.samplersSet && locs.samplers[i] >= 0)
+                GL41C.glProgramUniform1i(program, locs.samplers[i], FIRST_UNIT + i);
         }
+        locs.samplersSet = true;
     }
 
     private ColorLightSableCompat() {

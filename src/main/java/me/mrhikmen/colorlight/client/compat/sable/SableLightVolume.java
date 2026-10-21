@@ -226,8 +226,8 @@ public final class SableLightVolume {
                 w.rescan = RESCAN_TICKS;
                 final Window win = w;
                 // light that was never reported to us: it existed before the window did
-                engine.forEachLitSection(key -> {
-                    if (win.contains(PosKey.x(key), PosKey.y(key), PosKey.z(key)) && !win.slotOf.containsKey(key))
+                engine.forEachLitSectionNear(win.ax, win.ay, win.az, KEEP, KEEP, key -> {
+                    if (!win.slotOf.containsKey(key))
                         win.pending.add(key);
                 });
             }
@@ -312,17 +312,7 @@ public final class SableLightVolume {
     }
 
     private static void markSolidCells(ClientLevel level, int sx, int sy, int sz) {
-        int x0 = sx << 4, y0 = sy << 4, z0 = sz << 4;
-        int i = 0;
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++, i++) {
-                    cursor.set(x0 + x, y0 + y, z0 + z);
-                    if (level.getBlockState(cursor).getLightBlock(level, cursor) >= 15)
-                        cells[i] |= OPAQUE_BIT;
-                }
-            }
-        }
+        me.mrhikmen.colorlight.client.core.render.gpu.GpuLightVolume.markSolid(level, sx, sy, sz, cells, cursor);
     }
 
     private static void release(Window w, long key) {

@@ -84,6 +84,23 @@ public class ColorLightConfig {
     /** How far (blocks) the light of a sub-level reaches into the world; never more than {@code lightRangeBlocks}. */
     public int SABLE_LIGHT_RANGE_BLOCKS = 15;
 
+    /** Sable: a light on one sub-level also lights the other sub-levels in its reach (see SableLightLinker). */
+    public boolean SABLE_SUBLEVEL_LIGHT = true;
+    /**
+     * Propagation method of the dynamic lights of Sable sub-levels and of Flywheel-drawn Create contraptions, e.g.
+     * {@code colorlight:smooth}. Blank = the same as {@link #DYNAMIC_PROPAGATION}. Only table-driven methods work.
+     */
+    public String SABLE_PROPAGATION = "";
+
+    /** The id the Sable / Create dynamic lights spread with (blank setting -> the moving-light method; null = engine default). */
+    public net.minecraft.resources.ResourceLocation sablePropagationId() {
+        String raw = (SABLE_PROPAGATION == null || SABLE_PROPAGATION.isBlank()) ? DYNAMIC_PROPAGATION : SABLE_PROPAGATION;
+        return me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry.parse(raw);
+    }
+
+    /** Create: lights on moving contraptions become dynamic lights that follow them (see CreateContraptionLightLinker). */
+    public boolean CREATE_CONTRAPTION_LIGHT = true;
+
     /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
     public List<String> userOverrides = new ArrayList<>();
 
@@ -135,6 +152,9 @@ public class ColorLightConfig {
                 this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
                 this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
                 this.SABLE_CROSS_LIGHT = root.has("SABLE_CROSS_LIGHT") ? loaded.SABLE_CROSS_LIGHT : this.SABLE_CROSS_LIGHT;
+                this.CREATE_CONTRAPTION_LIGHT = root.has("CREATE_CONTRAPTION_LIGHT") ? loaded.CREATE_CONTRAPTION_LIGHT : this.CREATE_CONTRAPTION_LIGHT;
+                this.SABLE_SUBLEVEL_LIGHT = root.has("SABLE_SUBLEVEL_LIGHT") ? loaded.SABLE_SUBLEVEL_LIGHT : this.SABLE_SUBLEVEL_LIGHT;
+                this.SABLE_PROPAGATION = loaded.SABLE_PROPAGATION != null ? loaded.SABLE_PROPAGATION : "";
                 this.SABLE_LIGHT_RANGE_BLOCKS = loaded.SABLE_LIGHT_RANGE_BLOCKS > 0 ? Math.min(32, loaded.SABLE_LIGHT_RANGE_BLOCKS) : this.SABLE_LIGHT_RANGE_BLOCKS;
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
@@ -211,11 +231,6 @@ public class ColorLightConfig {
         appliedFromPack.clear(); // the fields were just replaced by the file's values
         for (SettingKey key : SettingKey.values())
             fileValues.put(key, read(key));
-    }
-
-    /** Whether a resource pack currently decides this setting (the player has not overridden it). */
-    public boolean isPackControlled(SettingKey key) {
-        return appliedFromPack.containsKey(key);
     }
 
     public void save() {

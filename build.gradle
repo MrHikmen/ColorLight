@@ -52,14 +52,16 @@ dependencies {
     modCompileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
 
     //voxy compat
-    // TODO: put the Voxy 1.21.1 backport jar (0.2.x) into libs/ (it is not on Modrinth's maven); change the name if needed
     modCompileOnly files("libs/voxy-1.21.1.jar")
 
     //dh compat
-    modCompileOnly "maven.modrinth:uCdwusMi:9w34y8ai" // Distant Horizons 3.3.3 for 1.21.1
+    modCompileOnly "maven.modrinth:uCdwusMi:9w34y8ai"
 
     //nvidium compat
-    modCompileOnly "maven.modrinth:SfMw2IZN:BIQFSOIx" // Nvidium 0.4.1-beta10 for 1.21.1
+    modCompileOnly "maven.modrinth:SfMw2IZN:BIQFSOIx"
+
+    //sable compat
+    modCompileOnly "maven.modrinth:T9PomCSv:OLG7vDD6"
 }
 
 processResources {

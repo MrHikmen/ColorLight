@@ -48,6 +48,9 @@
   "me.colorlight.general.whitepenalty_weight": "Сила подавления белого",
   "me.colorlight.general.whitepenalty_weight.tooltip": "Снижает оценку выцветших, почти белых пикселей (низкая насыщенность, высокая яркость), направляя выбор на цветные пиксели вместо белых бликов.",
 
+  "me.colorlight.compatibility.create": "Create",
+  "me.colorlight.compatibility.create_contraption_light": "Свет механизмов",
+  "me.colorlight.compatibility.create_contraption_light.tooltip": "Светящиеся блоки на движущихся механизмах Create становятся динамическими источниками света, которые следуют за механизмом: они освещают местность вокруг и сам механизм. Пока рядом нет механизмов, ничего не считается.",
   "me.colorlight.compatibility.sable": "Sable",
   "me.colorlight.compatibility.sable_cross_light": "Свет между миром и sublevel",
   "me.colorlight.compatibility.sable_cross_light.tooltip": "Свет от sublevel Sable (корабли, механизмы) освещает окружающий террейн, а свет террейна рядом с sublevel освещает его. Использует динамический свет; направление «террейн → sublevel» требует GPU-пайплайн. Пока рядом нет ни одного sublevel, ничего не считается.",
@@ -100,5 +103,9 @@
   "me.colorlight.block.propagation": "Распространение",
   "me.colorlight.block.propagation.default": "Как в настройках мода",
   "me.colorlight.compatibility.dynamic_propagation": "Способ света движущихся источников",
-  "me.colorlight.compatibility.dynamic_propagation.tooltip": "Как распространяется свет движущихся источников (например, сущностей с LambDynamicLights). Подходят только способы, заданные таблицей (без собственной функции propagate); иначе используется Smooth."
+  "me.colorlight.compatibility.dynamic_propagation.tooltip": "Как распространяется свет движущихся источников (например, сущностей с LambDynamicLights). Подходят только способы, заданные таблицей (без собственной функции propagate); иначе используется Smooth.",
+  "me.colorlight.compatibility.sable_sublevel_light": "Свет между sublevel",
+  "me.colorlight.compatibility.sable_sublevel_light.tooltip": "Свет одного sublevel Sable освещает и другие sublevel, до которых дотягивается (лампа на одном корабле освещает корабль рядом). Нужен GPU-пайплайн и включённый «Свет между миром и sublevel».",
+  "me.colorlight.compatibility.sable_propagation": "Способ света Sable / Flywheel",
+  "me.colorlight.compatibility.sable_propagation.tooltip": "Как распространяется свет, который переходит между миром и sublevel Sable, и свет механизмов Create, рисуемых через Flywheel. По умолчанию такой же, как способ света движущихся источников. Подходят только способы, заданные таблицей; иначе используется Smooth."
 }

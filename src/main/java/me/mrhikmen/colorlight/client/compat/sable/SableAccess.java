@@ -19,7 +19,22 @@ final class SableAccess {
                 int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
     }
 
-    private static final ConcurrentHashMap<String, Object> CACHE = new ConcurrentHashMap<>();
+    /**
+     * Reflection handles per class and member name. A {@link ClassValue} of a name map: a lookup is one class-value read
+     * plus one hash get on an interned literal, no string concatenation (this runs ~20 times per sub-level per draw).
+     */
+    private static final ClassValue<ConcurrentHashMap<String, Object>> FIELDS = new ClassValue<>() {
+        @Override
+        protected ConcurrentHashMap<String, Object> computeValue(Class<?> type) {
+            return new ConcurrentHashMap<>();
+        }
+    };
+    private static final ClassValue<ConcurrentHashMap<String, Object>> METHODS = new ClassValue<>() {
+        @Override
+        protected ConcurrentHashMap<String, Object> computeValue(Class<?> type) {
+            return new ConcurrentHashMap<>();
+        }
+    };
     private static final Object MISSING = new Object();
     private static volatile boolean broken;
 
@@ -55,7 +70,7 @@ final class SableAccess {
 
     private static Field field(Object target, String name) throws Exception {
         Class<?> cls = target.getClass();
-        Object cached = CACHE.computeIfAbsent("f:" + cls.getName() + "#" + name, k -> {
+        Object cached = FIELDS.get(cls).computeIfAbsent(name, k -> {
             for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
                 try {
                     Field f = c.getDeclaredField(name);
@@ -73,7 +88,7 @@ final class SableAccess {
 
     static Object call(Object target, String name) throws Exception {
         Class<?> cls = target.getClass();
-        Object cached = CACHE.computeIfAbsent("m:" + cls.getName() + "#" + name, k -> {
+        Object cached = METHODS.get(cls).computeIfAbsent(name, k -> {
             try {
                 Method m = cls.getMethod(name);
                 m.setAccessible(true);

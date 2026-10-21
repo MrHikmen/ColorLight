@@ -126,21 +126,6 @@ public final class VoxyLightBridge {
         }
     }
 
-    /** True when Voxy renders through Vulkan (it follows Minecraft's backend). Reflection: older Voxy has no such class. */
-    private static boolean isVulkanBackend() {
-        try {
-            Class<?> c = Class.forName("me.cortex.voxy.client.core.vk.VulkanBackend");
-            return (Boolean) c.getMethod("shouldUseVulkan").invoke(null);
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
-    /** True once the Vulkan variant of the shader patch is in (the Vulkan mixins ask this). */
-    public static boolean isPatchedForVulkan() {
-        return patched;
-    }
-
     /** A binding index high enough to stay clear of Voxy's own (it uses the low ones). */
     private static int chooseBinding() {
         int max = GL11C.glGetInteger(GL43C.GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS);
@@ -176,11 +161,6 @@ public final class VoxyLightBridge {
             disableInShader();
         }
     }
-
-    static int headerInts() { return HEADER_INTS; }
-    static int cellInts() { return CELL_INTS; }
-    static int sourceOffsetInts() { return SOURCE_OFFSET_INTS; }
-    static int totalInts() { return TOTAL_INTS; }
 
     private static void ensureBuffer() {
         if (buffer != 0)

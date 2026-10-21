@@ -26,6 +26,7 @@ in vec3 v_CLRel;     // position relative to the camera's integer block
 uniform sampler2D u_LightTex;
 
 #define CL_FRAGMENT
+#define CL_HEADER_VARYINGS
 #import <colorlight:include/colorlight_data.glsl>
 
 uniform sampler2D u_BlockTex; // The block texture

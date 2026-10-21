@@ -37,17 +37,32 @@ vec3 cl_light() {
     }
 
     float reach = float(clamp(clLod[5], 1, 16)); // the 3x3 cells of 16 blocks around a block cover 16 blocks
+    float reachSq = reach * reach;
+    float invReach = 1.0 / reach;
     vec3 best = vec3(0.0);
     for (int dz = -1; dz <= 1; dz++) {
+        // distance along z from the block to this row of cells; rows further than the reach are skipped unread
+        float z0 = float(((cell.y + dz) << 4) - cl_quadBlock.z);
+        float rz = max(max(z0 - 0.5, 0.5 - (z0 + 16.0)), 0.0);
+        if (rz >= reach) {
+            continue;
+        }
         for (int dx = -1; dx <= 1; dx++) {
+            float x0 = float(((cell.x + dx) << 4) - cl_quadBlock.x);
+            float rx = max(max(x0 - 0.5, 0.5 - (x0 + 16.0)), 0.0);
+            if (rx * rx + rz * rz >= reachSq) {
+                continue;
+            }
             ivec2 c = cell + ivec2(dx, dz);
             int entry = 16 + ((c.x & 511) | ((c.y & 511) << 9)) * 2;
             int first = clLod[entry];
             int count = min(clLod[entry + 1], 96);
             for (int i = 0; i < count; i++) {
                 int s = 16 + 524288 + (first + i) * 4;
-                float w = 1.0 - distance(p, vec3(clLod[s], clLod[s + 1], clLod[s + 2]) + 0.5) / reach;
-                if (w > 0.0) {
+                vec3 dv = p - (vec3(clLod[s], clLod[s + 1], clLod[s + 2]) + 0.5);
+                float d2 = dot(dv, dv);
+                if (d2 < reachSq) { // no sqrt for the sources that are out of reach anyway
+                    float w = 1.0 - sqrt(d2) * invReach;
                     int rgb = clLod[s + 3];
                     best = max(best, vec3(float(rgb & 255), float((rgb >> 8) & 255), float((rgb >> 16) & 255)) * w);
                 }

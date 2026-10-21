@@ -13,6 +13,8 @@
 **Light between the world and sub-levels** (`SableLightLinker`): the static light field cannot cross the plot/world boundary, so the dynamic layer is used (same worker and coalescing as entity lights; ids are negative so they never meet entity ids).
 - *Sub-level -> world:* the strongest 16 lights of each nearby sub-level become dynamic lights in world space at their current world position (pose from `logicalPose()`: `world = R * (S * (plot - rotationPoint)) + position`).
 - *World -> sub-level* (GPU pipeline only, because the footprint changes every tick the ship moves): the 16 nearest terrain lights whose reach touches a sub-level become dynamic lights in that sub-level's plot space (inverse pose), so the ship's own blocks occlude them.
+- *Sub-level -> sub-level* (GPU pipeline only, setting `SABLE_SUBLEVEL_LIGHT`): the 8 nearest lights of every other nearby sub-level that reach this one become dynamic lights in this sub-level's plot space (owner's world position, mapped through this sub-level's inverse pose), dimmed like the sub-level -> world light.
+- *Method:* the dynamic lights of Sable links and of Create contraptions (Flywheel) spread with `SABLE_PROPAGATION` (blank = the moving-light method); changing it re-floods every link.
 - *Optimisation:* no sub-level near the player -> nothing is computed and every link is removed; a terrain light with no sub-level within `lightRangeBlocks + 1` of it gets no dynamic light.
 - Lights are re-collected as soon as the engine's source set changes (and every 10 ticks to follow moving sub-levels), positions are followed every tick in 1/4-block steps, at most 8 floods per tick.
 
@@ -20,7 +22,7 @@
 - `SABLE_CROSS_LIGHT` (enabled by default): turns the light between the world and sub-levels on or off.
 - `SABLE_LIGHT_RANGE_BLOCKS` (1-32, default 15): how far the light of a sub-level reaches into the world. Sub-level -> world lights are dimmed by `range / lightRangeBlocks` (capped at 1), which shortens their reach; it cannot exceed the general light range.
 
-**Limitations:** single-block sub-levels (Sable's batched path) and Sable's own directional/sky-light shading are not covered; more than 16 visible sub-levels or sections farther than 14 sections from a sub-level's centre get no coloured light. Light does not go from one sub-level to another; the world -> sub-level light is not blocked by terrain, and the sub-level -> world light is not blocked by the ship's hull (each flood only sees the blocks of the space it floods in). Written against Sable 2.0.6 sources / Minecraft 1.21.1.
+**Limitations:** single-block sub-levels (Sable's batched path) and Sable's own directional/sky-light shading are not covered; more than 16 visible sub-levels or sections farther than 14 sections from a sub-level's centre get no coloured light. The world -> sub-level light is not blocked by terrain, and the sub-level -> world light is not blocked by the ship's hull (each flood only sees the blocks of the space it floods in). Written against Sable 2.0.6 sources / Minecraft 1.21.1.
 
 ---
 
@@ -40,6 +42,8 @@
 **Свет между миром и sublevel** (`SableLightLinker`): статическое поле света не пересекает границу plot и мира, поэтому используется динамический слой (тот же рабочий поток и склейка запросов, что у света сущностей; id отрицательные, поэтому не пересекаются с id сущностей).
 - *Sublevel -> мир:* 16 самых ярких источников каждого ближнего sublevel становятся динамическими источниками в мировых координатах в их текущей позиции (поза из `logicalPose()`: `world = R * (S * (plot - rotationPoint)) + position`).
 - *Мир -> sublevel* (только GPU-пайплайн, потому что отпечаток света меняется каждый тик движения корабля): 16 ближайших источников террейна, до которых дотягивается sublevel, становятся динамическими источниками в plot-пространстве этого sublevel (обратная поза), поэтому блоки самого корабля их затеняют.
+- *Sublevel -> sublevel* (только GPU-пайплайн, настройка `SABLE_SUBLEVEL_LIGHT`): 8 ближайших источников каждого другого ближнего sublevel, до которых дотягивается этот, становятся динамическими источниками в plot-пространстве этого sublevel (мировая позиция владельца через обратную позу этого sublevel), приглушаются как свет sublevel -> мир.
+- *Способ:* динамические источники связей Sable и механизмов Create (Flywheel) распространяются способом из `SABLE_PROPAGATION` (пусто = способ движущихся источников); смена способа пересчитывает все связи.
 - *Оптимизация:* если рядом с игроком нет sublevel, ничего не считается и все связи удаляются; источник террейна, рядом с которым (в пределах `lightRangeBlocks + 1`) нет sublevel, динамического света не получает.
 - Источники пересобираются сразу, как только меняется набор источников в движке (и каждые 10 тиков, чтобы следовать за движущимися sublevel), позиции отслеживаются каждый тик с шагом 1/4 блока, не больше 8 пересчётов за тик.
 
@@ -47,7 +51,7 @@
 - `SABLE_CROSS_LIGHT` (по умолчанию включено): включает и выключает свет между миром и sublevel.
 - `SABLE_LIGHT_RANGE_BLOCKS` (1-32, по умолчанию 15): на сколько блоков свет sublevel распространяется в мир. Свет sublevel -> мир приглушается в `range / lightRangeBlocks` раз (максимум 1), из-за чего сокращается его дальность; значение не может превышать общую дальность света.
 
-**Ограничения:** одноблочные sublevel (пакетный путь Sable) и собственное направленное/небесное освещение Sable не охвачены; больше 16 видимых sublevel или секции дальше 14 секций от центра sublevel остаются без цветного света. Свет не идёт от одного sublevel к другому; свет мир -> sublevel не блокируется террейном, а свет sublevel -> мир не блокируется корпусом корабля (каждый расчёт видит только блоки того пространства, где он считается). Написано по исходникам Sable 2.0.6 / Minecraft 1.21.1.
+**Ограничения:** одноблочные sublevel (пакетный путь Sable) и собственное направленное/небесное освещение Sable не охвачены; больше 16 видимых sublevel или секции дальше 14 секций от центра sublevel остаются без цветного света. Свет мир -> sublevel не блокируется террейном, а свет sublevel -> мир не блокируется корпусом корабля (каждый расчёт видит только блоки того пространства, где он считается). Написано по исходникам Sable 2.0.6 / Minecraft 1.21.1.
 
 </details>
 

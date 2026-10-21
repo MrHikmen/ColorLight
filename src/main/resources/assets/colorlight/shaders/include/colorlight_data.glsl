@@ -34,9 +34,23 @@ const int CL_OPAQUE_BIT = 1 << 24;
 
 CL_BINDING(5) uniform isamplerBuffer u_CLHeader;
 
+// CL_HEADER_VARYINGS (Sodium terrain only): the vertex shader reads the header once per vertex and hands the values to
+// the fragment shader as flat varyings, so a pixel no longer does ~10 texel fetches just to learn the camera and the
+// settings. The vertex shader declares the matching outputs (colored_terrain.vsh).
+#if defined(CL_HEADER_VARYINGS) && defined(CL_FRAGMENT) && !defined(CL_PLOT)
+#define CL_USE_HDR_VARYINGS
+flat in ivec4 v_CLHdrA; // camera block xyz, flags (bit 0 enabled, bit 1 smooth)
+flat in vec3 v_CLFrac;  // camera fraction
+flat in vec2 v_CLTint;  // tint strength, tint gamma
+#endif
+
 #ifdef CL_PLOT
 ivec3 cl_cameraBlock() {
     return u_CLAnchor;
+}
+#elif defined(CL_USE_HDR_VARYINGS)
+ivec3 cl_cameraBlock() {
+    return v_CLHdrA.xyz;
 }
 #else
 ivec3 cl_cameraBlock() {
@@ -44,6 +58,15 @@ ivec3 cl_cameraBlock() {
 }
 #endif
 
+#ifdef CL_USE_HDR_VARYINGS
+bool cl_enabled() {
+    return (v_CLHdrA.w & 1) == 1;
+}
+
+bool cl_smooth() {
+    return (v_CLHdrA.w & 2) == 2;
+}
+#else
 bool cl_enabled() {
     return texelFetch(u_CLHeader, 3).r == 1;
 }
@@ -51,6 +74,7 @@ bool cl_enabled() {
 bool cl_smooth() {
     return texelFetch(u_CLHeader, 9).r == 1;
 }
+#endif
 
 float cl_headerFloat(int index) {
     return intBitsToFloat(texelFetch(u_CLHeader, index).r);
@@ -60,9 +84,31 @@ float cl_headerFloat(int index) {
 vec3 cl_cameraFrac() {
     return u_CLCamOff;
 }
+#elif defined(CL_USE_HDR_VARYINGS)
+vec3 cl_cameraFrac() {
+    return v_CLFrac;
+}
 #else
 vec3 cl_cameraFrac() {
     return vec3(cl_headerFloat(4), cl_headerFloat(5), cl_headerFloat(6));
+}
+#endif
+
+#ifdef CL_USE_HDR_VARYINGS
+float cl_tintStrength() {
+    return v_CLTint.x;
+}
+
+float cl_tintGamma() {
+    return v_CLTint.y;
+}
+#else
+float cl_tintStrength() {
+    return cl_headerFloat(7);
+}
+
+float cl_tintGamma() {
+    return cl_headerFloat(8);
 }
 #endif
 
@@ -71,21 +117,35 @@ vec3 cl_cameraFrac() {
 CL_BINDING(6) uniform isamplerBuffer u_CLData;
 CL_BINDING(7) uniform isamplerBuffer u_CLPool;
 
+// Per-fragment cache of the last page-table lookup. The 8 taps of the trilinear filter almost always fall into the
+// same 16x16x16 section, so the dependent u_CLData fetch is done once instead of up to 8 times.
+ivec3 cl_cacheSection = ivec3(2147483647);
+int cl_cacheSlot = -1;
+
 // Raw cell value, or -1 when nothing is known about the cell: its section is outside the window or holds no light,
 // so it has no light data and, above all, no solid/air information.
 int cl_cellRaw(ivec3 cell, ivec3 camSection) {
-    ivec3 section = (cell - (cell & 15)) / 16; // exact floor division, also for negative coordinates
-    ivec3 d = section - camSection;
-    if (abs(d.x) > CL_SECTION_RADIUS_XZ || abs(d.z) > CL_SECTION_RADIUS_XZ || abs(d.y) > CL_SECTION_RADIUS_Y) {
-        return -1;
+    ivec3 section = cell >> 4; // arithmetic shift == floor division by 16, also for negative coordinates
+
+    int slot;
+    if (section == cl_cacheSection) {
+        slot = cl_cacheSlot;
+    } else {
+        ivec3 d = abs(section - camSection);
+        if (d.x > CL_SECTION_RADIUS_XZ || d.z > CL_SECTION_RADIUS_XZ || d.y > CL_SECTION_RADIUS_Y) {
+            slot = -1;
+        } else {
+#ifdef CL_PLOT
+            int page = u_CLPageBase + ((section.x & 31) | ((section.z & 31) << 5) | ((section.y & 31) << 10));
+#else
+            int page = (section.x & 63) | ((section.z & 63) << 6) | ((section.y & 31) << 12);
+#endif
+            slot = texelFetch(u_CLData, page).r;
+        }
+        cl_cacheSection = section;
+        cl_cacheSlot = slot;
     }
 
-#ifdef CL_PLOT
-    int page = u_CLPageBase + ((section.x & 31) | ((section.z & 31) << 5) | ((section.y & 31) << 10));
-#else
-    int page = (section.x & 63) | ((section.z & 63) << 6) | ((section.y & 31) << 12);
-#endif
-    int slot = texelFetch(u_CLData, page).r;
     if (slot < 0) {
         return -1;
     }
@@ -100,7 +160,7 @@ int cl_cellRaw(ivec3 cell, ivec3 camSection) {
 // hold no light: we can't tell if they are rock or air, and counting them as dark air would put a dark seam on every
 // section border (rock next to a lit cave, for example).
 vec3 cl_fetchLight(vec3 rel, vec3 n, ivec3 camBlock) {
-    ivec3 camSection = (camBlock - (camBlock & 15)) / 16;
+    ivec3 camSection = camBlock >> 4;
 
     if (!cl_smooth()) {
         // one sample per block face: the cell right in front of it, like vanilla's flat lighting
