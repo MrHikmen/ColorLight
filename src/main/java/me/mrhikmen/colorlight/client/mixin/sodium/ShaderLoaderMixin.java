@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.sodium.mixin;
+package me.mrhikmen.colorlight.client.mixin.sodium;
 
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 

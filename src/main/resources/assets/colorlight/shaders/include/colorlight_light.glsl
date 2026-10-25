@@ -67,8 +67,20 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
 
     vec3 hue = (lvl > 0.0) ? (cl / lvl) : vec3(1.0); // brightest channel == 1
 
+
     // vanilla result, with the light's added part recoloured to the light's hue at the same peak brightness
-    return clamp(full + amount * (hue * peak * vivid - delta), vec3(0.0), vec3(1.0));
+    vec3 lit = clamp(full + amount * (hue * peak * vivid - delta), vec3(0.0), vec3(1.0));
+
+    // No pale rim at the edge of the light. Out there `amount` is still small, so most of vanilla's block light (which is
+    // warm white: it lifts R, G and B alike) is still in `lit`, while the recoloured light would only lift the
+    // channels the hue actually carries. A coloured light lifting the channels it doesn't carry is exactly the white
+    // fringe: the pixel ends up brighter than both the unlit surface next to it and the saturated colour inside.
+    // So a channel may not rise above "sky-only + this light's own share of that channel". Cells with a strong hue
+    // already sit below this cap (nothing changes in the saturated middle), white light (hue = 1,1,1) is never
+    // capped, and a full-bright quad (coverage -> 0) is left alone.
+    vec3 cap = skyOnly + hue * (peak * vivid * tintStrength) + delta * (1.0 - tintStrength);
+    cap = mix(vec3(1.0), cap, coverage);
+    return min(lit, cap);
 }
 
 // Light multiplier (rgb) of a pixel from its position alone: finds the surface normal from screen-space derivatives

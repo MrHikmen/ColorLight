@@ -3,7 +3,7 @@
 **What it does:** with the GPU pipeline (Sodium) on, light on Sable sub-levels (ships, contraptions) is rendered per pixel, like the terrain, and light crosses between the world and sub-levels. Without Sable nothing changes.
 
 **How it works:**
-- Sable draws sub-levels with vanilla core shaders, not Sodium's terrain program. `VanillaChunkedSubLevelRenderDataMixin` (`colorlight.sable.mixins.json`, only applied when Sable is installed) wraps `renderChunkedSubLevel` and swaps the core shader (`solid`, `cutout`, `cutout_mipped`, `translucent`) for ColorLight's copy: `assets/colorlight/shaders/core/sublevel*`.
+- Sable draws sub-levels with vanilla core shaders, not Sodium's terrain program. `VanillaChunkedSubLevelRenderDataMixin` (`colorlight.mixins.json`, only applied when Sable is installed) wraps `renderChunkedSubLevel` and swaps the core shader (`solid`, `cutout`, `cutout_mipped`, `translucent`) for ColorLight's copy: `assets/colorlight/shaders/core/sublevel*`.
 - Sub-level blocks live in a plot ~20M blocks away, outside the camera-centred volume. `SableLightVolume` keeps one window per sub-level (31x31x31 sections around the middle of its bounding box, own page table, shared slot pool: 16 windows, 512 sections). The shader selects it with `u_CLAnchor`, `u_CLPageBase`, `u_CLCamOff` (`CL_PLOT` in `colorlight_data.glsl`).
 - Sable draws `Position + ChunkOffset` = plot-space vertex minus plot-space camera, so `ColorLightSableCompat` only computes the camera in plot space (double precision, from the render pose) relative to the anchor.
 - Sable classes are read by reflection (`SableAccess`, `SableBodies`); nothing is compiled against Sable.
@@ -32,7 +32,7 @@
 **Что даёт:** при включённом GPU-пайплайне (Sodium) свет на sublevel Sable (корабли, механизмы) рисуется попиксельно, как на террейне, а свет проходит между миром и sublevel. Без Sable ничего не меняется.
 
 **Как устроено:**
-- Sable рисует sublevel ванильными core-шейдерами, а не террейн-программой Sodium. `VanillaChunkedSubLevelRenderDataMixin` (`colorlight.sable.mixins.json`, применяется только при установленном Sable) оборачивает `renderChunkedSubLevel` и подменяет core-шейдер (`solid`, `cutout`, `cutout_mipped`, `translucent`) копией ColorLight: `assets/colorlight/shaders/core/sublevel*`.
+- Sable рисует sublevel ванильными core-шейдерами, а не террейн-программой Sodium. `VanillaChunkedSubLevelRenderDataMixin` (`colorlight.mixins.json`, применяется только при установленном Sable) оборачивает `renderChunkedSubLevel` и подменяет core-шейдер (`solid`, `cutout`, `cutout_mipped`, `translucent`) копией ColorLight: `assets/colorlight/shaders/core/sublevel*`.
 - Блоки sublevel лежат в plot примерно в 20 млн блоков от игрока, за пределами объёма вокруг камеры. `SableLightVolume` держит по одному окну на sublevel (31x31x31 секций вокруг середины его ограничивающего бокса, своя таблица страниц, общий пул слотов: 16 окон, 512 секций). Шейдер выбирает окно через `u_CLAnchor`, `u_CLPageBase`, `u_CLCamOff` (`CL_PLOT` в `colorlight_data.glsl`).
 - Sable рисует `Position + ChunkOffset` = вершина в plot-пространстве минус камера в plot-пространстве, поэтому `ColorLightSableCompat` считает только камеру в plot-пространстве (двойная точность, по позе отрисовки) относительно якоря.
 - Классы Sable читаются через рефлексию (`SableAccess`, `SableBodies`); компиляции против Sable нет.

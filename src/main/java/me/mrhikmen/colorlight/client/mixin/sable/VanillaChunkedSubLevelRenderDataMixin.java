@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.sable.mixin;
+package me.mrhikmen.colorlight.client.mixin.sable;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;

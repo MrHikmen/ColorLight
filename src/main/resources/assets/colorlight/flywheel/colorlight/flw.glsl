@@ -132,30 +132,27 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     }
 
     vec3 full = textureLod(flw_lightTex, uv, 0.0).rgb;
-    vec3 base = textureLod(flw_lightTex, vec2(8.0 / 256.0, 8.0 / 256.0), 0.0).rgb;
-    vec3 blockOnly = textureLod(flw_lightTex, vec2(uv.x, 8.0 / 256.0), 0.0).rgb;
 
-    vec3 delta = max(blockOnly - base, vec3(0.0));
-    float peak = max(delta.r, max(delta.g, delta.b));
-
+    // Day and night: the lightmap texture follows the time of day (and weather, night vision, dimension), so the
+    // sky-only colour below is bright by day and dark by night. The tint only shows as far as block light is what
+    // makes the pixel bright: fully at night, not at all under a bright sky (the CPU path's daylight factor).
     vec3 skyOnly = textureLod(flw_lightTex, vec2(8.0 / 256.0, uv.y), 0.0).rgb;
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
     float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) * 10.0 : 1.0;
     float daylight = smoothstep(0.0, 1.0, blockShare);
 
+    // The tint is the CPU pipeline's (ColorLightUtil.toArgb), multiplied with the lightmap like the CPU vertex colour:
+    // lerp(white, hue, 0.85 * intensity^gamma) per channel, faded back to white as sky light takes over. Same maths on
+    // both pipelines, so the GPU look is the CPU look, only per pixel.
+    float strength = clamp(0.85 * pow(max(lvl, 0.0001), tintGamma) * tintStrength, 0.0, 1.0);
+    vec3 hue = cl / lvl; // brightest channel == 1
+    vec3 tint = clamp(vec3(1.0) + (hue - vec3(1.0)) * strength, vec3(0.0), vec3(1.0));
+    // tint only what the volume contributes; a full-bright quad without volume light stays vanilla white
     float coverage = clamp(lvl / max(blockLevel, 0.0001), 0.0, 1.0);
-    const float GAMMA_DEFAULT = 0.55;
-    float exponent = max(0.0, GAMMA_DEFAULT + (tintGamma - GAMMA_DEFAULT) * 3.0);
-    float vivid = 1.0 + max(GAMMA_DEFAULT - tintGamma, 0.0);
-    float retention = clamp(1.0 - tintGamma, 0.0, 1.0);
-    float shaped = pow(max(lvl, 0.0001), exponent);
-    float kept = smoothstep(0.0, 0.06, lvl);
-    float amount = clamp(tintStrength * mix(shaped, kept, retention) * coverage * daylight, 0.0, 1.0);
+    tint = mix(vec3(1.0), tint, daylight * coverage);
 
-    vec3 hue = (lvl > 0.0) ? (cl / lvl) : vec3(1.0);
-
-    return clamp(full + amount * (hue * peak * vivid - delta), vec3(0.0), vec3(1.0));
+    return clamp(full * tint, vec3(0.0), vec3(1.0));
 }
 
 // rel: position relative to camBlock (the camera block, or the anchor of a sub-level window).

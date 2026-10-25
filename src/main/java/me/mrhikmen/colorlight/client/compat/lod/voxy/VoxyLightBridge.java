@@ -41,7 +41,10 @@ public final class VoxyLightBridge {
     private static final int MAX_SOURCES = 131072;
     private static final int CELL_INTS = GRID_CELLS * GRID_CELLS * 2;
     private static final int SOURCE_OFFSET_INTS = HEADER_INTS + CELL_INTS;
-    private static final int TOTAL_INTS = SOURCE_OFFSET_INTS + MAX_SOURCES * 4;
+    /** Where the eight 33x33x33 distance tables of the propagation methods start (see LodMethodTables; the shader has the same literal). */
+    private static final int TABLES_OFFSET_INTS = SOURCE_OFFSET_INTS + MAX_SOURCES * 4;
+    private static final int TOTAL_INTS = TABLES_OFFSET_INTS + 8 * 35937;
+    private static long uploadedTablesKey = Long.MIN_VALUE;
     /** Rebuild the table once the camera has moved this many columns (the shader keeps the same margin). */
     private static final int DRIFT_COLS = 8;
 
@@ -69,6 +72,16 @@ public final class VoxyLightBridge {
     private static final String ANCHOR_LIGHTING = "vec4 tinting = getLighting(lighting);";
     private static final String ANCHOR_SETUP = "    if (generateAttributes) {";
 
+    /** A shader piece: what comes before the shared code, the shared code, and what comes after it. */
+    private static String assemble(String file, int binding) throws Exception {
+        String piece = readResource("/assets/colorlight/shaders/voxy/" + file);
+        String common = readResource("/assets/colorlight/shaders/voxy/colorlight_lod_common.glsl");
+        int i = piece.indexOf("//@COMMON@");
+        String before = i < 0 ? piece : piece.substring(0, i);
+        String after = i < 0 ? "" : piece.substring(i + "//@COMMON@".length());
+        return (before + common + after).replace("__CL_BINDING__", Integer.toString(binding));
+    }
+
     /**
      * @param shaderSource what Voxy's {@code ShaderLoader.parse} produced
      * @return the changed source, or null to leave it as it is
@@ -79,7 +92,8 @@ public final class VoxyLightBridge {
 
         try {
             if (!shaderSource.contains(ANCHOR_LIGHTING) || !shaderSource.contains(ANCHOR_SETUP)
-                    || !shaderSource.contains("LIGHTING_SAMPLER_BINDING") || !shaderSource.contains("baseSectionPos")) {
+                    || !shaderSource.contains("LIGHTING_SAMPLER_BINDING") || !shaderSource.contains("baseSectionPos")
+                    || !shaderSource.contains("ivec2 quadSize = extractSize(rawQuad);") || !shaderSource.contains("uint face = extractFace(rawQuad);")) {
                 ColorLightClient.LOGGER.warn("[ColorLight] Voxy's LOD shader looks different from the one this was written for; far light colours are off");
                 return null;
             }
@@ -90,12 +104,12 @@ public final class VoxyLightBridge {
                 return null;
             }
 
-            String block = readResource("/assets/colorlight/shaders/voxy/colorlight_lod.glsl").replace("__CL_BINDING__", Integer.toString(chosen));
+            String block = assemble("colorlight_lod.glsl", chosen);
 
             String out = shaderSource;
             out = replaceFirst(out, ANCHOR_FUNCTION, block + "\n" + ANCHOR_FUNCTION);
             out = replaceFirst(out, ANCHOR_LIGHTING, "vec4 tinting = cl_getLighting(lighting);");
-            out = replaceFirst(out, ANCHOR_SETUP, "    cl_setQuad(extractPos(rawQuad), lodScale, baseSection, lodLevel);\n" + ANCHOR_SETUP);
+            out = replaceFirst(out, ANCHOR_SETUP, "    cl_setQuad(extractPos(rawQuad), lodScale, baseSection, lodLevel, face, quadSize);\n" + ANCHOR_SETUP);
 
             binding = chosen;
             patched = true;
@@ -151,6 +165,9 @@ public final class VoxyLightBridge {
             boolean enabled = cache != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
                     && ColorLightEngineHolder.get() != null;
 
+            if (enabled)
+                uploadMethodTables();
+
             writeHeader(camBlockX, camBlockZ, enabled);
 
             if (enabled)
@@ -162,9 +179,20 @@ public final class VoxyLightBridge {
         }
     }
 
+    /** The distance tables of the propagation methods, uploaded once and again whenever the methods or the default change. */
+    private static void uploadMethodTables() {
+        long key = me.mrhikmen.colorlight.client.compat.lod.LodMethodTables.key();
+        if (key == uploadedTablesKey)
+            return;
+        int[] tables = me.mrhikmen.colorlight.client.compat.lod.LodMethodTables.build();
+        GL45C.glNamedBufferSubData(buffer, (long) TABLES_OFFSET_INTS * Integer.BYTES, tables);
+        uploadedTablesKey = key;
+    }
+
     private static void ensureBuffer() {
         if (buffer != 0)
             return;
+        uploadedTablesKey = Long.MIN_VALUE;
         buffer = GL45C.glCreateBuffers();
         GL45C.glNamedBufferStorage(buffer, (long) TOTAL_INTS * Integer.BYTES, GL44C.GL_DYNAMIC_STORAGE_BIT);
         // a new buffer's contents are undefined: start from all zeros (no cells, no sources)
@@ -187,6 +215,7 @@ public final class VoxyLightBridge {
         h[2] = enabled ? 1 : 0;
         h[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
         h[4] = Float.floatToRawIntBits(1.0f);
+        h[7] = me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil.additiveMix() ? 1 : 0;
         h[5] = Math.max(1, Math.min(16, ColorLightEngineHolder.getMaxRangeBlocks())); // light reach in blocks (the shader reads the 3x3 cells of 16 blocks around a block)
     }
 

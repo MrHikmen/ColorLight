@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.lod.dh.mixin;
+package me.mrhikmen.colorlight.client.mixin.dh;
 
 import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 

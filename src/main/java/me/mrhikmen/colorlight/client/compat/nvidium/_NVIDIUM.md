@@ -4,7 +4,7 @@
 
 **Problem:** Nvidium bypasses `SodiumWorldRenderer.renderLayer`, so the ColorLight hooks in Sodium (`DefaultChunkRenderer`) were never executed, and nothing was reading the light volume.
 
-**How it works** (via the `colorlight.nvidium.mixins.json` mixins, only when Nvidium is installed):
+**How it works** (via the `colorlight.mixins.json` mixins, only when Nvidium is installed):
 - `NvidiumShaderLoaderMixin` + `NvidiumBridge.patchShader`: Patches Nvidium shader source code (`terrain/mesh.glsl`, `terrain/translucent/mesh.glsl`, `terrain/frag.frag`). The mesh shaders pass vertex color, lightmap coordinates, and camera-relative position; the fragment shader receives `colorlight_data.glsl` and `colorlight_light.glsl` and computes lighting per pixel.
 - `NvidiumRasterizerMixin`: Binds the three light buffers as texel buffers (texture units 5–7) before each render pass (main, temporal, and translucent/OIT).
 - `GpuLightVolume`: When Nvidium is active, the light buffers are regular GL buffers (using the same data layout).
@@ -24,7 +24,7 @@
 
 **Проблема:** Nvidium отменяет `SodiumWorldRenderer.renderLayer`, поэтому хуки ColorLight в Sodium (`DefaultChunkRenderer`) не выполнялись и объём света никто не читал.
 
-**Как устроено** (миксины `colorlight.nvidium.mixins.json`, только если Nvidium установлен):
+**Как устроено** (миксины `colorlight.mixins.json`, только если Nvidium установлен):
 - `NvidiumShaderLoaderMixin` + `NvidiumBridge.patchShader`: правит текст шейдеров Nvidium (`terrain/mesh.glsl`, `terrain/translucent/mesh.glsl`, `terrain/frag.frag`). Mesh-шейдеры передают цвет вершины, координату лайтмапа и позицию относительно камеры; fragment-шейдер получает `colorlight_data.glsl` и `colorlight_light.glsl` и считает свет попиксельно.
 - `NvidiumRasterizerMixin`: перед каждой отрисовкой (основной, temporal, прозрачный/OIT) подключает три буфера света как texel buffer (юниты 5-7).
 - `GpuLightVolume`: при активном Nvidium буферы света — обычные GL-буферы (та же раскладка).

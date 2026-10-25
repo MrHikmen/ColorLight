@@ -77,6 +77,9 @@ public class ColorLightEngine {
      */
     private final Map<ResourceLocation, LightPropagator> customPropagators = new HashMap<>();
     private final Map<ResourceLocation, LongQueue> customQueues = new HashMap<>();
+    /** Seed queues of sources, one per (method, colour hue): each is flooded on its own, see {@link LightPropagator#propagateIsolated}. */
+    private record HueQueueKey(ResourceLocation method, int hue) {}
+    private final Map<HueQueueKey, LongQueue> hueQueues = new HashMap<>();
     /** key -> propagation method id, for sources whose method isn't the engine default. Guarded by {@link #lock}. */
     private final Map<Long, ResourceLocation> customMethodByKey = new HashMap<>();
 
@@ -141,6 +144,7 @@ public class ColorLightEngine {
         this.defaultMethodId = PropagationMethodRegistry.contains(defaultMethodId) ? defaultMethodId : PropagationMethodRegistry.GRID;
         this.dynamicMethodId = (dynamicMethodId != null) ? dynamicMethodId : PropagationMethodRegistry.SMOOTH;
         this.staticField = new WorldLightField(level, data, this::markDirty);
+        this.staticField.setSourceColors(sourceColors);
         this.dynamic = new DynamicLightLayer(this::markDirty);
     }
 
@@ -348,7 +352,7 @@ public class ColorLightEngine {
         data.put(x, y, z, flags | merged);
         markDirty(x, y, z);
 
-        queueFor(methodId).add(key);
+        hueQueueFor(methodId, hueOf(packed)).add(key);
         return true;
     }
 
@@ -584,6 +588,26 @@ public class ColorLightEngine {
                 queue.clear();
             }
         }
+        if (!hueQueues.isEmpty()) {
+            for (LongQueue queue : hueQueues.values()) {
+                queue.clear();
+            }
+        }
+    }
+
+    /** The seed queue of the sources of one method and one hue (the colour with its brightest channel set to 1, in 1/15 steps). */
+    private LongQueue hueQueueFor(ResourceLocation methodId, int hue) {
+        ResourceLocation id = methodId == null ? defaultMethodId : methodId;
+        return hueQueues.computeIfAbsent(new HueQueueKey(id, hue), k -> new LongQueue(1 << 8));
+    }
+
+    private static int hueOf(int packed) {
+        int r = packed & 0xFF, g = (packed >> 8) & 0xFF, b = (packed >> 16) & 0xFF;
+        int peak = Math.max(r, Math.max(g, b));
+        if (peak <= 0)
+            return 0;
+        int half = peak >> 1;
+        return ((r * 15 + half) / peak) | (((g * 15 + half) / peak) << 4) | (((b * 15 + half) / peak) << 8);
     }
 
     private void flushQueuesLocked() {
@@ -592,6 +616,14 @@ public class ColorLightEngine {
                 LongQueue queue = entry.getValue();
                 if (!queue.isEmpty())
                     propagatorFor(entry.getKey()).propagate(queue, staticField);
+            }
+        }
+        if (!hueQueues.isEmpty()) {
+            // each colour is spread on its own, so overlapping lights only mix where they meet
+            for (Map.Entry<HueQueueKey, LongQueue> entry : hueQueues.entrySet()) {
+                LongQueue queue = entry.getValue();
+                if (!queue.isEmpty())
+                    propagatorFor(entry.getKey().method()).propagateIsolated(queue, staticField);
             }
         }
     }
@@ -668,9 +700,12 @@ public class ColorLightEngine {
 
                 int fr = nr, fg = ng, fb = nb;
                 boolean darkened = false;
-                if (nr != 0 && nr < r) { fr = 0; darkened = true; }
-                if (ng != 0 && ng < g) { fg = 0; darkened = true; }
-                if (nb != 0 && nb < b) { fb = 0; darkened = true; }
+                // a dim cell within one unit of the removed value counts as fed by it too: smooth light is stored rounded,
+                // so the far fringe of a light can come out equal to (or one above) its parent and would otherwise stay
+                // behind as a faint ghost glow after the light is removed
+                if (nr != 0 && (nr < r || (nr <= r + 1 && nr <= 8))) { fr = 0; darkened = true; }
+                if (ng != 0 && (ng < g || (ng <= g + 1 && ng <= 8))) { fg = 0; darkened = true; }
+                if (nb != 0 && (nb < b || (nb <= b + 1 && nb <= 8))) { fb = 0; darkened = true; }
 
                 long nKey = PosKey.pack(nx, ny, nz);
 

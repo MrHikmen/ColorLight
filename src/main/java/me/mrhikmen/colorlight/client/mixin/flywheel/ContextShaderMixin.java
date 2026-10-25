@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.flywheel.mixin;
+package me.mrhikmen.colorlight.client.mixin.flywheel;
 
 import me.mrhikmen.colorlight.client.compat.flywheel.ColorLightFlywheelCompat;
 

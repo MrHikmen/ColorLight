@@ -135,6 +135,10 @@ public final class VoxyLightCache {
     private int[] memoRgb = new int[4096];
     private volatile boolean memoStale;
 
+    // columns the saved file already knew: Voxy may have meshed their sections before the file was read
+    private final java.util.ArrayDeque<Long> remeshBacklog = new java.util.ArrayDeque<>();
+    private boolean backlogFilled;
+
     // sweep: scanning every column around the player once (nearest first)
     private volatile boolean sweepActive;
     private volatile int sweepIdx;
@@ -224,6 +228,19 @@ public final class VoxyLightCache {
         var player = Minecraft.getInstance().player;
         if (player == null)
             return;
+        if (!backlogFilled) {
+            backlogFilled = true;
+            synchronized (remeshBacklog) {
+                int pcx = player.getBlockX() >> 5, pcz = player.getBlockZ() >> 5;
+                for (Map.Entry<Long, int[]> e : columns.entrySet()) {
+                    long k = e.getKey();
+                    if (e.getValue().length > 0 && Math.abs((int) (k >> 32) - pcx) <= WINDOW_COLS && Math.abs((int) k - pcz) <= WINDOW_COLS)
+                        remeshBacklog.add(k);
+                }
+            }
+            if (!remeshBacklog.isEmpty())
+                ensureScheduled(1_000L);
+        }
         pendingEngine = engine;
         pendingCamX = player.getBlockX();
         pendingCamZ = player.getBlockZ();
@@ -288,6 +305,7 @@ public final class VoxyLightCache {
             }
             long deadline = System.nanoTime() + SLICE_NANOS;
             more = runDirty(engine, deadline);
+            more |= runRemeshBacklog(engine, deadline);
             if (sweepActive)
                 more |= runSweep(engine, deadline);
         } catch (Throwable t) {
@@ -298,6 +316,24 @@ public final class VoxyLightCache {
         }
         if (more)
             ensureScheduled(SLICE_GAP_MS);
+    }
+
+    private boolean runRemeshBacklog(WorldEngine engine, long deadline) {
+        while (true) {
+            Long key;
+            synchronized (remeshBacklog) {
+                key = remeshBacklog.poll();
+            }
+            if (key == null)
+                return false;
+            int[] src = columns.get(key);
+            if (src != null && src.length > 0)
+                remesh(engine, null, src, true);
+            if (System.nanoTime() > deadline)
+                synchronized (remeshBacklog) {
+                    return !remeshBacklog.isEmpty();
+                }
+        }
     }
 
     private boolean runSweep(WorldEngine engine, long deadline) {
@@ -348,9 +384,25 @@ public final class VoxyLightCache {
     private void scanAndStore(WorldEngine engine, int cx, int cz) {
         int[] fresh = scanColumn(engine, cx, cz);
         int[] old = columns.put(colKey(cx, cz), fresh);
+        boolean all = forceAll;
         if (old == null || !Arrays.equals(old, fresh)) {
             version.incrementAndGet();
             unsaved.set(true);
+            remesh(engine, old, fresh, all);
+        } else if (all && fresh.length > 0) {
+            remesh(engine, old, fresh, true);
+        }
+    }
+
+    /** Voxy builds the sections near changed sources again: its quads are split around lights (see LodSplit). */
+    private void remesh(WorldEngine engine, int[] old, int[] fresh, boolean all) {
+        try {
+            VoxyRemesh.request(engine, old, fresh, all);
+        } catch (Throwable t) {
+            if (!loggedFailure) {
+                loggedFailure = true;
+                ColorLightClient.LOGGER.warn("[ColorLight] Asking Voxy to rebuild sections near lights failed (further failures are not logged)", t);
+            }
         }
     }
 
@@ -438,8 +490,11 @@ public final class VoxyLightCache {
                 float scale = Math.max(0f, Math.min(1f, strength / 15f));
                 int rgb = ColorLightUtil.pack(Math.round(settings.r * scale), Math.round(settings.g * scale), Math.round(settings.b * scale)) & 0xFFFFFF;
                 int brightness = Math.max(ColorLightUtil.r(rgb), Math.max(ColorLightUtil.g(rgb), ColorLightUtil.b(rgb)));
-                if (brightness >= MIN_BRIGHTNESS)
-                    result = rgb;
+                if (brightness >= MIN_BRIGHTNESS) {
+                    // top byte: this block's own reach (bits 0..4) and the table of its propagation method (bits 5..7), see LodMethodTables
+                    int shape = me.mrhikmen.colorlight.client.compat.lod.LodMethodTables.slotOf(settings.getPropagationId());
+                    result = rgb | ((Math.max(1, Math.min(16, strength)) | (shape << 5)) << 24);
+                }
             }
         }
         memoState[blockId] = (byte) (result == 0 ? 1 : 2);

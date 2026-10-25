@@ -1,6 +1,9 @@
-package me.mrhikmen.colorlight.client.compat.lod.voxy.mixin;
+package me.mrhikmen.colorlight.client.mixin.voxy;
+
+import me.cortex.voxy.client.core.rendering.building.RenderGenerationService;
 
 import me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight;
+import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyRemesh;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,6 +23,8 @@ public abstract class RenderGenerationServiceMixin {
 
     @Inject(method = "enqueueTask(J)V", at = @At("HEAD"), require = 0)
     private void colorlight$sectionQueued(long pos, CallbackInfo ci) {
-        LodLight.onVoxySection(pos);
+        VoxyRemesh.remember((RenderGenerationService) (Object) this);
+        if (!VoxyRemesh.isInternal())
+            LodLight.onVoxySection(pos);
     }
 }

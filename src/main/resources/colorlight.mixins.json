@@ -1,12 +1,27 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "me.mrhikmen.colorlight.client.mixin.minecraft",
+  "package": "me.mrhikmen.colorlight.client.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
   ],
   "client": [
-    "LevelChunkMixin"
+    "dh.GlShaderMixin",
+    "flywheel.SourceFileMixin",
+    "flywheel.ContextShaderMixin",
+    "flywheel.EngineImplMixin",
+    "minecraft.LevelChunkMixin",
+    "nvidium.NvidiumShaderLoaderMixin",
+    "nvidium.NvidiumRasterizerMixin",
+    "sable.VanillaChunkedSubLevelRenderDataMixin",
+    "sodium.DefaultChunkRendererMixin",
+    "sodium.ShaderChunkRendererMixin",
+    "sodium.ShaderLoaderMixin",
+    "sodium.SodiumWorldRendererMixin",
+    "voxy.MesherMixin",
+    "voxy.RenderDataFactoryMixin",
+    "voxy.RenderGenerationServiceMixin",
+    "voxy.ShaderLoaderMixin"
   ],
   "injectors": {
     "defaultRequire": 1
