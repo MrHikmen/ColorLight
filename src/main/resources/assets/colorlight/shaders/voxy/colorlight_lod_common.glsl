@@ -84,7 +84,6 @@ vec3 cl_shade(uint skyLevel, vec3 cl) {
     float tintGamma = intBitsToFloat(clLod[3]);
     float tintStrength = intBitsToFloat(clLod[4]);
 
-    vec3 base = cl_getLm(0u).rgb;                // block 0, sky 0
     vec3 skyOnly = cl_getLm(skyLevel).rgb;
 
     // the block level is ColorLight's own (fractional, 0..15), looked up between two whole levels
@@ -94,17 +93,14 @@ vec3 cl_shade(uint skyLevel, vec3 cl) {
     float t = fract(lv);
     float lvl = lv / 15.0;
     vec3 full = mix(cl_getLm((lo << 4) | skyLevel).rgb, cl_getLm((hi << 4) | skyLevel).rgb, t);
-    vec3 blockOnly = mix(cl_getLm(lo << 4).rgb, cl_getLm(hi << 4).rgb, t);
 
-    vec3 delta = max(blockOnly - base, vec3(0.0));
-    float peak = max(delta.r, max(delta.g, delta.b));
+    // Same shaping as include/colorlight_light.glsl (kept in sync with it, see the comments there).
+    vec3 vis = max(full - skyOnly, vec3(0.0));
+    float visPeak = max(vis.r, max(vis.g, vis.b));
 
-    // day and night: the lightmap follows the time of day, the tint only shows as far as block light makes it bright
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
-    float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) * 10 : 1.0;
-    // See colored_terrain.fsh: stretched from (0.0, 0.5) so dusk/dawn fade the tint in and out gradually across
-    // most of the sky-light fade instead of snapping partway through it, kept in sync with that shader.
+    float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) * 10.0 : 1.0;
     float daylight = smoothstep(0.0, 1.0, blockShare);
 
     const float GAMMA_DEFAULT = 0.55;
@@ -114,13 +110,11 @@ vec3 cl_shade(uint skyLevel, vec3 cl) {
     float shaped = pow(max(lvl, 0.0001), exponent);
     float kept = smoothstep(0.0, 0.06, lvl);
     // a very faint colour (the far edge of a light's reach) only tints a little, instead of a full hue from nothing
-    float amount = clamp(tintStrength * mix(shaped, kept, retention) * daylight * smoothstep(0.0, 24.0, clPeak), 0.0, 1.0);
+    float strength = clamp(tintStrength * mix(shaped, kept, retention) * smoothstep(0.0, 24.0, clPeak), 0.0, 1.0);
 
-    vec3 lit = clamp(full + amount * (hue * peak * vivid - delta), vec3(0.0), vec3(1.0));
-    // No pale rim at the edge of the light (same cap as in include/colorlight_light.glsl, kept in sync with it): a channel
-    // may not rise above "sky-only + this light's own share of that channel", otherwise vanilla's warm-white block
-    // light plus a coloured light that doesn't carry some channel leaves a white fringe round the light.
-    vec3 cap = skyOnly + hue * (peak * vivid * tintStrength) + delta * (1.0 - tintStrength);
-    return min(lit, cap);
+    float blockPeak = min(visPeak * vivid, 1.0);
+    vec3 blockTinted = strength * (hue * blockPeak) + (1.0 - strength) * vis;
+    vec3 skyTinted = skyOnly * (vec3(1.0) + (hue - vec3(1.0)) * (strength * daylight));
+    return clamp(skyTinted + blockTinted, vec3(0.0), vec3(1.0));
 }
 
