@@ -57,7 +57,7 @@ dependencies {
     modCompileOnly "maven.modrinth:uCdwusMi:oNqCUHFk"
 
     //nvidium compat
-    modImplementation "maven.modrinth:SfMw2IZN:4x9ci9sF"
+    modCompileOnly "maven.modrinth:SfMw2IZN:4x9ci9sF"
 }
 
 processResources {
