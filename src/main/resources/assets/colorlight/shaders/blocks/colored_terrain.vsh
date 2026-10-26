@@ -1,4 +1,6 @@
 #version 330 core
+#extension GL_ARB_shading_language_420pack : enable
+#define CL_BIND_UNITS
 
 // ColorLight copy of sodium:blocks/block_layer_opaque.vsh (Sodium 0.8.12 / Minecraft 1.21.11, plain OpenGL).
 // Everything marked COLORLIGHT is ours; the rest must stay identical to Sodium's shader.
@@ -11,6 +13,9 @@ out vec4 v_Color;
 
 // COLORLIGHT: what the fragment shader needs to light the pixel itself
 #import <colorlight:include/colorlight_data.glsl>
+flat out ivec4 v_CLHdrA;
+flat out vec3 v_CLFrac;
+flat out vec2 v_CLTint;
 out vec4 v_ColorBase;
 out vec2 v_LightUV;
 out vec3 v_CLRel;
@@ -71,6 +76,9 @@ void main() {
     v_ColorBase = _vert_color;
     v_LightUV = _vert_tex_light_coord;
     v_CLRel = position + cl_cameraFrac(); // position relative to the camera's integer block
+    v_CLHdrA = ivec4(cl_cameraBlock(), texelFetch(u_CLHeader, 3).r + 2 * texelFetch(u_CLHeader, 9).r);
+    v_CLFrac = cl_cameraFrac();
+    v_CLTint = vec2(cl_tintStrength(), cl_tintGamma());
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord; // FMA for precision
 
     v_Material = _material_params;

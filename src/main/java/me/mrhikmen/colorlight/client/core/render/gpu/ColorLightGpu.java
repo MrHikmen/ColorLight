@@ -28,7 +28,7 @@ import net.minecraft.resources.Identifier;
  *     <li>{@code DefaultChunkRenderer.render}: binds the volume's buffers for every terrain draw.</li>
  * </ol>
  * <b>Safety net.</b> The pipeline only turns on when all three mixins applied (they are skipped for Sodium versions
- * we haven't checked, see {@code ColorLightMixinPlugin}). If anything is missing at run time, {@link #fail} switches
+ * we haven't checked, see {@code colorlighting.mixins.json}). If anything is missing at run time, {@link #fail} switches
  * back to the vertex-colour pipeline and re-meshes. With another renderer in charge (Iris shader packs) the hooks
  * never run and the vertex-colour pipeline is not affected at all.
  * <p>
@@ -56,6 +56,9 @@ public final class ColorLightGpu {
     public static volatile boolean vertexRedirected;
     public static volatile boolean fragmentRedirected;
     private static volatile boolean frameHooked;
+    private static volatile boolean drawHookRan;
+    private static int framesSeen;
+    private static boolean watchdogDone;
 
     private static GpuLightVolume volume;
 
@@ -96,11 +99,6 @@ public final class ColorLightGpu {
     /** True while coloured light is rendered by the shader (so meshes must NOT carry baked colours). */
     public static boolean isActive() {
         return !failed && !shaderPackActive && gpuMode() && ColorLightClient.config.GPU_PIPELINE;
-    }
-
-    /** True while an Iris shader pack is on. Asked fresh, for the settings screen. */
-    public static boolean shaderPackInUse() {
-        return queryShaderPack();
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -275,13 +273,59 @@ public final class ColorLightGpu {
         camSz = camBlockZ >> 4;
         camKnown = true;
         frameHooked = true;
+
+        // Terrain samplers are declared with layout(binding = 5..7): binding the units here makes the terrain shader
+        // work even when the per-draw hook below does not run.
+        int[] names = v.glBufferNames();
+        if (names != null)
+            SodiumGlBinder.bindUnits(names);
+
+        watchdog();
+    }
+
+    /** Re-binds the main volume to texture units 5..7 (the Sable compat borrows them for sub-level draws). */
+    public static void rebindMainUnits() {
+        GpuLightVolume v = volume;
+        int[] names = v == null ? null : v.glBufferNames();
+        if (names != null)
+            SodiumGlBinder.bindUnits(names);
+    }
+
+    /**
+     * A few seconds into the first world, reports what really happened to the three Sodium hooks. A terrain shader
+     * that was never installed would leave terrain with neither baked nor shader light, so that case falls back to
+     * vertex colours.
+     */
+    private static void watchdog() {
+        if (watchdogDone || ++framesSeen < 300)
+            return;
+        watchdogDone = true;
+
+        // Nvidium replaces Sodium's terrain draw: Sodium never loads (or draws with) its terrain shaders, and ColorLight's
+        // light reaches the terrain through Nvidium's own shaders (NvidiumBridge). Nothing to check here.
+        if (nvidiumRenders()) {
+            ColorLightClient.LOGGER.info("[ColorLight] Nvidium renders the terrain; the Sodium shader check is skipped");
+            return;
+        }
+
+        ColorLightClient.LOGGER.info("[ColorLight] GPU pipeline status: vertexShaderRedirected={}, fragmentShaderRedirected={}, drawHookRan={}, active={}, shadersSeen={}",
+                vertexRedirected, fragmentRedirected, drawHookRan, isActive(), SEEN_SHADERS);
+
+        if (!failed && !(vertexRedirected && fragmentRedirected))
+            fail("Sodium never loaded ColorLight's terrain shader (vertex=" + vertexRedirected + ", fragment=" + fragmentRedirected + "); another mod may replace Sodium's shader loading");
+        else if (!drawHookRan)
+            ColorLightClient.LOGGER.warn("[ColorLight] The terrain draw hook did not run; relying on the per-frame texture unit binding");
     }
 
     /**
      * Called from {@code ShaderChunkRendererMixin} for every shader Sodium loads: swaps Sodium's terrain shaders for
      * ColorLight's copies and remembers that it did.
      */
+    private static final java.util.Set<String> SEEN_SHADERS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public static Identifier redirectSodiumShader(Identifier original) {
+        if (original != null && SEEN_SHADERS.size() < 64 && SEEN_SHADERS.add(original.toString()))
+            ColorLightClient.LOGGER.info("[ColorLight] Sodium loads shader {}", original);
         if (SODIUM_TERRAIN_VERTEX.equals(original)) {
             vertexRedirected = true;
             return COLORLIGHT_TERRAIN_VERTEX;
@@ -304,6 +348,10 @@ public final class ColorLightGpu {
     }
 
     public static void onDraw(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ) {
+        if (!drawHookRan) {
+            drawHookRan = true;
+            ColorLightClient.LOGGER.info("[ColorLight] Terrain draw hook is active");
+        }
         // same as in the frame hook, for when that one did not run: cheap, it only uploads when something changed
         VoxyLightBridge.onFrame(camBlockX, camBlockZ);
         DhLightBridge.onFrame(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ);
@@ -397,8 +445,17 @@ public final class ColorLightGpu {
 
     /** The engine reported these sections as changed. */
     public static void onSectionsChanged(long[] sectionKeys) {
-        if (isActive())
+        if (isActive()) {
             volume().markDirty(sectionKeys);
+        }
+    }
+
+    /** OpenGL name of the main volume's header buffer (enabled flag, tint settings), or 0. Used by the Sable compat. */
+    public static int mainHeaderBuffer() {
+        if (failed || volume == null)
+            return 0;
+        int[] names = volume.glBufferNames();
+        return names == null ? 0 : names[0];
     }
 
     public static void tick(Minecraft client) {

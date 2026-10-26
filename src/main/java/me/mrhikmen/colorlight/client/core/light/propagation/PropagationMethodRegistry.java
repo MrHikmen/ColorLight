@@ -27,7 +27,15 @@ public final class PropagationMethodRegistry {
     /** Insertion-ordered so a GUI listing methods gets a stable, predictable order. */
     private static final Map<Identifier, JsonPropagationMethod> METHODS = new LinkedHashMap<>();
 
+    private static int version;
+
+    /** Changes whenever a method is registered or the registry is cleared (a resource reload), so callers can cache what they derive from it. */
+    public static synchronized int version() {
+        return version;
+    }
+
     public static synchronized void register(JsonPropagationMethod method) {
+        version++;
         if (method == null || method.id() == null)
             throw new IllegalArgumentException("A propagation method and its id must not be null");
         METHODS.put(method.id(), method);
@@ -35,6 +43,7 @@ public final class PropagationMethodRegistry {
 
     /** Drops every registered method; called on each resource reload before the packs' methods are registered again. */
     public static synchronized void clear() {
+        version++;
         METHODS.clear();
     }
 

@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.nvidium.mixin;
+package me.mrhikmen.colorlight.client.mixin.nvidium;
 
 import me.mrhikmen.colorlight.client.compat.nvidium.NvidiumBridge;
 

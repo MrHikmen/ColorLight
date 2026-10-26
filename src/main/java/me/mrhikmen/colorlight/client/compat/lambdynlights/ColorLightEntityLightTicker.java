@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.ItemFrame;
@@ -52,6 +53,21 @@ public final class ColorLightEntityLightTicker {
         BlockSettings settings;
         int strength;
         int lastSeenTick;
+    }
+
+    /**
+     * Plain white light for entities LambDynamicLights lights up but ColorLight has no colour for (a belt lantern, a
+     * glow squid, a burning mob ...). ColorLight only knows blocks, and on the GPU path it draws all block light, so
+     * without this such an entity gave no light at all. One shared instance: the tracker compares settings by identity.
+     */
+    private static final BlockSettings UNKNOWN_ENTITY_WHITE = whiteSettings();
+
+    private static BlockSettings whiteSettings() {
+        BlockSettings white = new BlockSettings(Identifier.fromNamespaceAndPath("colorlight", "unknown_entity"), 15, true);
+        white.r = 255;
+        white.g = 255;
+        white.b = 255;
+        return white;
     }
 
     private static final Map<Integer, Tracked> TRACKED = new HashMap<>();
@@ -162,7 +178,9 @@ public final class ColorLightEntityLightTicker {
         }
 
         BlockSettings settings = glow.settings();
-        int strength = effectiveStrength(settings, glow.stack());
+        int strength = glow.strengthOverride() >= 0
+                ? glow.strengthOverride()
+                : effectiveStrength(settings, glow.stack());
 
         double x = entity.getX();
         double y = entity.getY();
@@ -214,10 +232,24 @@ public final class ColorLightEntityLightTicker {
     // ---- item / block -> light settings (registry lookup, no config scans) ----
 
     /** A matched glow source: its settings, and the stack it came from (empty for the minecart/BlockState case). */
-    private record Glow(BlockSettings settings, ItemStack stack) {
+    private record Glow(BlockSettings settings, ItemStack stack, int strengthOverride) {
+        Glow(BlockSettings settings, ItemStack stack) {
+            this(settings, stack, -1);
+        }
     }
 
     private static Glow findGlowingSource(Entity entity) {
+        Glow known = findKnownGlow(entity);
+        if (known != null)
+            return known;
+
+        // ColorLight has no colour for this entity. If LambDynamicLights still lights it (a belt lantern, a glow
+        // squid, a burning mob ...), give it a plain white light of the same brightness instead of no light at all.
+        int luminance = LdlEntityLuminance.of(entity);
+        return luminance > 0 ? new Glow(UNKNOWN_ENTITY_WHITE, ItemStack.EMPTY, luminance) : null;
+    }
+
+    private static Glow findKnownGlow(Entity entity) {
         if (entity instanceof LivingEntity living) {
             ItemStack main = living.getMainHandItem();
             ItemStack off = living.getOffhandItem();

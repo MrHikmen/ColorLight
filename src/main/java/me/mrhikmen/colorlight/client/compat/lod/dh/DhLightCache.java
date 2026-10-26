@@ -17,32 +17,18 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.IntBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * The list of coloured light sources of the world, for Distant Horizons' LOD terrain.
@@ -91,9 +77,6 @@ public final class DhLightCache {
     /** No "section changed" hint exists through the public API: a full sweep is simply repeated on this cadence. */
     private static final long RESCAN_INTERVAL_MS = 300_000L;
     private static final int[] NO_SOURCES = new int[0];
-
-    private static final int FILE_MAGIC = 0x434C4448; // 'CLDH'
-    private static final int FILE_FORMAT = 2; // 2: bits 24..31 of a source hold its own light reach in blocks
 
     /** Nearest-first list of column offsets inside {@link #WINDOW_COLS}. */
     private static final int[] SWEEP_DX;
@@ -183,11 +166,6 @@ public final class DhLightCache {
     /** True once at least one full sweep around some position has finished. */
     public boolean hasScannedOnce() {
         return everCompletedSweep;
-    }
-
-    /** Coloured light sources currently known, across every column read so far (not just the uploaded window). */
-    public int sourcesFound() {
-        return store.sourceCount();
     }
 
     public void cancelScan() {

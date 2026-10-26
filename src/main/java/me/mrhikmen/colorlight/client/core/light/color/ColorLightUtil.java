@@ -27,6 +27,16 @@ public final class ColorLightUtil {
         return packed == EMPTY;
     }
 
+    private static volatile boolean additiveMix = true;
+
+    public static void setAdditiveMix(boolean value) {
+        additiveMix = value;
+    }
+
+    public static boolean additiveMix() {
+        return additiveMix;
+    }
+
     /** Per-channel maximum. Inputs are masked to 8 bits per channel, so no re-clamping is needed. */
     public static int max(int a, int b) {
         int r = Math.max(a & 0xFF, b & 0xFF);

@@ -65,6 +65,23 @@ final class WorldLightField implements LightField {
         return opacity;
     }
 
+    /** Own colours of the light sources by position key (the engine's map; read under the engine's lock only). */
+    private me.mrhikmen.colorlight.client.core.light.util.LongIntMap sourceColors;
+
+    void setSourceColors(me.mrhikmen.colorlight.client.core.light.util.LongIntMap sourceColors) {
+        this.sourceColors = sourceColors;
+    }
+
+    @Override
+    public int seedColor(int x, int y, int z) {
+        if (sourceColors != null) {
+            int own = sourceColors.get(PosKey.pack(x, y, z), -1);
+            if (own != -1)
+                return own;
+        }
+        return get(x, y, z);
+    }
+
     @Override
     public int get(int x, int y, int z) {
         return storage == null ? 0 : storage.get(x, y, z);

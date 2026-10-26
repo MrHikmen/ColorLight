@@ -17,6 +17,7 @@ import me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight;
 import me.mrhikmen.colorlight.client.compat.lod.dh.DhLodLight;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents;
@@ -44,6 +45,7 @@ public class ColorLightClient implements ClientModInitializer {
 
         config.load();
 
+        me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil.setAdditiveMix(config.ADDITIVE_MIX);
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
 
         ColorLightBlockRegistry.load(config);
@@ -80,6 +82,11 @@ public class ColorLightClient implements ClientModInitializer {
         if (ColorLightLambDynLightsCompat.isPresent()) {
             ColorLightEntityLightTicker.register();
             ColorLightClient.LOGGER.info("[ColorLight] LambDynamicLights initialized");
+        }
+
+        if (FabricLoader.getInstance().isModLoaded("create")) {
+            ClientTickEvents.END_CLIENT_TICK.register(me.mrhikmen.colorlight.client.compat.create.CreateContraptionLightLinker::tick);
+            ColorLightClient.LOGGER.info("[ColorLight] Create contraption light initialized");
         }
 
         ColorLightClient.LOGGER.info("[ColorLight] Mod initialized");
