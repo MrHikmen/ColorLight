@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.sodium.mixin;
+package me.mrhikmen.colorlight.client.mixin.sodium;
 
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.core.render.gpu.SodiumHookMarkers;
@@ -8,6 +8,8 @@ import net.minecraft.resources.Identifier;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 /**
@@ -37,5 +39,16 @@ public abstract class ShaderChunkRendererMixin implements SodiumHookMarkers.Shad
         if (!ColorLightGpu.gpuMode())
             return original;
         return ColorLightGpu.redirectSodiumShader(original);
+    }
+
+    /**
+     * Second place for the per-draw binding: the end of {@code begin}, when Sodium's program is current. The one in
+     * {@code DefaultChunkRendererMixin} is matched against the body of {@code render}, which other mods may change;
+     * this one only needs the method name. Calling both is harmless.
+     */
+    @Inject(method = "begin", at = @At("RETURN"), require = 0)
+    private void colorlight$afterBegin(CallbackInfo ci) {
+        if (ColorLightGpu.gpuMode())
+            ColorLightGpu.onDraw();
     }
 }

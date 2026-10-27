@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.lod.voxy.mixin;
+package me.mrhikmen.colorlight.client.mixin.voxy;
 
 import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge;
 
@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Voxy turns its shader files into source text in {@code ShaderLoader.parse} (it reads them from its own jar, so a
  * resource pack can't replace them). We look at every result and change the LOD vertex shader only.
  * <p>
- * Targeted by name so that ColorLight needs no Voxy at compile time; {@code ColorLightVoxyPlugin} keeps this out when
+ * Targeted by name so that ColorLight needs no Voxy at compile time; Mixin skips it when
  * Voxy isn't installed.
  */
 @Mixin(targets = "me.cortex.voxy.client.core.gl.shader.ShaderLoader")

@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.lod.dh.mixin;
+package me.mrhikmen.colorlight.client.mixin.dh;
 
 import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 
@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * change the terrain fragment shader only ({@code assets/distanthorizons/shaders/terrain/gl/frag.frag}).
  * <p>
  * Targeted by name so that ColorLight needs no Distant Horizons at compile time beyond the dev-only API jar;
- * {@code ColorLightDistantHorizonsPlugin} keeps this out when Distant Horizons isn't installed.
+ * Mixin skips it when Distant Horizons isn't installed.
  */
 @Mixin(targets = "com.seibel.distanthorizons.common.render.openGl.glObject.shader.GlShader")
 public abstract class GlShaderMixin {

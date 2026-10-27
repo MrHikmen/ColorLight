@@ -1,4 +1,6 @@
 #version 330 core
+#extension GL_ARB_shading_language_420pack : enable
+#define CL_BIND_UNITS
 
 // ColorLight copy of sodium:blocks/block_layer_opaque.fsh (Sodium 0.9.2 / Minecraft 26.1.2, plain OpenGL).
 // Everything marked COLORLIGHT is ours; the rest must stay identical to Sodium's shader.
@@ -22,6 +24,7 @@ in vec3 v_CLRel;     // position relative to the camera's integer block
 uniform sampler2D u_LightTex;
 
 #define CL_FRAGMENT
+#define CL_HEADER_VARYINGS
 #import <colorlight:include/colorlight_data.glsl>
 
 uniform sampler2D u_BlockTex; // The block texture

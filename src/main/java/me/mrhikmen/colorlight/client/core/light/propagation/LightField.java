@@ -21,6 +21,14 @@ public interface LightField {
     /** Stored value of the cell, 0 if nothing was ever written there. */
     int get(int x, int y, int z);
 
+    /**
+     * The colour a seed cell starts an isolated pass with ({@link LightPropagator#propagateIsolated}): for a light source its
+     * own colour, which can differ from {@link #get} once other lights have raised the stored cell.
+     */
+    default int seedColor(int x, int y, int z) {
+        return get(x, y, z);
+    }
+
     /** Stores a new value. Only called when the colour actually changed, so this is where "dirty" is recorded. */
     void set(int x, int y, int z, int value);
 }

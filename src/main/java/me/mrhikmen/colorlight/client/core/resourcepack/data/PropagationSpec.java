@@ -57,10 +57,6 @@ public final class PropagationSpec {
         this.loss = loss;
     }
 
-    public int neighborCount() {
-        return dx.length;
-    }
-
     /** Builds the propagator for one engine. {@code decay} is {@code 255 / range}. */
     public LightPropagator createPropagator(float decay) {
         return createTable(decay);
@@ -88,10 +84,6 @@ public final class PropagationSpec {
             return table;
         });
     }
-
-    public int[] offsetsX() { return dx.clone(); }
-    public int[] offsetsY() { return dy.clone(); }
-    public int[] offsetsZ() { return dz.clone(); }
 
     // =====================================================================================
     // Built-in fallbacks: used only if no pack (not even the mod's own) provides "grid" / "smooth"

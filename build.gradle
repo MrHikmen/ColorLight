@@ -56,7 +56,7 @@ dependencies {
     compileOnly "dev.lambdaurora.lambdynamiclights:lambdynamiclights-api:${project.lambdynlights_version}"
 
     //Voxy
-    compileOnly "maven.modrinth:fxxUqruK:Zt3LPI0b"
+    implementation "maven.modrinth:fxxUqruK:Zt3LPI0b"
 
     //DH
     compileOnly "maven.modrinth:uCdwusMi:QHxoccsN"

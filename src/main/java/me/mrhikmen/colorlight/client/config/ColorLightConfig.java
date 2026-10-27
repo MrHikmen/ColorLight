@@ -34,37 +34,13 @@ public class ColorLightConfig {
     public boolean ENABLE = true;
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
-    /**
-     * Light the terrain per pixel in a shader (a copy of Sodium's terrain shader that reads a GPU light volume)
-     * instead of baking colours into the chunk meshes. Only works with a Sodium version ColorLight was written
-     * against, otherwise vertex colours are used. Switchable while playing; ignored while a shader pack is on.
-     */
-    public boolean GPU_PIPELINE = true;
-    /**
-     * Colour the light on Voxy's distant LODs. The engine only knows the chunks the client has loaded, so this uses a
-     * coarse far-light map (8x8 blocks at the finest level, doubling per level, highest light wins) that is
-     * remembered between sessions. Needs Voxy; ignored otherwise.
-     */
-    public boolean VOXY_LIGHT = true;
-    /**
-     * Colour the light on Distant Horizons' LOD terrain, read from Distant Horizons' own saved data through its
-     * public API (not just the chunks the client has loaded). Needs Distant Horizons; ignored otherwise.
-     */
-    public boolean DH_LIGHT = true;
-    /** How many 16x16x16 light sections the GPU light volume can hold at once (16 KiB each). 64..4096. */
-    public int GPU_LIGHT_SECTIONS = 768;
-    /** Id of the propagation method blocks use by default, e.g. {@code colorlight:grid}. Legacy values GRID / SMOOTH still work. */
+    public boolean ADDITIVE_MIX = true;
+    public float TINT_GAMMA = 0.55f;
     public String PROPAGATION_MODE = "colorlight:grid";
-    /** Id of the propagation method moving (entity) lights use. */
     public String DYNAMIC_PROPAGATION = "colorlight:smooth";
 
-    /**
-     * Curve applied to how far a channel is from the light's own colour before it's blended onto the texture.
-     * 1 = old linear behaviour (a cell needs to be almost fully lit before the tint reads as clearly coloured).
-     * Less than 1 makes the colour stand out sooner, even in dimmer cells; greater than 1 keeps it subtle
-     * until a cell is nearly saturated. Must stay above 0.
-     */
-    public float TINT_GAMMA = 0.55f;
+    public boolean GPU_PIPELINE = true;
+    public int GPU_LIGHT_SECTIONS = 768;
 
     public int BRIGHTNESS_WEIGHT     = 100;
     public int LOCAL_WEIGHT          = 100;
@@ -79,19 +55,26 @@ public class ColorLightConfig {
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
-    /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
-    public List<String> userOverrides = new ArrayList<>();
+    public boolean VOXY_LIGHT = true;
+    public boolean DH_LIGHT = true;
+
+    public boolean CREATE_CONTRAPTION_LIGHT = true;
+
+    public boolean SABLE_CROSS_LIGHT = true;
+    public int SABLE_LIGHT_RANGE_BLOCKS = 15;
+    public boolean SABLE_SUBLEVEL_LIGHT = true;
+    public String SABLE_PROPAGATION = "";
+    public net.minecraft.resources.Identifier sablePropagationId() {
+        String raw = (SABLE_PROPAGATION == null || SABLE_PROPAGATION.isBlank()) ? DYNAMIC_PROPAGATION : SABLE_PROPAGATION;
+        return me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry.parse(raw);
+    }
 
     public LinkedList<BlockSettings> blocks = new LinkedList<>();
 
+    public List<String> userOverrides = new ArrayList<>();
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("colorlight.json");
-
-    /** What the active resource packs ask for (set by the reload listener); re-applied on every {@link #load()}. */
     private static volatile Map<SettingKey, Object> packDefaults = new EnumMap<>(SettingKey.class);
-
-    /** What the pack set last, i.e. the value that is in the field if the player did not touch it. */
     private final transient Map<SettingKey, Object> appliedFromPack = new EnumMap<>(SettingKey.class);
-    /** The values from the file, which are the ones to write back for settings a pack is currently overriding. */
     private final transient Map<SettingKey, Object> fileValues = new EnumMap<>(SettingKey.class);
 
     public void load() {
@@ -108,14 +91,13 @@ public class ColorLightConfig {
                 mergeBlocks(loaded.blocks);
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
-                this.GPU_PIPELINE = root.has("GPU_PIPELINE") ? loaded.GPU_PIPELINE : this.GPU_PIPELINE;
-                this.GPU_LIGHT_SECTIONS = loaded.GPU_LIGHT_SECTIONS >= 64 ? Math.min(4096, loaded.GPU_LIGHT_SECTIONS) : this.GPU_LIGHT_SECTIONS;
+                this.ADDITIVE_MIX = root.has("ADDITIVE_MIX") ? loaded.ADDITIVE_MIX : this.ADDITIVE_MIX;
+                this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
                 this.DYNAMIC_PROPAGATION = root.has("DYNAMIC_PROPAGATION") && loaded.DYNAMIC_PROPAGATION != null ? loaded.DYNAMIC_PROPAGATION : this.DYNAMIC_PROPAGATION;
-                this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
 
-                this.VOXY_LIGHT = loaded.VOXY_LIGHT;
-                this.DH_LIGHT = loaded.DH_LIGHT;
+                this.GPU_PIPELINE = root.has("GPU_PIPELINE") ? loaded.GPU_PIPELINE : this.GPU_PIPELINE;
+                this.GPU_LIGHT_SECTIONS = loaded.GPU_LIGHT_SECTIONS >= 64 ? Math.min(4096, loaded.GPU_LIGHT_SECTIONS) : this.GPU_LIGHT_SECTIONS;
 
                 this.BRIGHTNESS_WEIGHT = loaded.BRIGHTNESS_WEIGHT > -1 ? loaded.BRIGHTNESS_WEIGHT : this.BRIGHTNESS_WEIGHT;
                 this.LOCAL_WEIGHT = loaded.LOCAL_WEIGHT > -1 ? loaded.LOCAL_WEIGHT : this.LOCAL_WEIGHT;
@@ -126,9 +108,20 @@ public class ColorLightConfig {
                 this.GLOWCOLORSCORE_WEIGHT = loaded.GLOWCOLORSCORE_WEIGHT > -1 ? loaded.GLOWCOLORSCORE_WEIGHT : this.GLOWCOLORSCORE_WEIGHT;
                 this.WHITEPENALTY_WEIGHT = loaded.WHITEPENALTY_WEIGHT > -1 ? loaded.WHITEPENALTY_WEIGHT : this.WHITEPENALTY_WEIGHT;
 
+                this.VOXY_LIGHT = loaded.VOXY_LIGHT;
+                this.DH_LIGHT = loaded.DH_LIGHT;
+
                 this.ENTITY_TRACKING_ENABLED = root.has("ENTITY_TRACKING_ENABLED") ? loaded.ENTITY_TRACKING_ENABLED : this.ENTITY_TRACKING_ENABLED;
                 this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
                 this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
+
+
+                this.CREATE_CONTRAPTION_LIGHT = root.has("CREATE_CONTRAPTION_LIGHT") ? loaded.CREATE_CONTRAPTION_LIGHT : this.CREATE_CONTRAPTION_LIGHT;
+
+                this.SABLE_CROSS_LIGHT = root.has("SABLE_CROSS_LIGHT") ? loaded.SABLE_CROSS_LIGHT : this.SABLE_CROSS_LIGHT;
+                this.SABLE_SUBLEVEL_LIGHT = root.has("SABLE_SUBLEVEL_LIGHT") ? loaded.SABLE_SUBLEVEL_LIGHT : this.SABLE_SUBLEVEL_LIGHT;
+                this.SABLE_PROPAGATION = loaded.SABLE_PROPAGATION != null ? loaded.SABLE_PROPAGATION : "";
+                this.SABLE_LIGHT_RANGE_BLOCKS = loaded.SABLE_LIGHT_RANGE_BLOCKS > 0 ? Math.min(32, loaded.SABLE_LIGHT_RANGE_BLOCKS) : this.SABLE_LIGHT_RANGE_BLOCKS;
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
             } catch (IOException e) {
@@ -140,10 +133,6 @@ public class ColorLightConfig {
         applyPackDefaults();
     }
 
-    /**
-     * Brings {@link #blocks} in line with the file <b>without replacing the entry objects</b>: the settings screens hold
-     * on to entries, and an edit made to an entry that a reload has since dropped from the list would silently go nowhere.
-     */
     private void mergeBlocks(LinkedList<BlockSettings> fromFile) {
         if (fromFile == null)
             fromFile = new LinkedList<>();
@@ -172,10 +161,6 @@ public class ColorLightConfig {
         this.blocks.addAll(merged);
     }
 
-    /**
-     * Sets which settings the active resource packs provide and applies them right away. Called after the packs'
-     * scripts ran. Passing an empty map removes the pack influence.
-     */
     public void setPackDefaults(Map<SettingKey, Object> defaults) {
         packDefaults = new EnumMap<>(SettingKey.class);
         packDefaults.putAll(defaults);
@@ -183,13 +168,11 @@ public class ColorLightConfig {
     }
 
     private void applyPackDefaults() {
-        // first undo what an earlier pack set, so a pack that no longer lists a key lets go of it
         for (Map.Entry<SettingKey, Object> e : appliedFromPack.entrySet()) {
             if (!userOverrides.contains(e.getKey().jsonKey) && fileValues.containsKey(e.getKey()))
                 write(e.getKey(), fileValues.get(e.getKey()));
         }
         appliedFromPack.clear();
-
         for (Map.Entry<SettingKey, Object> e : packDefaults.entrySet()) {
             SettingKey key = e.getKey();
             if (userOverrides.contains(key.jsonKey))
@@ -201,18 +184,12 @@ public class ColorLightConfig {
 
     private void rememberFileValues() {
         fileValues.clear();
-        appliedFromPack.clear(); // the fields were just replaced by the file's values
+        appliedFromPack.clear();
         for (SettingKey key : SettingKey.values())
             fileValues.put(key, read(key));
     }
 
-    /** Whether a resource pack currently decides this setting (the player has not overridden it). */
-    public boolean isPackControlled(SettingKey key) {
-        return appliedFromPack.containsKey(key);
-    }
-
     public void save() {
-        // Work out which pack-controlled settings the player changed since the pack applied them.
         for (Map.Entry<SettingKey, Object> e : appliedFromPack.entrySet()) {
             SettingKey key = e.getKey();
             if (!Objects.equals(read(key), e.getValue()) && !userOverrides.contains(key.jsonKey)) {
@@ -224,8 +201,6 @@ public class ColorLightConfig {
             if (userOverrides.contains(key.jsonKey))
                 fileValues.put(key, read(key));
         }
-
-        // Write the player's values, not the pack's, for everything the pack still controls.
         Map<SettingKey, Object> current = new EnumMap<>(SettingKey.class);
         for (SettingKey key : appliedFromPack.keySet()) {
             if (userOverrides.contains(key.jsonKey))
@@ -233,7 +208,6 @@ public class ColorLightConfig {
             current.put(key, read(key));
             write(key, fileValues.get(key));
         }
-
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         try (Writer writer = Files.newBufferedWriter(PATH)) {
             gson.toJson(this, writer);

@@ -21,8 +21,12 @@ public class Translatable {
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
     public static Component TINT_GAMMA = Component.translatable("me.colorlight.general.tint_gamma");
     public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
+    public static Component ADDITIVE_MIX = Component.translatable("me.colorlight.general.additive_mix");
+    public static Component ADDITIVE_MIX_Tooltip = Component.translatable("me.colorlight.general.additive_mix.tooltip");
     public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
     public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
+    public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
+    public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
 
     public static Component GPU_EXPERIMENTS = Component.translatable("me.colorlight.general.gpu_experiments");
     public static Component GPU_PIPELINE = Component.translatable("me.colorlight.general.gpu_pipeline");
@@ -78,10 +82,22 @@ public class Translatable {
     public static Component ENTITY_TRACKING_ENABLED_Tooltip = Component.translatable("me.colorlight.compatibility.entity_tracking_enabled.tooltip");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance");
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE_Tooltip = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance.tooltip");
-    public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
-    public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS_Tooltip = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks.tooltip");
+
+    public static Component CREATE = Component.translatable("me.colorlight.compatibility.create");
+    public static Component CREATE_CONTRAPTION_LIGHT = Component.translatable("me.colorlight.compatibility.create_contraption_light");
+    public static Component CREATE_CONTRAPTION_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.create_contraption_light.tooltip");
+
+    public static Component SABLE = Component.translatable("me.colorlight.compatibility.sable");
+    public static Component SABLE_CROSS_LIGHT = Component.translatable("me.colorlight.compatibility.sable_cross_light");
+    public static Component SABLE_CROSS_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.sable_cross_light.tooltip");
+    public static Component SABLE_LIGHT_RANGE = Component.translatable("me.colorlight.compatibility.sable_light_range");
+    public static Component SABLE_LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.compatibility.sable_light_range.tooltip");
+    public static Component SABLE_SUBLEVEL_LIGHT = Component.translatable("me.colorlight.compatibility.sable_sublevel_light");
+    public static Component SABLE_SUBLEVEL_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.sable_sublevel_light.tooltip");
+    public static Component SABLE_PROPAGATION = Component.translatable("me.colorlight.compatibility.sable_propagation");
+    public static Component SABLE_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.sable_propagation.tooltip");
 
     public static Component BLOCKS_Value(int value) {
         return pluralValue("me.colorlight.block_value", value);

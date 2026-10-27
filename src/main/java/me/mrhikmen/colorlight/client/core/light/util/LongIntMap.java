@@ -142,17 +142,6 @@ public final class LongIntMap {
         return out;
     }
 
-    /** Snapshot of the values, index-aligned with {@link #keysToArray()} called at the same moment. */
-    public int[] valuesToArray() {
-        int[] out = new int[size];
-        int n = 0;
-        for (int i = 0; i < keys.length; i++) {
-            if (used[i])
-                out[n++] = vals[i];
-        }
-        return out;
-    }
-
     private void grow() {
         long[] oldKeys = keys;
         int[] oldVals = vals;

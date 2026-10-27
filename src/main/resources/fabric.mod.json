@@ -43,22 +43,6 @@
     {
       "config": "colorlighting.mixins.json",
       "environment": "client"
-    },
-    {
-      "config": "colorlight.sodium.mixins.json",
-      "environment": "client"
-    },
-    {
-      "config": "colorlight.voxy.mixins.json",
-      "environment": "client"
-    },
-    {
-      "config": "colorlight.nvidium.mixins.json",
-      "environment": "client"
-    },
-    {
-      "config": "colorlight.distanthorizons.mixins.json",
-      "environment": "client"
     }
   ],
   "depends": {

@@ -92,6 +92,17 @@ public final class ColorLightChunkScanner {
     }
 
     /**
+     * Scans a chunk that did not come through the normal chunk-load event (Sable sub-level plot chunks, which
+     * Sable loads through its own path). {@code orderX/orderZ} only decide when it is scanned: the pool takes the
+     * chunk nearest to the player first, and a plot sits ~20M blocks out, so pass where the chunk really is.
+     */
+    public static void scan(ClientLevel level, LevelChunk chunk, int orderX, int orderZ) {
+        if (!ColorLightClient.config.ENABLE || ColorLightBlockRegistry.isEmpty())
+            return;
+        SCAN_EXECUTOR.execute(orderX, orderZ, () -> scanChunk(level, chunk));
+    }
+
+    /**
      * Runs an engine mutation on the apply thread, in FIFO order with chunk loads and unloads.
      * The game thread must never wait for the engine lock (a flood on the apply thread can hold it for
      * milliseconds back to back), so anything that needs it - block edits included - goes through here.

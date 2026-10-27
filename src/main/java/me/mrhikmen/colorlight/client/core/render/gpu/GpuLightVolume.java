@@ -12,6 +12,10 @@ import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import org.lwjgl.opengl.GL15C;
 import org.lwjgl.opengl.GL45C;
@@ -29,7 +33,7 @@ import java.util.Arrays;
  *     <li><b>header buffer</b>: {@link #HEADER_INTS} ints (camera, flags, tint settings), rewritten by mapping it,
  *     which is allowed while a render pass is open (a command-encoder write is not).</li>
  *     <li><b>data buffer</b>: one int per
- *     section page: the {@link #pool} slot holding that section, or -1. Pages are addressed toroidally, so the
+ *     section page: the {@link #glPool} slot holding that section, or -1. Pages are addressed toroidally, so the
  *     window follows the camera without anything being moved.</li>
  *     <li><b>pool buffer</b>: slots of 4096 cells (16 KiB). A slot exists only for a section that holds light.
  *     Cell = {@code 0x00BBGGRR} light colour, bit 24 set for solid blocks (the shader leaves those out of its
@@ -125,10 +129,6 @@ public final class GpuLightVolume {
     // ------------------------------------------------------------------------------------------------------
     // GPU resources
     // ------------------------------------------------------------------------------------------------------
-
-    public boolean isRawGl() {
-        return rawGl;
-    }
 
     public boolean hasBuffers() {
         if (rawGl)
@@ -357,8 +357,8 @@ public final class GpuLightVolume {
         if (--rescanTimer <= 0) {
             rescanTimer = RESCAN_TICKS;
             // light that was never reported as dirty to us: it existed before the volume did, or just entered the window
-            engine.forEachLitSection(key -> {
-                if (inWindow(PosKey.x(key), PosKey.y(key), PosKey.z(key)) && !slotOf.containsKey(key))
+            engine.forEachLitSectionNear(camSx, camSy, camSz, KEEP_RADIUS_XZ, KEEP_RADIUS_Y, key -> {
+                if (!slotOf.containsKey(key))
                     pending.add(key);
             });
         }
@@ -457,13 +457,35 @@ public final class GpuLightVolume {
 
     /** Sets {@link #OPAQUE_BIT} on every cell of the section that holds a light-blocking block. */
     private void markSolidCells(ClientLevel level, int sx, int sy, int sz) {
+        markSolid(level, sx, sy, sz, cells, cursor);
+    }
+
+    /**
+     * Shared by the main volume and the Sable windows. Reads the blocks straight from the chunk section (one chunk
+     * lookup instead of 4096) and skips sections that hold only air; an unloaded chunk or a section outside the build
+     * height reads as air, exactly like {@code Level.getBlockState} does.
+     */
+    public static void markSolid(ClientLevel level, int sx, int sy, int sz, int[] cells, BlockPos.MutableBlockPos cursor) {
+        int index = level.getSectionIndexFromSectionY(sy);
+        if (index < 0 || index >= level.getSectionsCount())
+            return;
+        ChunkAccess chunk = level.getChunk(sx, sz, ChunkStatus.FULL, false);
+        if (chunk == null)
+            return;
+        LevelChunkSection section = chunk.getSection(index);
+        if (section.hasOnlyAir())
+            return;
+
         int x0 = sx << 4, y0 = sy << 4, z0 = sz << 4;
         int i = 0;
         for (int y = 0; y < 16; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++, i++) {
+                    BlockState state = section.getBlockState(x, y, z);
+                    if (state.isAir())
+                        continue;
                     cursor.set(x0 + x, y0 + y, z0 + z);
-                    if (level.getBlockState(cursor).getLightDampening() >= 15)
+                    if (state.getLightDampening() >= 15)
                         cells[i] |= OPAQUE_BIT;
                 }
             }
