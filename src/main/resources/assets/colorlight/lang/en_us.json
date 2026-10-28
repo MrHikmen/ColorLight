@@ -15,10 +15,14 @@
   "me.colorlight.general.light_range.tooltip": "Maximum distance that colored light can spread.",
   "me.colorlight.general.smooth_lighting": "Smooth colored lighting",
   "me.colorlight.general.smooth_lighting.tooltip": "Blends colored light between neighboring blocks at each vertex for a softer appearance. When disabled, each face uses a single sample instead, which is cheaper.",
+  "me.colorlight.general.additive_mix": "Light intersection gradient",
+  "me.colorlight.general.additive_mix.tooltip": "On: If two different light sources are positioned close to each other, their overlap will blend smoothly, creating a new color at the point of intersection.\n\nOff: The light will transition more abruptly, without creating any new colors.",
   "me.colorlight.general.tint_gamma": "Tint vividness",
   "me.colorlight.general.tint_gamma.tooltip": "Curves how strongly a block's colour shows up, and how far from the light it lasts. 100% is linear: the colour needs strong light to be clearly visible and fades with the brightness. Lower values make the colour stand out sooner, even in dim spots; with the shader lighting, values near 0% also keep the hue fully saturated all the way to the edge of the light. Higher values keep it subtle until a block is nearly saturated.",
   "me.colorlight.general.propagation_mode": "Method of light propagation",
   "me.colorlight.general.propagation_mode.tooltip": "Changes how light spreads from standard blocks.\nThe list comes from JSON files in resource packs (assets/colorlight/propagation); ColorLight ships two: Grid (diamond, vanilla-like, cheapest) and Smooth (circle, 1/8-block precision, costlier). Blocks can name their own method in their block JSON entry. Existing light is recalculated when the setting is changed.\nA resource pack may supply its own default for this setting; once you change it here, your choice is kept.",
+  "me.colorlight.compatibility.dynamic_propagation": "Moving light method",
+  "me.colorlight.compatibility.dynamic_propagation.tooltip": "How the light of moving sources (e.g. entities with LambDynamicLights) spreads. Only methods defined by a table (not a custom propagate function) can be used; otherwise Smooth is used.",
 
   "me.colorlight.general.gpu_experiments": "GPU experiments",
   "me.colorlight.general.gpu_pipeline": "Shader lighting (GPU)",
@@ -73,6 +77,20 @@
   "me.colorlight.compatibility.dh_light": "Coloured light on Distant Horizons LODs",
   "me.colorlight.compatibility.dh_light.tooltip": "Colours the light on Distant Horizons' distant terrain, read from its own saved data through its public API in the background (reaches as far as Distant Horizons' own data does, not just loaded chunks). A changed light shows up within about 20 seconds. Needs Distant Horizons.",
 
+  "me.colorlight.compatibility.create": "Create",
+  "me.colorlight.compatibility.create_contraption_light": "Light of contraptions",
+  "me.colorlight.compatibility.create_contraption_light.tooltip": "Light-emitting blocks on moving Create contraptions become dynamic lights that follow the contraption, so they light the terrain around it and the contraption itself. Nothing is calculated while no contraption is nearby.",
+
+  "me.colorlight.compatibility.sable": "Sable",
+  "me.colorlight.compatibility.sable_cross_light": "Light between the world and sub-levels",
+  "me.colorlight.compatibility.sable_cross_light.tooltip": "Lights of Sable sub-levels (ships, contraptions) light the terrain around them, and terrain lights close to a sub-level light it. Uses dynamic lights; the terrain-to-sub-level direction needs the GPU pipeline. Nothing is calculated while no sub-level is nearby.",
+  "me.colorlight.compatibility.sable_light_range": "Sub-level light distance",
+  "me.colorlight.compatibility.sable_light_range.tooltip": "How far, in blocks, the light of a sub-level spreads into the world. It is the same as dimming the light, so it cannot go beyond the general light range; lower values are cheaper.",
+  "me.colorlight.compatibility.sable_sublevel_light": "Light between sub-levels",
+  "me.colorlight.compatibility.sable_sublevel_light.tooltip": "Lights of one Sable sub-level also light the other sub-levels they reach (a lamp on one ship lights the ship next to it). Needs the GPU pipeline and \"Light between the world and sub-levels\".",
+  "me.colorlight.compatibility.sable_propagation": "Sable / Flywheel light method",
+  "me.colorlight.compatibility.sable_propagation.tooltip": "How the light that crosses between the world and Sable sub-levels, and the light of Create contraptions drawn by Flywheel, spreads. By default it is the same as the moving light method. Only methods defined by a table can be used; otherwise Smooth is used.",
+
   "me.colorlight.block_value.1": "%s block",
   "me.colorlight.block_value.1-5": "%s blocks",
   "me.colorlight.block_value": "%s blocks",
@@ -91,7 +109,5 @@
   "me.colorlight.block.reset_to_default": "Reset to default",
   "me.colorlight.block.apply": "Apply",
   "me.colorlight.block.propagation": "Propagation",
-  "me.colorlight.block.propagation.default": "Engine default",
-  "me.colorlight.compatibility.dynamic_propagation": "Moving light method",
-  "me.colorlight.compatibility.dynamic_propagation.tooltip": "How the light of moving sources (e.g. entities with LambDynamicLights) spreads. Only methods defined by a table (not a custom propagate function) can be used; otherwise Smooth is used."
+  "me.colorlight.block.propagation.default": "Engine default"
 }

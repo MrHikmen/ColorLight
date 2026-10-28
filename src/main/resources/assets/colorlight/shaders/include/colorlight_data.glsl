@@ -37,22 +37,43 @@ vec3 cl_cameraFrac() {
     return vec3(cl_headerFloat(4), cl_headerFloat(5), cl_headerFloat(6));
 }
 
+float cl_tintStrength() {
+    return cl_headerFloat(7);
+}
+
+float cl_tintGamma() {
+    return cl_headerFloat(8);
+}
+
 #ifdef CL_FRAGMENT
 
 uniform isamplerBuffer u_CLData;
 uniform isamplerBuffer u_CLPool;
 
+// Per-fragment cache of the last page-table lookup. The 8 taps of the trilinear filter almost always fall into the
+// same 16x16x16 section, so the dependent u_CLData fetch is done once instead of up to 8 times.
+ivec3 cl_cacheSection = ivec3(2147483647);
+int cl_cacheSlot = -1;
+
 // Raw cell value, or -1 when nothing is known about the cell: its section is outside the window or holds no light,
 // so it has no light data and, above all, no solid/air information.
 int cl_cellRaw(ivec3 cell, ivec3 camSection) {
     ivec3 section = (cell - (cell & 15)) / 16; // exact floor division, also for negative coordinates
-    ivec3 d = section - camSection;
-    if (abs(d.x) > CL_SECTION_RADIUS_XZ || abs(d.z) > CL_SECTION_RADIUS_XZ || abs(d.y) > CL_SECTION_RADIUS_Y) {
-        return -1;
-    }
 
-    int page = (section.x & 63) | ((section.z & 63) << 6) | ((section.y & 31) << 12);
-    int slot = texelFetch(u_CLData, page).r;
+    int slot;
+    if (section == cl_cacheSection) {
+        slot = cl_cacheSlot;
+    } else {
+        ivec3 d = abs(section - camSection);
+        if (d.x > CL_SECTION_RADIUS_XZ || d.z > CL_SECTION_RADIUS_XZ || d.y > CL_SECTION_RADIUS_Y) {
+            slot = -1;
+        } else {
+            int page = (section.x & 63) | ((section.z & 63) << 6) | ((section.y & 31) << 12);
+            slot = texelFetch(u_CLData, page).r;
+        }
+        cl_cacheSection = section;
+        cl_cacheSlot = slot;
+    }
     if (slot < 0) {
         return -1;
     }

@@ -34,14 +34,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         boolean ldl = ColorLightLambDynLightsCompat.isPresent();
         boolean voxy = ColorLightVoxyCompat.isPresent();
         boolean distantHorizons = ColorLightDistantHorizonsCompat.isPresent();
+        boolean create = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("create");
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(Identifier.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
 
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
-        if (ldl || voxy || distantHorizons) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons));
+        if (ldl || voxy || distantHorizons || create) {
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, create));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -85,6 +86,14 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         () -> Math.round(config.TINT_GAMMA * 100f)
                                 )
                                 .setDefaultValue(Math.round(config.TINT_GAMMA * 100f))
+                        )
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:additive_mix"))
+                                .setName(Translatable.ADDITIVE_MIX)
+                                .setTooltip(Translatable.ADDITIVE_MIX_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setImpact(OptionImpact.MEDIUM)
+                                .setBinding(value -> config.ADDITIVE_MIX = value, () -> config.ADDITIVE_MIX)
+                                .setDefaultValue(config.ADDITIVE_MIX)
                         )
                         .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:propagation_mode"))
                                 .setName(Translatable.PROPAGATION_MODE)
@@ -222,10 +231,10 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return built;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean create) {
         Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
         Identifier entityFollowId = Identifier.parse("colorlight:entity_follow_render_distance");
-        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}.", ldl, voxy, distantHorizons);
+        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}, create - {}", ldl, voxy, distantHorizons, create);
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.COMPATIBILITY);
         if (ldl) {
             page.addOptionGroup(builder.createOptionGroup()
@@ -264,6 +273,28 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setStorageHandler(this::save)
                             .setBinding(value -> config.ENTITY_CHECK_RADIUS_CHUNKS = value, () -> config.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setDefaultValue(config.ENTITY_CHECK_RADIUS_CHUNKS)
+                    )
+            );
+        }
+        if (create) {
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.CREATE)
+                    .addOption(builder.createBooleanOption(Identifier.parse("colorlight:create_contraption_light"))
+                            .setName(Translatable.CREATE_CONTRAPTION_LIGHT)
+                            .setTooltip(Translatable.CREATE_CONTRAPTION_LIGHT_Tooltip)
+                            .setImpact(OptionImpact.LOW)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.CREATE_CONTRAPTION_LIGHT = value, () -> config.CREATE_CONTRAPTION_LIGHT)
+                            .setDefaultValue(config.CREATE_CONTRAPTION_LIGHT)
+                    )
+                    .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:create_propagation"))
+                            .setName(Translatable.SABLE_PROPAGATION)
+                            .setTooltip(Translatable.SABLE_PROPAGATION_Tooltip)
+                            .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new PropagationPickerScreen(
+                                    parentScreen, Translatable.SABLE_PROPAGATION,
+                                    () -> (config.SABLE_PROPAGATION == null || config.SABLE_PROPAGATION.isBlank()) ? config.DYNAMIC_PROPAGATION : config.SABLE_PROPAGATION,
+                                    value -> config.SABLE_PROPAGATION = value,
+                                    this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
                     )
             );
         }

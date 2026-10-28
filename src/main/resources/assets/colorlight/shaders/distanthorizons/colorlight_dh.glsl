@@ -24,7 +24,7 @@ layout(binding = __CL_BINDING__, std430) readonly buffer ColorLightDhBuffer {
 };
 
 // Same per-channel-max, linear-fade-over-reach sampling the near-field engine and the Voxy compat use: strongest
-// source per channel wins, each fading to nothing over the light reach by true 3D distance.
+// source per channel wins, each fading to nothing over the light reach by true (round) 3D distance.
 vec3 cl_dh_light(vec3 worldPos) {
     vec3 camF = vec3(intBitsToFloat(clDh[7]), intBitsToFloat(clDh[8]), intBitsToFloat(clDh[9]));
     vec3 t = camF + worldPos;
@@ -53,7 +53,7 @@ vec3 cl_dh_light(vec3 worldPos) {
         for (int dx = -1; dx <= 1; dx++) {
             float x0 = float(((cell.x + dx) << 4) - p.x);
             float rx = max(max(x0 - f.x, f.x - (x0 + 16.0)), 0.0);
-            if (rx + rz >= reach) {
+            if (rx * rx + rz * rz >= reach * reach) {
                 continue;
             }
             ivec2 c = cell + ivec2(dx, dz);
@@ -65,12 +65,12 @@ vec3 cl_dh_light(vec3 worldPos) {
                 int rgb = clDh[s + 3];
                 // every source has its own reach (a torch and a lantern do not spread equally far), capped by the
                 // light range setting; 0 = unknown (old data): the setting itself
-                float own = float((rgb >> 24) & 255);
+                float own = float((rgb >> 24) & 31); // bits 5..6 of the top byte hold a shape code that only Voxy uses
                 float r = (own > 0.0) ? min(own, reach) : reach;
-                // whole blocks, like Minecraft's own light: the level drops by one per block of walking distance, so
-                // the light comes in steps (a diamond in the open) and is not smoothed out
-                ivec3 d = abs(ivec3(clDh[s], clDh[s + 1], clDh[s + 2]) - p);
-                float w = 1.0 - float(d.x + d.y + d.z) / r;
+                // true 3D distance (like the near-field engine and the Voxy compat), so the light is round and not the
+                // diamond that the old block-walking distance (|dx| + |dy| + |dz|) drew
+                vec3 dv = vec3(ivec3(clDh[s], clDh[s + 1], clDh[s + 2]) - p);
+                float w = 1.0 - length(dv) / r;
                 if (w > 0.0) {
                     best = max(best, vec3(float(rgb & 255), float((rgb >> 8) & 255), float((rgb >> 16) & 255)) * w);
                 }

@@ -17,10 +17,14 @@
   "me.colorlight.general.light_range.tooltip": "Максимальная дальность распространения цветного света.",
   "me.colorlight.general.smooth_lighting": "Сглаживание цветного света",
   "me.colorlight.general.smooth_lighting.tooltip": "Смешивает цветной свет между соседними блоками в каждой вершине, делая освещение мягче. При отключении для каждой грани используется один сэмпл вместо интерполяции, что снижает нагрузку.",
+  "me.colorlight.general.additive_mix": "Градиент пересечения света",
+  "me.colorlight.general.additive_mix.tooltip": "Вкл: если два разных источника света стоят рядом то их пересечение будет плавно переходить, образуя в зоне пересечения новый цвет. \n\nВыкл: свет будет переходить резче, не образуя новых цветов.",
   "me.colorlight.general.tint_gamma": "Насыщенность подсветки",
   "me.colorlight.general.tint_gamma.tooltip": "Задаёт, насколько сильно проявляется цвет блока и как далеко от источника он держится. 100% — линейно: цвету нужен сильный свет, и он угасает вместе с яркостью. Низкие значения делают цвет заметным раньше, даже в тусклых местах; в шейдерном освещении значения около 0% ещё и держат оттенок насыщенным до самого края света. Высокие значения оставляют цвет неброским, пока блок не станет почти полностью освещённым.",
   "me.colorlight.general.propagation_mode": "Способ распространения света",
   "me.colorlight.general.propagation_mode.tooltip": "Меняет способ распространения света от обычных блоков.\nСписок берётся из JSON-файлов в ресурспаках (assets/colorlight/propagation); ColorLight содержит два: Grid (ромб, как у ванильного света, самый быстрый) и Smooth (круг, точность 1/8 блока, дороже). Блок может указать свой способ прямо в своей JSON-записи. При смене настройки существующий свет пересчитывается.\nРесурспак может задать своё значение по умолчанию; после изменения здесь сохраняется ваш выбор.",
+  "me.colorlight.compatibility.dynamic_propagation": "Способ света движущихся источников",
+  "me.colorlight.compatibility.dynamic_propagation.tooltip": "Как распространяется свет движущихся источников (например, сущностей с LambDynamicLights). Подходят только способы, заданные таблицей (без собственной функции propagate); иначе используется Smooth.",
 
   "me.colorlight.general.gpu_experiments": "Эксперименты с GPU",
   "me.colorlight.general.gpu_pipeline": "Шейдерное освещение (GPU)",
@@ -75,6 +79,20 @@
   "me.colorlight.compatibility.dh_light": "Цветной свет на LOD Distant Horizons",
   "me.colorlight.compatibility.dh_light.tooltip": "Окрашивает свет на дальнем террейне Distant Horizons, читая его собственные сохранённые данные через публичный API в фоне (действует настолько далеко, насколько у Distant Horizons есть данные, а не только по загруженным чанкам). Изменённый источник света появляется в течение примерно 20 секунд. Нужен Distant Horizons.",
 
+  "me.colorlight.compatibility.create": "Create",
+  "me.colorlight.compatibility.create_contraption_light": "Свет механизмов",
+  "me.colorlight.compatibility.create_contraption_light.tooltip": "Светящиеся блоки на движущихся механизмах Create становятся динамическими источниками света, которые следуют за механизмом: они освещают местность вокруг и сам механизм. Пока рядом нет механизмов, ничего не считается.",
+
+  "me.colorlight.compatibility.sable": "Sable",
+  "me.colorlight.compatibility.sable_cross_light": "Свет между миром и sublevel",
+  "me.colorlight.compatibility.sable_cross_light.tooltip": "Свет от sublevel Sable (корабли, механизмы) освещает окружающий террейн, а свет террейна рядом с sublevel освещает его. Использует динамический свет; направление «террейн → sublevel» требует GPU-пайплайн. Пока рядом нет ни одного sublevel, ничего не считается.",
+  "me.colorlight.compatibility.sable_light_range": "Дистанция света sublevel",
+  "me.colorlight.compatibility.sable_light_range.tooltip": "На сколько блоков свет от sublevel распространяется в мир. Это то же самое, что приглушить свет, поэтому значение не может быть больше общей дальности света; меньшие значения дешевле.",
+  "me.colorlight.compatibility.sable_sublevel_light": "Свет между sublevel",
+  "me.colorlight.compatibility.sable_sublevel_light.tooltip": "Свет одного sublevel Sable освещает и другие sublevel, до которых дотягивается (лампа на одном корабле освещает корабль рядом). Нужен GPU-пайплайн и включённый «Свет между миром и sublevel».",
+  "me.colorlight.compatibility.sable_propagation": "Способ света Sable / Flywheel",
+  "me.colorlight.compatibility.sable_propagation.tooltip": "Как распространяется свет, который переходит между миром и sublevel Sable, и свет механизмов Create, рисуемых через Flywheel. По умолчанию такой же, как способ света движущихся источников. Подходят только способы, заданные таблицей; иначе используется Smooth.",
+
   "me.colorlight.block_value.1": "%s блок",
   "me.colorlight.block_value.1-5": "%s блока",
   "me.colorlight.block_value": "%s блоков",
@@ -93,7 +111,5 @@
   "me.colorlight.block.reset_to_default": "Сбросить",
   "me.colorlight.block.apply": "Применить",
   "me.colorlight.block.propagation": "Распространение",
-  "me.colorlight.block.propagation.default": "Как в настройках мода",
-  "me.colorlight.compatibility.dynamic_propagation": "Способ света движущихся источников",
-  "me.colorlight.compatibility.dynamic_propagation.tooltip": "Как распространяется свет движущихся источников (например, сущностей с LambDynamicLights). Подходят только способы, заданные таблицей (без собственной функции propagate); иначе используется Smooth."
+  "me.colorlight.block.propagation.default": "Как в настройках мода"
 }

@@ -3,7 +3,7 @@
 **What it does:** Enables colored lighting for Distant Horizons' distant LOD terrain, read from Distant Horizons'
 own saved data through its public `DhApi`, not just the client's loaded chunks.
 
-**How it works** (via `colorlight.distanthorizons.mixins.json`, applied when Distant Horizons 3.x is installed):
+**How it works** (via `colorlighting.mixins.json`, applied when Distant Horizons 3.x is installed):
 - `GlShaderMixin` + `DhLightBridge.patch`: Patches the terrain shader source code DH compiles (`vert.vert` gets two
   small varyings added for the sky/block light levels it already computes, `frag.frag` gets `colorlight_dh.glsl`
   added and one line in `main()` changed). If any expected anchor is not found in either file, that file is left
@@ -34,7 +34,7 @@ any Distant Horizons version.
 **Что даёт:** цветной свет на дальнем LOD-террейне Distant Horizons, читается из собственных сохранённых данных DH
 через публичный `DhApi`, а не только по загруженным клиентом чанкам.
 
-**Как устроено** (`colorlight.distanthorizons.mixins.json`, применяется при установленном Distant Horizons 3.x):
+**Как устроено** (`colorlighting.mixins.json`, применяется при установленном Distant Horizons 3.x):
 - `GlShaderMixin` + `DhLightBridge.patch`: правит текст шейдеров террейна, которые компилирует DH (`vert.vert`
   получает две небольшие varying-переменные с уже посчитанными уровнями sky/block light, `frag.frag` получает
   добавленный `colorlight_dh.glsl` и одну изменённую строку в `main()`). Если в любом из файлов не найден ожидаемый

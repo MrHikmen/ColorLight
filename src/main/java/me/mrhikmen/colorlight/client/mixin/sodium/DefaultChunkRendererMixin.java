@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.sodium.mixin;
+package me.mrhikmen.colorlight.client.mixin.sodium;
 
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
