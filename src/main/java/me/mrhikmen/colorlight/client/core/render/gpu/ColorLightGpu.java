@@ -30,7 +30,7 @@ import net.minecraft.resources.Identifier;
  *     <li>{@code DefaultChunkRenderer.render}: binds the volume's buffers for every terrain draw.</li>
  * </ol>
  * <b>Safety net.</b> The pipeline only turns on when all three mixins applied (they are skipped for Sodium versions
- * we haven't checked, see {@code ColorLightMixinPlugin}). If anything is missing at run time, {@link #fail} switches
+ * we haven't checked, see {@code colorlighting.mixins.json}). If anything is missing at run time, {@link #fail} switches
  * back to the vertex-colour pipeline and re-meshes. With another renderer in charge (Iris shader packs) the hooks
  * never run and the vertex-colour pipeline is not affected at all.
  * <p>
@@ -365,6 +365,18 @@ public final class ColorLightGpu {
             return null;
         GpuLightVolume v = volume;
         return v == null ? null : v.glBufferNames();
+    }
+
+    /**
+     * For Flywheel (plain OpenGL): OpenGL names of the volume's {header, data, pool} buffers, whichever way the volume
+     * keeps them (raw GL buffers, or blaze3d buffers on the OpenGL backend). Null when there are none: no volume yet,
+     * the pipeline failed or is off, or the device is not OpenGL.
+     */
+    public static int[] flywheelBuffers() {
+        if (failed || !gpuMode())
+            return null;
+        GpuLightVolume v = volume;
+        return v == null ? null : v.anyGlNames();
     }
 
     /** The engine reported these sections as changed. */

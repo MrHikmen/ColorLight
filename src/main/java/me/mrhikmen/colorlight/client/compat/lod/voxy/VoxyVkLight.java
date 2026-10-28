@@ -45,6 +45,8 @@ public final class VoxyVkLight {
     private static final long[] mapped = new long[SLOTS];
     /** Stamp of the table (cells + sources) each slot holds; -1 = nothing copied yet. */
     private static final long[] slotStamp = new long[SLOTS];
+    /** Stamp of the propagation method tables each slot holds; -1 = none copied yet. */
+    private static final long[] slotTablesStamp = new long[SLOTS];
 
     private static long currentHandle;
     private static long currentSize;
@@ -133,6 +135,7 @@ public final class VoxyVkLight {
         handles[slot] = bufferHandle.getLong(b);
         mapped[slot] = ptr;
         slotStamp[slot] = -1L;
+        slotTablesStamp[slot] = -1L;
     }
 
     private static void sync(int slot) {
@@ -144,7 +147,18 @@ public final class VoxyVkLight {
 
         long mirror = VoxyLightBridge.vkMirror;
         long stamp = VoxyLightBridge.vkStamp;
-        if (mirror == 0L || slotStamp[slot] == stamp)
+        if (mirror == 0L)
+            return;
+
+        // the distance tables of the propagation methods (only when the shader reads them); they change rarely
+        long tablesStamp = VoxyLightBridge.vkTablesStamp;
+        if (tablesStamp != 0L && slotTablesStamp[slot] != tablesStamp) {
+            long toff = (long) VoxyLightBridge.tablesOffsetInts() * Integer.BYTES;
+            MemoryUtil.memCopy(mirror + toff, base + toff, (long) VoxyLightBridge.tablesInts() * Integer.BYTES);
+            slotTablesStamp[slot] = tablesStamp;
+        }
+
+        if (slotStamp[slot] == stamp)
             return;
 
         // table first, then the sources it points into; only the used part of the source list is copied
@@ -169,6 +183,7 @@ public final class VoxyVkLight {
                 handles[i] = 0L;
                 mapped[i] = 0L;
                 slotStamp[i] = -1L;
+                slotTablesStamp[i] = -1L;
             }
         }
         currentHandle = 0L;

@@ -12,6 +12,10 @@ import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import org.lwjgl.opengl.GL15C;
 import org.lwjgl.opengl.GL45C;
@@ -141,6 +145,50 @@ public final class GpuLightVolume {
         if (!rawGl || !hasBuffers())
             return null;
         return new int[]{glHeader, glData, glPool};
+    }
+
+    private static java.lang.reflect.Field[] handleFields;
+
+    /**
+     * OpenGL name behind a blaze3d buffer of the OpenGL backend, 0 for anything else (Vulkan, closed buffer). The
+     * field is not part of any API, so every int field of the buffer class is looked at: "handle" / "id" first, then the
+     * others, and the first value that OpenGL itself calls a buffer name wins.
+     */
+    private static int glNameOf(GpuBuffer buffer) {
+        if (buffer == null || !buffer.getClass().getName().contains(".opengl."))
+            return 0; // never touch GL on another backend: there may be no GL context at all
+        try {
+            if (handleFields == null) {
+                java.util.List<java.lang.reflect.Field> found = new java.util.ArrayList<>();
+                for (Class<?> c = buffer.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (var f : c.getDeclaredFields()) {
+                        if (f.getType() == int.class && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                            f.setAccessible(true);
+                            found.add(f);
+                        }
+                    }
+                }
+                found.sort(java.util.Comparator.comparingInt(f -> f.getName().equals("handle") ? 0 : f.getName().equals("id") ? 1 : 2));
+                handleFields = found.toArray(new java.lang.reflect.Field[0]);
+            }
+            for (var f : handleFields) {
+                int v = f.getInt(buffer);
+                if (v > 0 && GL15C.glIsBuffer(v))
+                    return v;
+            }
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    /** OpenGL names of {header, data, pool} in either mode, or null if any is unknown (e.g. a Vulkan device). */
+    public int[] anyGlNames() {
+        if (rawGl)
+            return glBufferNames();
+        if (!hasBuffers())
+            return null;
+        int h = glNameOf(header_), d = glNameOf(data), p = glNameOf(pool);
+        return (h == 0 || d == 0 || p == 0) ? null : new int[]{h, d, p};
     }
 
     public GpuBuffer headerBuffer() {
@@ -357,8 +405,8 @@ public final class GpuLightVolume {
         if (--rescanTimer <= 0) {
             rescanTimer = RESCAN_TICKS;
             // light that was never reported as dirty to us: it existed before the volume did, or just entered the window
-            engine.forEachLitSection(key -> {
-                if (inWindow(PosKey.x(key), PosKey.y(key), PosKey.z(key)) && !slotOf.containsKey(key))
+            engine.forEachLitSectionNear(camSx, camSy, camSz, KEEP_RADIUS_XZ, KEEP_RADIUS_Y, key -> {
+                if (!slotOf.containsKey(key))
                     pending.add(key);
             });
         }
@@ -457,13 +505,35 @@ public final class GpuLightVolume {
 
     /** Sets {@link #OPAQUE_BIT} on every cell of the section that holds a light-blocking block. */
     private void markSolidCells(ClientLevel level, int sx, int sy, int sz) {
+        markSolid(level, sx, sy, sz, cells, cursor);
+    }
+
+    /**
+     * Reads the blocks straight from the chunk section (one chunk lookup instead of 4096) and skips sections that hold
+     * only air; an unloaded chunk or a section outside the build height reads as air, exactly like
+     * {@code Level.getBlockState} does.
+     */
+    public static void markSolid(ClientLevel level, int sx, int sy, int sz, int[] cells, BlockPos.MutableBlockPos cursor) {
+        int index = level.getSectionIndexFromSectionY(sy);
+        if (index < 0 || index >= level.getSectionsCount())
+            return;
+        ChunkAccess chunk = level.getChunk(sx, sz, ChunkStatus.FULL, false);
+        if (chunk == null)
+            return;
+        LevelChunkSection section = chunk.getSection(index);
+        if (section.hasOnlyAir())
+            return;
+
         int x0 = sx << 4, y0 = sy << 4, z0 = sz << 4;
         int i = 0;
         for (int y = 0; y < 16; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++, i++) {
+                    BlockState state = section.getBlockState(x, y, z);
+                    if (state.isAir())
+                        continue;
                     cursor.set(x0 + x, y0 + y, z0 + z);
-                    if (level.getBlockState(cursor).getLightDampening() >= 15)
+                    if (state.getLightDampening() >= 15)
                         cells[i] |= OPAQUE_BIT;
                 }
             }

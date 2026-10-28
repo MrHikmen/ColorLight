@@ -128,7 +128,7 @@ public final class NvidiumBridge {
             throw new IllegalStateException("fragment anchor not found");
         String var = use.group(1);
         src = src.substring(0, use.start())
-                + var + ".rgb *= cl_multiplier(v_colour);"
+                + "#ifndef OIT_ALPHA_ONLY\n        " + var + ".rgb *= cl_multiplier(v_colour);\n#else\n        " + var + ".rgb *= v_colour;\n#endif"
                 + src.substring(use.end());
 
         int main = src.lastIndexOf("void main()");

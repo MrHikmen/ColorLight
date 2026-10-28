@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.lod.voxy.mixin;
+package me.mrhikmen.colorlight.client.mixin.voxy;
 
 import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge;
 import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyVkLight;

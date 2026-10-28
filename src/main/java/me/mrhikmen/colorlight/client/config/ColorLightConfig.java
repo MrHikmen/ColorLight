@@ -35,6 +35,11 @@ public class ColorLightConfig {
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
     /**
+     * Per-channel fading of coloured light (as in Colorful Lighting by erykczy, MIT): where two lights of different colours
+     * overlap they blend into a new colour. Off: the hue of a light is kept while it fades.
+     */
+    public boolean ADDITIVE_MIX = true;
+    /**
      * Light the terrain per pixel in a shader (a copy of Sodium's terrain shader that reads a GPU light volume)
      * instead of baking colours into the chunk meshes. Only works with a Sodium version ColorLight was written
      * against, otherwise vertex colours are used. Switchable while playing; ignored while a shader pack is on.
@@ -79,6 +84,20 @@ public class ColorLightConfig {
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
+    /** Create: light-emitting blocks of moving contraptions become dynamic lights that follow them. */
+    public boolean CREATE_CONTRAPTION_LIGHT = true;
+
+    /** Sable sub-levels: light shared between the world and sub-levels. */
+    public boolean SABLE_CROSS_LIGHT = true;
+    public int SABLE_LIGHT_RANGE_BLOCKS = 15;
+    public boolean SABLE_SUBLEVEL_LIGHT = true;
+    /** Propagation method for the light of Sable sub-levels and Create contraptions; blank = the moving light method. */
+    public String SABLE_PROPAGATION = "";
+    public net.minecraft.resources.Identifier sablePropagationId() {
+        String raw = (SABLE_PROPAGATION == null || SABLE_PROPAGATION.isBlank()) ? DYNAMIC_PROPAGATION : SABLE_PROPAGATION;
+        return me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry.parse(raw);
+    }
+
     /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
     public List<String> userOverrides = new ArrayList<>();
 
@@ -108,6 +127,7 @@ public class ColorLightConfig {
                 mergeBlocks(loaded.blocks);
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
+                this.ADDITIVE_MIX = root.has("ADDITIVE_MIX") ? loaded.ADDITIVE_MIX : this.ADDITIVE_MIX;
                 this.GPU_PIPELINE = root.has("GPU_PIPELINE") ? loaded.GPU_PIPELINE : this.GPU_PIPELINE;
                 this.GPU_LIGHT_SECTIONS = loaded.GPU_LIGHT_SECTIONS >= 64 ? Math.min(4096, loaded.GPU_LIGHT_SECTIONS) : this.GPU_LIGHT_SECTIONS;
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
@@ -129,6 +149,13 @@ public class ColorLightConfig {
                 this.ENTITY_TRACKING_ENABLED = root.has("ENTITY_TRACKING_ENABLED") ? loaded.ENTITY_TRACKING_ENABLED : this.ENTITY_TRACKING_ENABLED;
                 this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
                 this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
+
+                this.CREATE_CONTRAPTION_LIGHT = root.has("CREATE_CONTRAPTION_LIGHT") ? loaded.CREATE_CONTRAPTION_LIGHT : this.CREATE_CONTRAPTION_LIGHT;
+
+                this.SABLE_CROSS_LIGHT = root.has("SABLE_CROSS_LIGHT") ? loaded.SABLE_CROSS_LIGHT : this.SABLE_CROSS_LIGHT;
+                this.SABLE_SUBLEVEL_LIGHT = root.has("SABLE_SUBLEVEL_LIGHT") ? loaded.SABLE_SUBLEVEL_LIGHT : this.SABLE_SUBLEVEL_LIGHT;
+                this.SABLE_PROPAGATION = loaded.SABLE_PROPAGATION != null ? loaded.SABLE_PROPAGATION : "";
+                this.SABLE_LIGHT_RANGE_BLOCKS = loaded.SABLE_LIGHT_RANGE_BLOCKS > 0 ? Math.min(32, loaded.SABLE_LIGHT_RANGE_BLOCKS) : this.SABLE_LIGHT_RANGE_BLOCKS;
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
             } catch (IOException e) {

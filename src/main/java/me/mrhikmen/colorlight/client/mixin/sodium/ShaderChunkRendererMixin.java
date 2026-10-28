@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.sodium.mixin;
+package me.mrhikmen.colorlight.client.mixin.sodium;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.BindGroupLayout;

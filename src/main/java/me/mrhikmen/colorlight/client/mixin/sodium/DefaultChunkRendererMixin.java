@@ -1,4 +1,4 @@
-package me.mrhikmen.colorlight.client.compat.sodium.mixin;
+package me.mrhikmen.colorlight.client.mixin.sodium;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.buffers.GpuBuffer;
