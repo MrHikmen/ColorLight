@@ -148,17 +148,38 @@ public final class GpuLightVolume {
     }
 
     private static java.lang.reflect.Field[] handleFields;
+    private static Class<?> handleFieldsClass;
+    private static boolean handleLookupReported;
 
     /**
      * OpenGL name behind a blaze3d buffer of the OpenGL backend, 0 for anything else (Vulkan, closed buffer). The
      * field is not part of any API, so every int field of the buffer class is looked at: "handle" / "id" first, then the
      * others, and the first value that OpenGL itself calls a buffer name wins.
      */
-    private static int glNameOf(GpuBuffer buffer) {
-        if (buffer == null || !buffer.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("opengl"))
+    private static int glNameOf(GpuBuffer frontendBuffer) {
+        if (frontendBuffer == null)
+            return 0;
+        Object buffer = frontendBuffer;
+        try {
+            // Renderpearl (26.3+) hands out frontend wrappers; the backend's own buffer is in the public field "backend"
+            for (Class<?> c = buffer.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                try {
+                    var bf = c.getDeclaredField("backend");
+                    bf.setAccessible(true);
+                    Object inner = bf.get(buffer);
+                    if (inner != null)
+                        buffer = inner;
+                    break;
+                } catch (NoSuchFieldException ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        if (!buffer.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("opengl"))
             return 0; // never touch GL on another backend: there may be no GL context at all
         try {
-            if (handleFields == null) {
+            if (handleFields == null || handleFieldsClass != buffer.getClass()) {
+                handleFieldsClass = buffer.getClass();
                 java.util.List<java.lang.reflect.Field> found = new java.util.ArrayList<>();
                 for (Class<?> c = buffer.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
                     for (var f : c.getDeclaredFields()) {
@@ -176,7 +197,18 @@ public final class GpuLightVolume {
                 if (v > 0 && GL15C.glIsBuffer(v))
                     return v;
             }
-        } catch (Throwable ignored) {
+            if (!handleLookupReported) {
+                handleLookupReported = true;
+                StringBuilder sb = new StringBuilder();
+                for (var f : handleFields)
+                    sb.append(f.getName()).append('=').append(f.getInt(buffer)).append(' ');
+                me.mrhikmen.colorlight.client.ColorLightClient.LOGGER.warn("[ColorLight] Flywheel: no OpenGL buffer name found in {} (int fields: {})", buffer.getClass().getName(), sb);
+            }
+        } catch (Throwable t) {
+            if (!handleLookupReported) {
+                handleLookupReported = true;
+                me.mrhikmen.colorlight.client.ColorLightClient.LOGGER.warn("[ColorLight] Flywheel: OpenGL buffer lookup failed", t);
+            }
         }
         return 0;
     }

@@ -21,8 +21,6 @@ public class Translatable {
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
     public static Component TINT_GAMMA = Component.translatable("me.colorlight.general.tint_gamma");
     public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
-    public static Component ADDITIVE_MIX = Component.translatable("me.colorlight.general.additive_mix");
-    public static Component ADDITIVE_MIX_Tooltip = Component.translatable("me.colorlight.general.additive_mix.tooltip");
     public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
     public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
 
@@ -107,11 +105,6 @@ public class Translatable {
         return pluralValue("me.colorlight.chunks_value", value);
     }
 
-    /**
-     * Picks the Russian-style plural form for {@code baseKey} ("1" for one, "1-5" for the few-form, the bare
-     * key otherwise) and falls back to the bare key's own translation for languages that don't define the
-     * suffixed forms, such as English.
-     */
     private static Component pluralValue(String baseKey, int value) {
         if (value == 1) return Component.translatable(baseKey + ".1", value);
         if (value % 10 > 1 && value % 10 < 5 && !(value % 100 >= 12 && value % 100 <= 14))

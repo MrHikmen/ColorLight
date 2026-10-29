@@ -12,19 +12,11 @@ public class BlockSettings {
     public int light;
     public boolean enable;
     public boolean edit;
-
-    /**
-     * Id of the {@link me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod} this block spreads
-     * with, e.g. {@code "colorlight:smooth"} or a resource pack's own id. Blank/absent means
-     * "use the engine-wide default" - existing configs without this field keep working unchanged.
-     */
     public String propagation = "";
 
-    /** Parsed form of {@link #block}; transient so Gson neither saves nor reads it. */
     private transient Identifier cachedId;
     private transient String cachedFor;
 
-    /** Parsed form of {@link #propagation}; transient so Gson neither saves nor reads it. */
     private transient Identifier cachedPropagationId;
     private transient String cachedPropagationFor;
 
@@ -34,7 +26,6 @@ public class BlockSettings {
         this.enable = enable;
     }
 
-    /** A detached copy (the cached parse results are not copied), so scripts can adjust it without touching the config. */
     public BlockSettings copy() {
         BlockSettings c = new BlockSettings(getBlock(), light, enable);
         c.r = r;
@@ -45,7 +36,6 @@ public class BlockSettings {
         return c;
     }
 
-    /** Parsing an Identifier on every call used to dominate config-wide scans; parse once per string value. */
     public Identifier getBlock() {
         String current = block;
         Identifier id = cachedId;
@@ -57,11 +47,6 @@ public class BlockSettings {
         return id;
     }
 
-    /**
-     * Parsed form of {@link #propagation}, or {@code null} when the block should use the engine's
-     * default propagation method (either because the field is blank, or - configs are hand-written
-     * and mods come and go - because the id it names isn't currently registered).
-     */
     public Identifier getPropagationId() {
         String current = propagation;
         if (current == null || current.isBlank())
