@@ -21,8 +21,6 @@ public class Translatable {
     public static Component SMOOTH_LIGHTING_Tooltip = Component.translatable("me.colorlight.general.smooth_lighting.tooltip");
     public static Component TINT_GAMMA = Component.translatable("me.colorlight.general.tint_gamma");
     public static Component TINT_GAMMA_Tooltip = Component.translatable("me.colorlight.general.tint_gamma.tooltip");
-    public static Component ADDITIVE_MIX = Component.translatable("me.colorlight.general.additive_mix");
-    public static Component ADDITIVE_MIX_Tooltip = Component.translatable("me.colorlight.general.additive_mix.tooltip");
     public static Component PROPAGATION_MODE = Component.translatable("me.colorlight.general.propagation_mode");
     public static Component PROPAGATION_MODE_Tooltip = Component.translatable("me.colorlight.general.propagation_mode.tooltip");
     public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");

@@ -22,7 +22,6 @@ public final class ColorLightApply {
         if (saveConfig)
             config.save();
 
-        me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil.setAdditiveMix(config.ADDITIVE_MIX);
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
         ColorLightBlockRegistry.load(config);
 
