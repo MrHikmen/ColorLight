@@ -88,14 +88,6 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 )
                                 .setDefaultValue(Math.round(config.TINT_GAMMA * 100f))
                         )
-                        .addOption(builder.createBooleanOption(ResourceLocation.parse("colorlight:additive_mix"))
-                                .setName(Translatable.ADDITIVE_MIX)
-                                .setTooltip(Translatable.ADDITIVE_MIX_Tooltip)
-                                .setStorageHandler(this::save)
-                                .setImpact(OptionImpact.MEDIUM)
-                                .setBinding(value -> config.ADDITIVE_MIX = value, () -> config.ADDITIVE_MIX)
-                                .setDefaultValue(config.ADDITIVE_MIX)
-                        )
                         .addOption(builder.createExternalButtonOption(ResourceLocation.parse("colorlight:propagation_mode"))
                                 .setName(Translatable.PROPAGATION_MODE)
                                 .setTooltip(Translatable.PROPAGATION_MODE_Tooltip)
@@ -235,7 +227,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean sable, boolean create) {
         ResourceLocation entityEnabledId = ResourceLocation.parse("colorlight:entity_tracking_enabled");
         ResourceLocation entityFollowId = ResourceLocation.parse("colorlight:entity_follow_render_distance");
-        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}.", ldl, voxy, distantHorizons);
+        ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}, sable - {}, create - {}.", ldl, voxy, distantHorizons, sable, create);
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.COMPATIBILITY);
         if (ldl) {
             page.addOptionGroup(builder.createOptionGroup()

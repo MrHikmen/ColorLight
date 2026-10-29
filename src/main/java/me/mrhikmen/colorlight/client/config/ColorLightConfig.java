@@ -34,7 +34,6 @@ public class ColorLightConfig {
     public boolean ENABLE = true;
     public int lightRangeBlocks = 15;
     public boolean SMOOTH_LIGHTING = true;
-    public boolean ADDITIVE_MIX = true;
     public float TINT_GAMMA = 0.55f;
     public String PROPAGATION_MODE = "colorlight:grid";
     public String DYNAMIC_PROPAGATION = "colorlight:smooth";
@@ -91,7 +90,6 @@ public class ColorLightConfig {
                 mergeBlocks(loaded.blocks);
                 this.lightRangeBlocks = loaded.lightRangeBlocks > 0 ? loaded.lightRangeBlocks : this.lightRangeBlocks;
                 this.SMOOTH_LIGHTING = loaded.SMOOTH_LIGHTING;
-                this.ADDITIVE_MIX = root.has("ADDITIVE_MIX") ? loaded.ADDITIVE_MIX : this.ADDITIVE_MIX;
                 this.TINT_GAMMA = loaded.TINT_GAMMA >= 0f ? loaded.TINT_GAMMA : this.TINT_GAMMA;
                 this.PROPAGATION_MODE = loaded.PROPAGATION_MODE != null ? loaded.PROPAGATION_MODE : this.PROPAGATION_MODE;
                 this.DYNAMIC_PROPAGATION = root.has("DYNAMIC_PROPAGATION") && loaded.DYNAMIC_PROPAGATION != null ? loaded.DYNAMIC_PROPAGATION : this.DYNAMIC_PROPAGATION;

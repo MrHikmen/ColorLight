@@ -15,8 +15,6 @@
   "me.colorlight.general.light_range.tooltip": "Maximum distance that colored light can spread.",
   "me.colorlight.general.smooth_lighting": "Smooth colored lighting",
   "me.colorlight.general.smooth_lighting.tooltip": "Blends colored light between neighboring blocks at each vertex for a softer appearance. When disabled, each face uses a single sample instead, which is cheaper.",
-  "me.colorlight.general.additive_mix": "Light intersection gradient",
-  "me.colorlight.general.additive_mix.tooltip": "On: If two different light sources are positioned close to each other, their overlap will blend smoothly, creating a new color at the point of intersection.\n\nOff: The light will transition more abruptly, without creating any new colors.",
   "me.colorlight.general.tint_gamma": "Tint vividness",
   "me.colorlight.general.tint_gamma.tooltip": "Curves how strongly a block's colour shows up, and how far from the light it lasts. 100% is linear: the colour needs strong light to be clearly visible and fades with the brightness. Lower values make the colour stand out sooner, even in dim spots; with the shader lighting, values near 0% also keep the hue fully saturated all the way to the edge of the light. Higher values keep it subtle until a block is nearly saturated.",
   "me.colorlight.general.propagation_mode": "Method of light propagation",

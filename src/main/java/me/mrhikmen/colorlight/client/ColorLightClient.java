@@ -47,7 +47,6 @@ public class ColorLightClient implements ClientModInitializer {
 
         config.load();
 
-        me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil.setAdditiveMix(config.ADDITIVE_MIX);
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
 
         ColorLightBlockRegistry.load(config);
