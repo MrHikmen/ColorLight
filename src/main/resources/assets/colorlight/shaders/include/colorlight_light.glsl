@@ -9,7 +9,20 @@
 //  - exception: full-bright quads (emissive models) are lit by vanilla at 15/15; they keep that
 //  - the block level is the smooth (trilinear) level from the volume, not vanilla's stepped 0..15
 //  - sky light is left alone, so daylight washes the tint out the way it should
+// COLORLIGHT: brightness curve of the light. Brighter close to the source, dimmer towards the edge.
+//   CL_CURVE_POWER > 1 pushes the weak (far) part down, CL_CURVE_GAIN lifts the strong (near) part.
+//   Equal to the old look at CL_CURVE_POWER = 1.0 and CL_CURVE_GAIN = 1.0.
+const float CL_CURVE_POWER = 1.3;
+const float CL_CURVE_GAIN = 1.3;
+
+float cl_shapeLevel(float lvl) {
+    return clamp(pow(max(lvl, 0.0), CL_CURVE_POWER) * CL_CURVE_GAIN, 0.0, 1.0);
+}
+
 vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
+    float rawLvl = lvl;
+    lvl = cl_shapeLevel(lvl);
+
     float tintStrength = cl_tintStrength();
     float tintGamma = cl_tintGamma();
 
@@ -52,7 +65,7 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     float kept = smoothstep(0.0, 0.06, lvl);
     float strength = clamp(tintStrength * mix(shaped, kept, retention) * coverage, 0.0, 1.0);
 
-    vec3 hue = cl / lvl; // brightest channel == 1
+    vec3 hue = cl / max(rawLvl, 0.0001); // brightest channel == 1
 
     // The block light's own contribution is recoloured to the light's hue at EVERY distance, daylight does not touch
     // it: when the tint faded out with daylight towards the edge of a light, what was left there was vanilla's
@@ -64,7 +77,10 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     // The sky/ambient part follows the hue too, so the sum does not run into the 1.0 ceiling (a bluish sky plus an
     // orange light saturated G and B into a white ring). This part does fade with daylight. With no light, by day
     // or on a full-bright quad it is exactly vanilla.
-    vec3 skyTinted = skyOnly * (vec3(1.0) + (hue - vec3(1.0)) * (strength * daylight));
+    // Far edge of a light: the block light adds little there, so the sky colour must not be recoloured yet (a blue sky
+    // times a yellow hue just goes muddy olive). The recolouring grows in with how much the block light adds.
+    float skyShare = smoothstep(0.0, 1.5, visPeak / max(skyPeak, 0.03));
+    vec3 skyTinted = skyOnly * (vec3(1.0) + (hue - vec3(1.0)) * (strength * daylight * skyShare));
     return clamp(skyTinted + blockTinted, vec3(0.0), vec3(1.0));
 }
 

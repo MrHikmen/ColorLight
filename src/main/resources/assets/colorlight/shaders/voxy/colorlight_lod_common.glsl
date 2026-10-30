@@ -77,6 +77,11 @@ vec3 cl_lightAt(vec3 pos) {
 
 // The colour of a surface with ColorLight's light on it: sky light from the quad (skyLevel) plus the block light cl (0..255
 // per channel, from cl_lightAt), shaped like colored_terrain.fsh does for the normal chunks. Returns the finished rgb.
+// Same brightness curve as CL_CURVE_POWER / CL_CURVE_GAIN in include/colorlight_light.glsl (keep the numbers in sync):
+// brighter close to the source, dimmer towards the edge of the reach.
+const float CL_LOD_CURVE_POWER = 1.3;
+const float CL_LOD_CURVE_GAIN = 1.3;
+
 vec3 cl_shade(uint skyLevel, vec3 cl) {
     float clPeak = max(cl.r, max(cl.g, cl.b));
     vec3 hue = cl / max(clPeak, 0.0001);
@@ -87,7 +92,7 @@ vec3 cl_shade(uint skyLevel, vec3 cl) {
     vec3 skyOnly = cl_getLm(skyLevel).rgb;
 
     // the block level is ColorLight's own (fractional, 0..15), looked up between two whole levels
-    float lv = clamp(clPeak / 255.0, 0.0, 1.0) * 15.0;
+    float lv = clamp(pow(clamp(clPeak / 255.0, 0.0, 1.0), CL_LOD_CURVE_POWER) * CL_LOD_CURVE_GAIN, 0.0, 1.0) * 15.0;
     uint lo = uint(floor(lv));
     uint hi = min(lo + 1u, 15u);
     float t = fract(lv);
@@ -114,7 +119,10 @@ vec3 cl_shade(uint skyLevel, vec3 cl) {
 
     float blockPeak = min(visPeak * vivid, 1.0);
     vec3 blockTinted = strength * (hue * blockPeak) + (1.0 - strength) * vis;
-    vec3 skyTinted = skyOnly * (vec3(1.0) + (hue - vec3(1.0)) * (strength * daylight));
+    // Far edge of a light: the block light adds little there, so the sky colour must not be recoloured yet (a blue sky
+    // times a yellow hue just goes muddy olive). The recolouring grows in with how much the block light adds.
+    float skyShare = smoothstep(0.0, 1.5, visPeak / max(skyPeak, 0.03));
+    vec3 skyTinted = skyOnly * (vec3(1.0) + (hue - vec3(1.0)) * (strength * daylight * skyShare));
     return clamp(skyTinted + blockTinted, vec3(0.0), vec3(1.0));
 }
 
