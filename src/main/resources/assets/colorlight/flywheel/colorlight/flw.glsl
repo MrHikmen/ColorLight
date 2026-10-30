@@ -113,11 +113,26 @@ vec3 cl_fetchLight(vec3 rel, vec3 n, ivec3 camBlock) {
     return (wsum > 0.0) ? (sum / (wsum * 255.0)) : vec3(0.0);
 }
 
-// Same shaping as include/colorlight_light.glsl (cl_lightColor); the lightmap is Flywheel's flw_lightTex.
+// Same look as the terrain: this is include/colorlight_light.glsl (cl_lightColor) with Flywheel's lightmap (flw_lightTex).
+// Brightness curve (keep the numbers in sync with include/colorlight_light.glsl). Brighter close to the source, dimmer towards the edge.
+//   CL_FLW_CURVE_POWER > 1 pushes the weak (far) part down, CL_FLW_CURVE_GAIN lifts the strong (near) part.
+//   Equal to the old look at CL_FLW_CURVE_POWER = 1.0 and CL_FLW_CURVE_GAIN = 1.0.
+const float CL_FLW_CURVE_POWER = 1.3;
+const float CL_FLW_CURVE_GAIN = 1.3;
+
+float cl_shapeLevel(float lvl) {
+    return clamp(pow(max(lvl, 0.0), CL_FLW_CURVE_POWER) * CL_FLW_CURVE_GAIN, 0.0, 1.0);
+}
+
 vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
+    // the hue comes from the raw light, the brightness from the shaped one
+    float rawLvl = lvl;
+    lvl = cl_shapeLevel(lvl);
+
     float tintStrength = cl_headerFloat(7);
     float tintGamma = cl_headerFloat(8);
 
+    // Sodium encodes light levels 0..15 as (level * 16 + 8) / 256
     float vanillaBlock = clamp((lightUV.x * 256.0 - 8.0) / 240.0, 0.0, 1.0);
     float vanillaSky = clamp((lightUV.y * 256.0 - 8.0) / 240.0, 0.0, 1.0);
     float fullBright = step(0.99, vanillaBlock) * step(0.99, vanillaSky);
@@ -126,33 +141,51 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     vec2 uv = vec2((blockLevel * 240.0 + 8.0) / 256.0, lightUV.y);
 
     // No volume light here (most of the world): the result below reduces exactly to the plain lightmap lookup
-    // (coverage = 0 -> amount = 0), so skip the other three lightmap fetches and the pow/smoothstep maths.
+    // (coverage = 0 -> no tint), so skip the second lightmap fetch and the pow/smoothstep maths.
     if (lvl <= 0.0) {
         return clamp(textureLod(flw_lightTex, uv, 0.0).rgb, vec3(0.0), vec3(1.0));
     }
 
     vec3 full = textureLod(flw_lightTex, uv, 0.0).rgb;
+    vec3 skyOnly = textureLod(flw_lightTex, vec2(8.0 / 256.0, uv.y), 0.0).rgb;          // block 0, sky level
 
-    // Day and night: the lightmap texture follows the time of day (and weather, night vision, dimension), so the
-    // sky-only colour below is bright by day and dark by night. The tint only shows as far as block light is what
-    // makes the pixel bright: fully at night, not at all under a bright sky (the CPU path's daylight factor).
-    vec3 skyOnly = textureLod(flw_lightTex, vec2(8.0 / 256.0, uv.y), 0.0).rgb;
+    // What the block light adds on top of the sky light, as the lightmap actually shows it (a bright sky saturates
+    // the sum, so by day this is small, which is how daylight washes a light out).
+    vec3 vis = max(full - skyOnly, vec3(0.0));
+    float visPeak = max(vis.r, max(vis.g, vis.b));
+
+    // Day and night: the tint of the sky/ambient part only shows as far as block light is what makes the pixel bright:
+    // fully at night, not at all under a bright sky.
     float fullPeak = max(full.r, max(full.g, full.b));
     float skyPeak = max(skyOnly.r, max(skyOnly.g, skyOnly.b));
     float blockShare = (fullPeak > 0.0001) ? clamp(1.0 - skyPeak / fullPeak, 0.0, 1.0) * 10.0 : 1.0;
     float daylight = smoothstep(0.0, 1.0, blockShare);
 
-    // The tint is the CPU pipeline's (ColorLightUtil.toArgb), multiplied with the lightmap like the CPU vertex colour:
-    // lerp(white, hue, 0.85 * intensity^gamma) per channel, faded back to white as sky light takes over. Same maths on
-    // both pipelines, so the GPU look is the CPU look, only per pixel.
-    float strength = clamp(0.85 * pow(max(lvl, 0.0001), tintGamma) * tintStrength, 0.0, 1.0);
-    vec3 hue = cl / lvl; // brightest channel == 1
-    vec3 tint = clamp(vec3(1.0) + (hue - vec3(1.0)) * strength, vec3(0.0), vec3(1.0));
-    // tint only what the volume contributes; a full-bright quad without volume light stays vanilla white
-    float coverage = clamp(lvl / max(blockLevel, 0.0001), 0.0, 1.0);
-    tint = mix(vec3(1.0), tint, daylight * coverage);
+    const float GAMMA_DEFAULT = 0.55;
+    float exponent = max(0.0, GAMMA_DEFAULT + (tintGamma - GAMMA_DEFAULT) * 3.0);
+    float vivid = 1.0 + max(GAMMA_DEFAULT - tintGamma, 0.0);
+    float retention = clamp(1.0 - tintGamma, 0.0, 1.0);
+    float shaped = pow(max(lvl, 0.0001), exponent);
+    float kept = smoothstep(0.0, 0.06, lvl);
+    float strength = clamp(tintStrength * mix(shaped, kept, retention) * coverage, 0.0, 1.0);
 
-    return clamp(full * tint, vec3(0.0), vec3(1.0));
+    vec3 hue = cl / max(rawLvl, 0.0001); // brightest channel == 1
+
+    // The block light's own contribution is recoloured to the light's hue at EVERY distance, daylight does not touch
+    // it: when the tint faded out with daylight towards the edge of a light, what was left there was vanilla's
+    // warm-white block light, a pale rim round the coloured light. The brightest channel of the hue is 1, so capping
+    // the scalar (not each channel) keeps the hue when vivid pushes the brightness past 1.
+    float blockPeak = min(visPeak * vivid, 1.0);
+    vec3 blockTinted = strength * (hue * blockPeak) + (1.0 - strength) * vis;
+
+    // The sky/ambient part follows the hue too, so the sum does not run into the 1.0 ceiling (a bluish sky plus an
+    // orange light saturated G and B into a white ring). This part does fade with daylight. With no light, by day
+    // or on a full-bright quad it is exactly vanilla.
+    // Far edge of a light: the block light adds little there, so the sky colour must not be recoloured yet (a blue sky
+    // times a yellow hue just goes muddy olive). The recolouring grows in with how much the block light adds.
+    float skyShare = smoothstep(0.0, 1.5, visPeak / max(skyPeak, 0.03));
+    vec3 skyTinted = skyOnly * (vec3(1.0) + (hue - vec3(1.0)) * (strength * daylight * skyShare));
+    return clamp(skyTinted + blockTinted, vec3(0.0), vec3(1.0));
 }
 
 // rel: position relative to camBlock (the camera block, or the anchor of a sub-level window).
