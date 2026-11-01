@@ -204,14 +204,20 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.BLOCK);
         for (BlockSettings entry : ColorLightClient.config.blocks) {
             Identifier block = entry.getBlock();
-            page.addOptionGroup(
-                    builder.createOptionGroup()
-                            .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + block.getPath()))
-                                    .setName(Component.translatable("block." + block.toLanguageKey()))
-                                    .setTooltip(Translatable.BLOCK_Tooltip)
-                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, liveEntry(entry), this::save, this::applyImmediately)))
-                            )
-            );
+            Component id = Component.translatable(block.toLanguageKey("block"));
+            if (id.getString().indexOf('.') != -1 && id.getString().substring(0, id.getString().indexOf('.')).endsWith("block")){
+                id = Component.translatable(block.toLanguageKey("item"));
+            }
+            if(id.getString().indexOf('.') == -1) {
+                page.addOptionGroup(
+                        builder.createOptionGroup()
+                                .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + block.getPath()))
+                                        .setName(id)
+                                        .setTooltip(Translatable.BLOCK_Tooltip)
+                                        .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, liveEntry(entry), this::save, this::applyImmediately)))
+                                )
+                );
+            }
         }
         return page;
     }
