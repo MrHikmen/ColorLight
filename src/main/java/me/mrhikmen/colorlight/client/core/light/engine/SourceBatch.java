@@ -49,15 +49,20 @@ public final class SourceBatch {
     /**
      * Reorders the entries so the ones closest to ({@code px}, {@code py}, {@code pz}) come first; the engine
      * floods them in this order, so light appears around the player before it appears further away.
+     * <p>
+     * The distance is that of the chunk <b>column</b> (16x16 blocks, full height) the source is in, and the sources of one
+     * column stay together: the engine floods the lamps of a column in one go, and a column cut in two would be flooded
+     * twice over the same area.
      */
     public void sortByDistance(int px, int py, int pz) {
-        if (size < 2)
+        if (size < 2 || size >= (1 << 20)) // the index below has 20 bits; a batch that large is not ordered
             return;
 
-        long[] order = new long[size]; // (squared distance << 20) | index: sorts by distance, ties by index
+        long[] order = new long[size]; // (squared distance of the column << 20) | index: sorts by distance, ties by index
         for (int i = 0; i < size; i++) {
-            long dx = PosKey.x(keys[i]) - px, dy = PosKey.y(keys[i]) - py, dz = PosKey.z(keys[i]) - pz;
-            long dist = Math.min(dx * dx + dy * dy + dz * dz, (1L << 40) - 1);
+            long dx = (long) ((PosKey.x(keys[i]) >> 4) * 16 + 8) - px;
+            long dz = (long) ((PosKey.z(keys[i]) >> 4) * 16 + 8) - pz;
+            long dist = Math.min(dx * dx + dz * dz, (1L << 40) - 1);
             order[i] = (dist << 20) | i;
         }
         Arrays.sort(order, 0, size);
@@ -78,6 +83,21 @@ public final class SourceBatch {
 
     public int size() {
         return size;
+    }
+
+    /** Appends every entry of {@code other} (used to flood the sources of several chunks together). */
+    public void addAll(SourceBatch other) {
+        int need = size + other.size;
+        if (need > keys.length) {
+            int cap = Math.max(need, keys.length << 1);
+            keys = Arrays.copyOf(keys, cap);
+            colors = Arrays.copyOf(colors, cap);
+            methods = Arrays.copyOf(methods, cap);
+        }
+        System.arraycopy(other.keys, 0, keys, size, other.size);
+        System.arraycopy(other.colors, 0, colors, size, other.size);
+        System.arraycopy(other.methods, 0, methods, size, other.size);
+        size = need;
     }
 
     public boolean isEmpty() {

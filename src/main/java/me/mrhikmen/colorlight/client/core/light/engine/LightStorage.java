@@ -1,6 +1,6 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
-import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
+import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import java.util.Arrays;
@@ -10,7 +10,8 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.LongConsumer;
 
 /**
- * Sparse 3D int grid holding packed light colours, organised as chunk columns of 16x16x16 sections.
+ * Sparse 3D grid of {@link LightCell}s (two lights + flags in a {@code long}), organised as chunk columns of 16x16x16
+ * sections.
  * <p>
  * Compared to the previous {@code ConcurrentHashMap<Long, AtomicIntegerArray>} layout this:
  * <ul>
@@ -26,9 +27,6 @@ import java.util.function.LongConsumer;
  */
 public final class LightStorage {
 
-    /** Only the low 24 bits carry colour; the top byte is free for engine flags. */
-    public static final int RGB_MASK = 0x00FFFFFF;
-
     private static final int COLUMN_BITS = 7;
     private static final int COLUMN_WINDOW = 1 << COLUMN_BITS;
     private static final int COLUMN_MASK = COLUMN_WINDOW - 1;
@@ -39,7 +37,7 @@ public final class LightStorage {
     private static final int SECTION_VOLUME = 16 * 16 * 16;
 
     private static final class Section {
-        final int[] cells = new int[SECTION_VOLUME];
+        final long[] cells = new long[SECTION_VOLUME];
         volatile int nonEmpty;
     }
 
@@ -96,13 +94,13 @@ public final class LightStorage {
         return col.sections.get(idx);
     }
 
-    /** Raw stored value (colour + any engine flags); 0 when nothing has ever been written there. */
-    public int get(int x, int y, int z) {
+    /** Raw stored cell (lights + any engine flags); 0 when nothing has ever been written there. */
+    public long get(int x, int y, int z) {
         Section s = sectionOrNull(x >> 4, y >> 4, z >> 4);
         return s == null ? 0 : s.cells[localIndex(x, y, z)];
     }
 
-    public void put(int x, int y, int z, int value) {
+    public void put(int x, int y, int z, long value) {
         int sx = x >> 4;
         int sy = y >> 4;
         int sz = z >> 4;
@@ -134,49 +132,49 @@ public final class LightStorage {
         }
 
         int li = localIndex(x, y, z);
-        int old = s.cells[li];
+        long old = s.cells[li];
         if (old == value)
             return;
         s.cells[li] = value;
 
-        boolean wasLit = (old & RGB_MASK) != 0;
-        boolean isLit = (value & RGB_MASK) != 0;
+        boolean wasLit = LightCell.isLit(old);
+        boolean isLit = LightCell.isLit(value);
         if (wasLit != isLit)
             s.nonEmpty += isLit ? 1 : -1;
     }
 
     /**
-     * Copies a section's colours (flags stripped) into {@code out}, indexed {@code (y << 8) | (z << 4) | x}.
+     * Copies a section's cells (flags stripped) into {@code out}, indexed {@code (y << 8) | (z << 4) | x}.
      *
      * @return true if the section holds any light; {@code out} is zero-filled otherwise
      */
-    public boolean copySection(int sx, int sy, int sz, int[] out) {
+    public boolean copySection(int sx, int sy, int sz, long[] out) {
         Section s = sectionOrNull(sx, sy, sz);
         if (s == null || s.nonEmpty <= 0) {
-            Arrays.fill(out, 0, SECTION_VOLUME, 0);
+            Arrays.fill(out, 0, SECTION_VOLUME, 0L);
             return false;
         }
-        int[] cells = s.cells;
+        long[] cells = s.cells;
         for (int i = 0; i < SECTION_VOLUME; i++)
-            out[i] = cells[i] & RGB_MASK;
+            out[i] = cells[i] & LightCell.SLOTS;
         return true;
     }
 
     /**
-     * Raises {@code out} to the per-channel maximum of itself and this section's colours (same indexing as
-     * {@link #copySection}).
+     * Adds the lights of this section to {@code out} (which {@link #copySection} filled, same indexing): each cell of
+     * {@code out} ends up with the lights of both.
      *
      * @return true if the section held any light
      */
-    public boolean mergeMaxInto(int sx, int sy, int sz, int[] out) {
+    public boolean mergeInto(int sx, int sy, int sz, long[] out) {
         Section s = sectionOrNull(sx, sy, sz);
         if (s == null || s.nonEmpty <= 0)
             return false;
-        int[] cells = s.cells;
+        long[] cells = s.cells;
         for (int i = 0; i < SECTION_VOLUME; i++) {
-            int v = cells[i] & RGB_MASK;
+            long v = cells[i] & LightCell.SLOTS;
             if (v != 0)
-                out[i] = ColorLightUtil.max(out[i], v);
+                out[i] = LightCell.merge(out[i], v);
         }
         return true;
     }

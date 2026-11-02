@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 /**
  * Immutable result of one dynamic light flood: the cells (sorted, for binary search) a moving light
- * currently touches and the colour it gives each of them. It lives in its own layer and is
+ * currently touches and the brightness it gives each of them, in the one colour (palette id) the light has. It lives in its own layer and is
  * never written into the static light field, which is what makes moving a light cheap - the old
  * position is forgotten by simply dropping the previous footprint, with no "darkening" pass through
  * whatever static light happens to overlap it.
@@ -14,15 +14,19 @@ import java.util.Arrays;
 public final class DynamicFootprint {
 
     final long[] keys;
-    final int[] colors;
+    /** Brightness (1..255) in each cell, parallel to {@link #keys}. */
+    final int[] levels;
+    /** Palette id of the light's colour. */
+    final int id;
     final int minX, minY, minZ, maxX, maxY, maxZ;
 
     /** Set when a block changed inside this footprint, meaning it must be recomputed even if the light didn't move. */
     volatile boolean stale;
 
-    DynamicFootprint(long[] sortedKeys, int[] colors) {
+    DynamicFootprint(long[] sortedKeys, int[] levels, int id) {
         this.keys = sortedKeys;
-        this.colors = colors;
+        this.levels = levels;
+        this.id = id;
 
         int loX = Integer.MAX_VALUE, loY = Integer.MAX_VALUE, loZ = Integer.MAX_VALUE;
         int hiX = Integer.MIN_VALUE, hiY = Integer.MIN_VALUE, hiZ = Integer.MIN_VALUE;
@@ -49,11 +53,11 @@ public final class DynamicFootprint {
                 && z >= minZ - margin && z <= maxZ + margin;
     }
 
-    /** Colour at the given cell, or 0 if this footprint doesn't cover it. */
-    int colorAt(int x, int y, int z, long key) {
+    /** Brightness at the given cell, or 0 if this footprint doesn't cover it. */
+    int levelAt(int x, int y, int z, long key) {
         if (x < minX || x > maxX || y < minY || y > maxY || z < minZ || z > maxZ)
             return 0;
         int i = Arrays.binarySearch(keys, key);
-        return i >= 0 ? colors[i] : 0;
+        return i >= 0 ? levels[i] : 0;
     }
 }

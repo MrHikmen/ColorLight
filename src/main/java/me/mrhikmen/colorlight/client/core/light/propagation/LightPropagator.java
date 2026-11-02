@@ -1,9 +1,7 @@
 package me.mrhikmen.colorlight.client.core.light.propagation;
 
-import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
-
 /**
- * A model for how light spreads outwards from cells that already hold light.
+ * A model for how light of one colour spreads outwards from cells that already hold it.
  *
  * @see TablePropagator the data-driven kernel behind every propagation method (grid, smooth, and any JSON file
  *      a resource pack supplies)
@@ -11,18 +9,15 @@ import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 public interface LightPropagator {
 
     /**
-     * Spreads light from every cell in {@code queue} (keys built with {@code PosKey.pack}) until nothing brighter can be
-     * reached. The queue is consumed. Cells that end up brighter are written through {@code field}.
+     * Spreads light of the colour with palette id {@code id} from the seeds until nothing brighter can be reached.
+     * <p>
+     * Only this colour is followed: what other colours left in the cells is neither carried on nor compared against.
+     * Because brightness only ever falls, the result of several seeds is the per-cell maximum of what each would give
+     * alone, whatever the order they are visited in - so seeds can be split between passes (or threads) freely.
+     * Cells that end up brighter are written through {@code field}.
+     *
+     * @param seedKeys   cell keys built with {@code PosKey.pack}
+     * @param seedLevels the brightness (1..255) each seed starts with
      */
-    void propagate(LongQueue queue, LightField field);
-
-    /**
-     * Like {@link #propagate}, but the light of this pass is followed on its own: what other passes (other colours) left
-     * in the cells is not mixed into what this pass carries on. Cells still end up with the per-channel maximum of the
-     * stored light and this pass's light. Used so that overlapping lights of different colours fade independently and
-     * only mix where they meet, instead of one light carrying the other's colour along as it spreads.
-     */
-    default void propagateIsolated(LongQueue queue, LightField field) {
-        propagate(queue, field);
-    }
+    void spread(int id, long[] seedKeys, int[] seedLevels, int seedCount, LightField field);
 }

@@ -106,18 +106,20 @@ public class ModelTextureResolver {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        if (modelJson.has("parent")) {
+        if (modelJson.has("parent") && modelJson.get("parent").isJsonPrimitive() && modelJson.get("parent").getAsJsonPrimitive().isString()) {
 
             Identifier parentId = Identifier.parse(modelJson.get("parent").getAsString());
             textures.putAll(resolveTextures(parentId, visited));
-
         }
-        if (modelJson.has("textures")) {
+        if (modelJson.has("textures") && modelJson.get("textures").isJsonObject()) {
 
             JsonObject localTextures = modelJson.getAsJsonObject("textures");
 
             for (Map.Entry<String, JsonElement> entry : localTextures.entrySet()) {
-                textures.put(entry.getKey(), entry.getValue().getAsString());
+                JsonElement value = entry.getValue();
+                if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+                    textures.put(entry.getKey(), value.getAsString());
+                }
             }
         }
         return textures;

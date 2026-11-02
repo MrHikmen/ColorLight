@@ -27,6 +27,10 @@ public final class ColorLightUtil {
         return packed == EMPTY;
     }
 
+    /**
+     * Only read by the LOD shaders' header now: the near-field flood keeps every light's hue fixed whatever this says
+     * (see {@code TablePropagator}).
+     */
     private static volatile boolean additiveMix = true;
 
     public static void setAdditiveMix(boolean value) {

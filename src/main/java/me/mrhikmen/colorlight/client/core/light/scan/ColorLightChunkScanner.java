@@ -5,6 +5,7 @@ import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.client.core.light.engine.LoadStats;
 import me.mrhikmen.colorlight.client.core.light.engine.SourceBatch;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -58,14 +59,91 @@ public final class ColorLightChunkScanner {
     }
 
     private static void submitApply(Runnable task) {
+        submitApply(task, true);
+    }
+
+    /** @param flushFirst whether sources waiting to be flooded must be in the engine before the task runs */
+    private static void submitApply(Runnable task, boolean flushFirst) {
         APPLY_IN_FLIGHT.incrementAndGet();
         APPLY_EXECUTOR.execute(() -> {
             try {
+                // whatever was found before this task must be in the engine before the task looks at it
+                if (flushFirst)
+                    flushPendingSources();
                 task.run();
             } finally {
                 APPLY_IN_FLIGHT.decrementAndGet();
             }
         });
+    }
+
+    // ---- sources of several chunks flooded together (apply thread only) ----------------------------------------
+
+    /** Enough waiting sources to flood right away instead of waiting for more chunks. */
+    private static final int FLUSH_SOURCES = 512;
+
+    private record PendingChunk(ClientLevel level, ChunkPos chunkPos, ColorLightEngine engine, SourceBatch found) {
+    }
+
+    /** Found sources whose chunk was scanned but not applied yet. Touched only on the apply thread. */
+    private static final ArrayList<PendingChunk> PENDING_SOURCES = new ArrayList<>();
+    private static int pendingSourceCount;
+    private static boolean flushScheduled;
+
+    /**
+     * Chunks stream in one by one, each with a handful of sources. Flooding every chunk on its own would never give the
+     * flood threads enough to share, and would read the world again for every chunk. So the apply thread collects what the
+     * scanners found while it was busy and floods all of it together, once it reaches the end of its queue (or has
+     * {@link #FLUSH_SOURCES} sources waiting). Every other task flushes first, so the order against unloads and block
+     * edits stays what it was.
+     */
+    private static void queueSources(PendingChunk chunk) {
+        PENDING_SOURCES.add(chunk);
+        pendingSourceCount += chunk.found().size();
+        if (pendingSourceCount >= FLUSH_SOURCES) {
+            flushPendingSources();
+        } else if (!flushScheduled) {
+            flushScheduled = true;
+            // queued behind everything already waiting: runs when no more chunks are ready to join
+            APPLY_IN_FLIGHT.incrementAndGet();
+            APPLY_EXECUTOR.execute(() -> {
+                try {
+                    flushScheduled = false;
+                    flushPendingSources();
+                } finally {
+                    APPLY_IN_FLIGHT.decrementAndGet();
+                }
+            });
+        }
+    }
+
+    private static void flushPendingSources() {
+        if (PENDING_SOURCES.isEmpty())
+            return;
+
+        ArrayList<PendingChunk> chunks = new ArrayList<>(PENDING_SOURCES);
+        PENDING_SOURCES.clear();
+        pendingSourceCount = 0;
+
+        try {
+            ColorLightEngine current = ColorLightEngineHolder.get();
+            SourceBatch all = new SourceBatch();
+            for (PendingChunk chunk : chunks) {
+                // the chunk may have unloaded, or the world been replaced, while this was queued
+                if (chunk.engine() != current || !chunk.level().hasChunk(chunk.chunkPos().x(), chunk.chunkPos().z()))
+                    continue;
+                all.addAll(chunk.found());
+            }
+            if (all.isEmpty() || current == null)
+                return;
+
+            var player = Minecraft.getInstance().player;
+            if (player != null)
+                all.sortByDistance(player.getBlockX(), player.getBlockY(), player.getBlockZ());
+            current.addSources(all);
+        } catch (Throwable t) {
+            ColorLightClient.LOGGER.warn("[ColorLight] Failed to apply light sources of {} chunks", chunks.size(), t);
+        }
     }
 
     private static Thread backgroundThread(Runnable runnable, String name) {
@@ -188,6 +266,7 @@ public final class ColorLightChunkScanner {
             if (engine == null)
                 return;
 
+            long scanStart = LoadStats.ON ? System.nanoTime() : 0L;
             SourceBatch found = new SourceBatch();
 
             chunk.findBlockLightSources((pos, state) -> {
@@ -208,27 +287,18 @@ public final class ColorLightChunkScanner {
                         Math.min(entry.light, emission), entry.getPropagationId());
             });
 
+            if (LoadStats.ON)
+                LoadStats.scan(System.nanoTime() - scanStart, found.size());
+
             if (!found.isEmpty()) {
                 var player = Minecraft.getInstance().player;
                 if (player != null)
                     found.sortByDistance(player.getBlockX(), player.getBlockY(), player.getBlockZ());
                 ChunkPos chunkPos = chunk.getPos();
-                submitApply(() -> applyFound(level, chunkPos, engine, found));
+                submitApply(() -> queueSources(new PendingChunk(level, chunkPos, engine, found)), false);
             }
         } catch (Throwable t) {
             ColorLightClient.LOGGER.warn("[ColorLight] Failed to scan chunk {}", chunk.getPos(), t);
-        }
-    }
-
-    private static void applyFound(ClientLevel level, ChunkPos chunkPos, ColorLightEngine engine, SourceBatch found) {
-        try {
-            // the chunk may have unloaded, or the world been replaced, while this was queued
-            if (engine != ColorLightEngineHolder.get() || !level.hasChunk(chunkPos.x(), chunkPos.z()))
-                return;
-
-            engine.addSources(found);
-        } catch (Throwable t) {
-            ColorLightClient.LOGGER.warn("[ColorLight] Failed to apply light sources of chunk {}", chunkPos, t);
         }
     }
 

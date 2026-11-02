@@ -12,7 +12,8 @@ uniform isamplerBuffer u_CLPool;
 
 const int CL_SECTION_RADIUS_XZ = 31;
 const int CL_SECTION_RADIUS_Y = 15;
-const int CL_OPAQUE_BIT = 1 << 24;
+const int CL_OPAQUE_BIT = 1 << 30;
+const int CL_TWO_LIGHTS_BIT = 1 << 29;
 
 // set by cl_flwApply, consumed by the patched common.frag instead of the lightmap lookup
 bool _cl_flwActive = false;
@@ -41,6 +42,28 @@ vec3 cl_cameraFrac() {
 // Sub-level (Sable) window: >= 0 selects the page table region of the sub-level volume; set by the apply file.
 int _cl_pageBase = -1;
 int cl_cellRawPlot(ivec3 cell, ivec3 camSection); // defined by the apply file (a stub without Sable)
+
+// Colour of palette id 1..255 (brightest channel 1.0); the palette follows the 16 header ints.
+vec3 cl_palette(int id) {
+    int rgb = texelFetch(u_CLHeader, 16 + id).r;
+    return vec3(float(rgb & 255), float((rgb >> 8) & 255), float((rgb >> 16) & 255)) / 255.0;
+}
+
+// The light colour (0..1 per channel) a cell word shows, same arithmetic as LightCell.packedToRgb:
+//   bit 29 clear: bits 0..23 are the colour itself (0x00BBGGRR). Bit 29 set: two lights, bits 0..7 I, 8..15 id1,
+//   16..23 id2, 24..28 ratio (second light = I * ratio / 31). Bit 30 opaque.
+// Each light is its palette hue scaled by its brightness; where two meet the brighter channel wins (never a sum).
+vec3 cl_decodeCell(int raw) {
+    if ((raw & CL_TWO_LIGHTS_BIT) == 0) {
+        // one light: the colour is already in the word (bits 0..23 = 0x00BBGGRR), no palette lookup
+        return vec3(float(raw & 255), float((raw >> 8) & 255), float((raw >> 16) & 255)) * (1.0 / 255.0);
+    }
+    float level = float(raw & 255);
+    vec3 c = cl_palette((raw >> 8) & 255) * level;
+    int ratio = (raw >> 24) & 31;
+    c = max(c, cl_palette((raw >> 16) & 255) * (level * float(ratio) / 31.0));
+    return c / 255.0;
+}
 
 // Per-invocation cache of the last world page-table lookup: the 8 taps of the trilinear filter nearly always share a
 // section, so the dependent u_CLData fetch happens once instead of up to 8 times.
@@ -75,6 +98,45 @@ int cl_cellRaw(ivec3 cell, ivec3 camSection) {
     return texelFetch(u_CLPool, (slot << 12) | (l.y << 8) | (l.z << 4) | l.x).r;
 }
 
+// One tap of the smooth filter: adds the cell's light with weight w, unless it is solid or its section is unknown.
+void cl_tap(ivec3 cell, float w, ivec3 camSection, inout vec3 sum, inout float wsum) {
+    if (w <= 0.0001) {
+        return;
+    }
+    int raw = cl_cellRaw(cell, camSection);
+    if (raw < 0 || (raw & CL_OPAQUE_BIT) != 0) {
+        return;
+    }
+    sum += w * cl_decodeCell(raw);
+    wsum += w;
+}
+
+// Smooth light for a face whose normal is a coordinate axis (every full-block face): the surface sits on a cell
+// plane, so only the 4 cells of that plane carry weight, a bilinear filter. Same result as the 8-tap loop below,
+// which spends the other 4 iterations on zero weights; this is the path nearly every pixel takes.
+vec3 cl_fetchLightPlanar(vec3 s, int axis, ivec3 camBlock, ivec3 camSection) {
+    vec3 fl = floor(s);
+    vec3 f = s - fl;
+    ivec3 base = ivec3(fl) + camBlock;
+    ivec3 u = (axis == 0) ? ivec3(0, 1, 0) : ivec3(1, 0, 0);
+    ivec3 v = (axis == 2) ? ivec3(0, 1, 0) : ivec3(0, 0, 1);
+    // along the normal the sample is meant to sit exactly on a cell centre: round, so float noise cannot pick the
+    // neighbouring plane
+    if (axis == 0) { base.x = int(floor(s.x + 0.5)) + camBlock.x; }
+    else if (axis == 1) { base.y = int(floor(s.y + 0.5)) + camBlock.y; }
+    else { base.z = int(floor(s.z + 0.5)) + camBlock.z; }
+    float fu = dot(f, vec3(u));
+    float fv = dot(f, vec3(v));
+
+    vec3 sum = vec3(0.0);
+    float wsum = 0.0;
+    cl_tap(base, (1.0 - fu) * (1.0 - fv), camSection, sum, wsum);
+    cl_tap(base + u, fu * (1.0 - fv), camSection, sum, wsum);
+    cl_tap(base + v, (1.0 - fu) * fv, camSection, sum, wsum);
+    cl_tap(base + u + v, fu * fv, camSection, sum, wsum);
+    return (wsum > 0.0) ? (sum / wsum) : vec3(0.0);
+}
+
 vec3 cl_fetchLight(vec3 rel, vec3 n, ivec3 camBlock) {
     ivec3 camSection = camBlock >> 4;
 
@@ -83,7 +145,19 @@ vec3 cl_fetchLight(vec3 rel, vec3 n, ivec3 camBlock) {
         if (raw < 0 || (raw & CL_OPAQUE_BIT) != 0) {
             return vec3(0.0);
         }
-        return vec3(float(raw & 255), float((raw >> 8) & 255), float((raw >> 16) & 255)) / 255.0;
+        return cl_decodeCell(raw);
+    }
+
+    vec3 an = abs(n);
+    int axis = (an.x > 0.999) ? 0 : ((an.y > 0.999) ? 1 : ((an.z > 0.999) ? 2 : -1));
+    if (axis >= 0) {
+        // only a face lying on a block boundary (not a slab top, a carpet...) is on a cell plane
+        vec3 sp = rel + n * 0.5 - 0.5;
+        float along = (axis == 0) ? sp.x : ((axis == 1) ? sp.y : sp.z);
+        float off = abs(along - floor(along + 0.5));
+        if (off < 0.002) {
+            return cl_fetchLightPlanar(sp, axis, camBlock, camSection);
+        }
     }
 
     vec3 s = rel + n * 0.5 - 0.5;
@@ -106,7 +180,7 @@ vec3 cl_fetchLight(vec3 rel, vec3 n, ivec3 camBlock) {
             continue;
         }
 
-        sum += w * vec3(float(raw & 255), float((raw >> 8) & 255), float((raw >> 16) & 255));
+        sum += w * cl_decodeCell(raw) * 255.0;
         wsum += w;
     }
 

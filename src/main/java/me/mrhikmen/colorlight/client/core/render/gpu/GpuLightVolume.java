@@ -7,7 +7,10 @@ import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
+import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
+import me.mrhikmen.colorlight.client.core.light.cell.LightPalette;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
+import me.mrhikmen.colorlight.client.core.light.engine.LoadStats;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -30,14 +33,16 @@ import java.util.Arrays;
  * <p>
  * <b>Layout</b> (mirrored by {@code shaders/include/colorlight_data.glsl} - change both together):
  * <ul>
- *     <li><b>header buffer</b>: {@link #HEADER_INTS} ints (camera, flags, tint settings), rewritten by mapping it,
- *     which is allowed while a render pass is open (a command-encoder write is not).</li>
+ *     <li><b>header buffer</b>: {@link #HEADER_INTS} ints (camera, flags, tint settings), then the light palette
+ *     ({@link #PALETTE_OFFSET} + id = the colour of palette id 1..255, {@code 0x00BBGGRR}, brightest channel 255);
+ *     rewritten by mapping it, which is allowed while a render pass is open (a command-encoder write is not).</li>
  *     <li><b>data buffer</b>: one int per
  *     section page: the {@link #pool} slot holding that section, or -1. Pages are addressed toroidally, so the
  *     window follows the camera without anything being moved.</li>
  *     <li><b>pool buffer</b>: slots of 4096 cells (16 KiB). A slot exists only for a section that holds light.
- *     Cell = {@code 0x00BBGGRR} light colour, bit 24 set for solid blocks (the shader leaves those out of its
- *     averages).</li>
+ *     Cell = {@code light I (bits 0-7) | id1 (8-15) | id2 (16-23) | ratio (24-29) | opaque (30)}, see
+ *     {@code LightCell.pack}: up to two lights per cell, each a palette id; the second one has {@code I * ratio / 63}.
+ *     The opaque bit marks solid blocks (the shader leaves those out of its averages).</li>
  * </ul>
  * Compared to baking colours into the chunk meshes this means a light change only rewrites a few KiB of GPU memory;
  * no chunk is rebuilt.
@@ -49,11 +54,14 @@ public final class GpuLightVolume {
 
     // ---- layout constants, mirrored in colorlight_data.glsl --------------------------------------------------
     public static final int HEADER_INTS = 16;
+    public static final int PALETTE_OFFSET = HEADER_INTS;
+    /** Header ints plus the palette entries (ids 1..255 live at {@link #PALETTE_OFFSET} + id). */
+    public static final int HEADER_TOTAL = PALETTE_OFFSET + 256;
     public static final int XZ_BITS = 6;
     public static final int Y_BITS = 5;
     public static final int PAGE_COUNT = 1 << (XZ_BITS * 2 + Y_BITS);
     public static final int SECTION_CELLS = 16 * 16 * 16;
-    public static final int OPAQUE_BIT = 1 << 24;
+    public static final int OPAQUE_BIT = LightCell.PACKED_OPAQUE_BIT;
 
     /** Shader window radii are 31 / 15 sections; sections are only kept within one less, so the window can't alias. */
     public static final int KEEP_RADIUS_XZ = 30;
@@ -93,8 +101,8 @@ public final class GpuLightVolume {
     private final int[] cells = new int[SECTION_CELLS];
     private final ByteBuffer sectionBytes = MemoryUtil.memAlloc(SECTION_CELLS * Integer.BYTES);
     private final ByteBuffer wordBytes = MemoryUtil.memAlloc(Integer.BYTES);
-    private final int[] header = new int[HEADER_INTS];
-    private final int[] lastHeader = new int[HEADER_INTS];
+    private final int[] header = new int[HEADER_TOTAL];
+    private final int[] lastHeader = new int[HEADER_TOTAL];
     private boolean headerWritten;
 
     private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
@@ -246,7 +254,7 @@ public final class GpuLightVolume {
         }
 
         var device = RenderSystem.getDevice();
-        header_ = device.createBuffer(() -> "ColorLight light header", USAGE, (long) HEADER_INTS * Integer.BYTES);
+        header_ = device.createBuffer(() -> "ColorLight light header", USAGE, (long) HEADER_TOTAL * Integer.BYTES);
         data = device.createBuffer(() -> "ColorLight light pages", USAGE, (long) PAGE_COUNT * Integer.BYTES);
         pool = device.createBuffer(() -> "ColorLight light pool", USAGE, (long) slotCount * SECTION_CELLS * Integer.BYTES);
 
@@ -269,11 +277,11 @@ public final class GpuLightVolume {
     }
 
     private void createRawBuffers() {
-        ByteBuffer headerInit = MemoryUtil.memCalloc(HEADER_INTS * Integer.BYTES); // disabled until the first writeHeader
+        ByteBuffer headerInit = MemoryUtil.memCalloc(HEADER_TOTAL * Integer.BYTES); // disabled until the first writeHeader
         ByteBuffer pagesInit = MemoryUtil.memAlloc(PAGE_COUNT * Integer.BYTES);
         try {
             MemoryUtil.memSet(pagesInit, 0xFF); // every page -1 = "no light here"
-            glHeader = createRawBuffer((long) HEADER_INTS * Integer.BYTES, headerInit);
+            glHeader = createRawBuffer((long) HEADER_TOTAL * Integer.BYTES, headerInit);
             glData = createRawBuffer((long) PAGE_COUNT * Integer.BYTES, pagesInit);
             glPool = createRawBuffer((long) slotCount * SECTION_CELLS * Integer.BYTES, null);
         } finally {
@@ -333,7 +341,7 @@ public final class GpuLightVolume {
     // Per-frame header (camera + settings). Must be called outside of a render pass.
     // ------------------------------------------------------------------------------------------------------
 
-    public void writeHeader(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ, boolean enabled, float tintGamma, boolean smooth) {
+    public void writeHeader(int camBlockX, int camBlockY, int camBlockZ, float fracX, float fracY, float fracZ, boolean enabled, float tintGamma, boolean smooth, LightPalette palette) {
         if (!hasBuffers())
             return;
 
@@ -352,6 +360,8 @@ public final class GpuLightVolume {
         header[7] = Float.floatToRawIntBits(TINT_STRENGTH);
         header[8] = Float.floatToRawIntBits(Math.max(0f, tintGamma));
         header[9] = smooth ? 1 : 0;
+        if (palette != null)
+            palette.copyTo(header, PALETTE_OFFSET);
 
         if (headerWritten && Arrays.equals(header, lastHeader))
             return;
@@ -362,12 +372,12 @@ public final class GpuLightVolume {
             // mapped, not written through the command encoder: this runs while Sodium's render pass is open
             try (var mapping = header_.map(false, true)) {
                 ByteBuffer bytes = mapping.data().order(ByteOrder.nativeOrder());
-                for (int i = 0; i < HEADER_INTS; i++)
+                for (int i = 0; i < HEADER_TOTAL; i++)
                     bytes.putInt(i * Integer.BYTES, header[i]);
             }
         }
 
-        System.arraycopy(header, 0, lastHeader, 0, HEADER_INTS);
+        System.arraycopy(header, 0, lastHeader, 0, HEADER_TOTAL);
         headerWritten = true;
     }
 
@@ -467,15 +477,20 @@ public final class GpuLightVolume {
         if (keys.length > 1)
             keys = nearestFirst(keys);
 
+        int maxUploads = MAX_UPLOADS_PER_TICK;
+        long budget = UPLOAD_BUDGET_NANOS;
+
         long start = System.nanoTime();
         int uploaded = 0;
         for (long key : keys) {
-            if (uploaded >= MAX_UPLOADS_PER_TICK || System.nanoTime() - start > UPLOAD_BUDGET_NANOS)
+            if (uploaded >= maxUploads || System.nanoTime() - start > budget)
                 break; // the rest stays pending for the next tick
             pending.remove(key);
             upload(engine, level, key);
             uploaded++;
         }
+        if (LoadStats.ON)
+            LoadStats.upload(uploaded, System.nanoTime() - start, keys.length);
     }
 
     private long[] nearestFirst(long[] keys) {
@@ -505,7 +520,7 @@ public final class GpuLightVolume {
             return;
         }
 
-        boolean lit = engine.copySectionColors(sx, sy, sz, cells);
+        boolean lit = engine.copySectionPacked(sx, sy, sz, cells);
         int slot = slotOf.get(key);
 
         if (!lit) {

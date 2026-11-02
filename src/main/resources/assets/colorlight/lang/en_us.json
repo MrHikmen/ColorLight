@@ -22,6 +22,11 @@
   "me.colorlight.compatibility.dynamic_propagation": "Moving light method",
   "me.colorlight.compatibility.dynamic_propagation.tooltip": "How the light of moving sources (e.g. entities with LambDynamicLights) spreads. Only methods defined by a table (not a custom propagate function) can be used; otherwise Smooth is used.",
 
+  "me.colorlight.general.performance": "Performance",
+  "me.colorlight.general.flood_threads": "Light threads",
+  "me.colorlight.general.flood_threads.tooltip": "How many CPU threads spread light at the same time when many lights are added at once (loading an area, placing many lamps). Automatic uses about a third of your threads. 1 = a single thread. More threads load light faster but take CPU time from the game. Applies immediately.",
+  "me.colorlight.general.flood_threads.auto": "Auto (%s)",
+  "me.colorlight.general.flood_threads.value": "%s",
   "me.colorlight.general.gpu_experiments": "GPU experiments",
   "me.colorlight.general.gpu_pipeline": "Shader lighting (GPU)",
   "me.colorlight.general.gpu_pipeline.tooltip": "Lights terrain per pixel in a shader instead of baking colours into chunk meshes. Smoother light, and light changes no longer rebuild chunks. Needs a Sodium version ColorLight supports, otherwise vertex colours are used automatically. Takes effect immediately. Can't be changed while a shader pack is on.",

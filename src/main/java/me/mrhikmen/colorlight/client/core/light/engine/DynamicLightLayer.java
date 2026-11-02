@@ -1,12 +1,13 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
+import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Holds the footprints of all currently tracked moving lights and the merged (per-channel max)
- * colour field they produce. Sampling reads {@code max(staticField, dynamicField)}, so the two never
+ * Holds the footprints of all currently tracked moving lights and the merged field of lights they produce
+ * (two strongest colours per cell, see {@link LightCell}). Sampling reads the static and the dynamic field together, so the two never
  * interfere: a moving light crossing a torch's glow costs exactly what it costs in an empty cave.
  * <p>
  * Mutations ({@link #replace}, {@link #remove}, {@link #clear}) must be serialised by the caller
@@ -69,7 +70,7 @@ final class DynamicLightLayer {
             for (int i = 0; i < fp.keys.length; i++) {
                 long key = fp.keys[i];
                 int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
-                write(x, y, z, single ? fp.colors[i] : merged(x, y, z, key));
+                write(x, y, z, single ? LightCell.insert(0L, fp.id, fp.levels[i]) : merged(x, y, z, key));
             }
         }
 
@@ -93,21 +94,17 @@ final class DynamicLightLayer {
         storage.clear();
     }
 
-    private int merged(int x, int y, int z, long key) {
-        int r = 0, g = 0, b = 0;
+    private long merged(int x, int y, int z, long key) {
+        long cell = 0L;
         for (DynamicFootprint f : active) {
-            int c = f.colorAt(x, y, z, key);
-            if (c == 0)
-                continue;
-            int cr = c & 0xFF, cg = (c >> 8) & 0xFF, cb = (c >> 16) & 0xFF;
-            if (cr > r) r = cr;
-            if (cg > g) g = cg;
-            if (cb > b) b = cb;
+            int level = f.levelAt(x, y, z, key);
+            if (level != 0)
+                cell = LightCell.insert(cell, f.id, level);
         }
-        return r | (g << 8) | (b << 16);
+        return cell;
     }
 
-    private void write(int x, int y, int z, int value) {
+    private void write(int x, int y, int z, long value) {
         if (storage.get(x, y, z) == value)
             return;
         storage.put(x, y, z, value);

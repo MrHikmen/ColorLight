@@ -4,8 +4,8 @@ package me.mrhikmen.colorlight.client.core.light.propagation;
  * What a {@link LightPropagator} needs from the place the light is stored. Implemented by the engine for the
  * world's static light and by the dynamic-light flood for the private field of one moving light.
  * <p>
- * A cell value holds the colour in its low 24 bits ({@code b << 16 | g << 8 | r}); the top byte belongs to the
- * owner (the engine keeps flags there) and must be handed back unchanged when a colour is written.
+ * Light is stored per colour: a cell holds a brightness (1..255) for each of up to two colours, named by their
+ * palette id (see {@code LightCell}); how that is laid out is the field's business, not the propagator's.
  */
 public interface LightField {
 
@@ -18,17 +18,10 @@ public interface LightField {
     /** Light dampening of the block at the position, 0 (air) to 15 (fully opaque, blocks light). */
     int opacityAt(int x, int y, int z);
 
-    /** Stored value of the cell, 0 if nothing was ever written there. */
-    int get(int x, int y, int z);
-
     /**
-     * The colour a seed cell starts an isolated pass with ({@link LightPropagator#propagateIsolated}): for a light source its
-     * own colour, which can differ from {@link #get} once other lights have raised the stored cell.
+     * The pass reached the cell with light of colour {@code id} at brightness {@code level} (1..255): make the cell
+     * hold at least that much of the colour. Called only when the brightness is higher than at any earlier call of the
+     * pass for this cell, so this is where "dirty" is recorded.
      */
-    default int seedColor(int x, int y, int z) {
-        return get(x, y, z);
-    }
-
-    /** Stores a new value. Only called when the colour actually changed, so this is where "dirty" is recorded. */
-    void set(int x, int y, int z, int value);
+    void raise(int x, int y, int z, int id, int level);
 }

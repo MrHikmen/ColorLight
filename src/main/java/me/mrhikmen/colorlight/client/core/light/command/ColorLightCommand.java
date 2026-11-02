@@ -50,6 +50,9 @@ public final class ColorLightCommand {
                                     .executes(ColorLightCommand::removeAtTarget))
                     )
 
+                    .then(ClientCommands.literal("cell")
+                            .executes(ColorLightCommand::debugCell))
+
                     .then(ClientCommands.literal("clear")
                             .executes(ColorLightCommand::clearAll))
 
@@ -75,6 +78,32 @@ public final class ColorLightCommand {
         }
 
         ctx.getSource().sendFeedback(Component.literal(engine.debugDaylight(pos)));
+        return 1;
+    }
+
+    /** Shows what the engine stores in the cell in front of the targeted face (the one the shader samples) and in the block itself. */
+    private static int debugCell(CommandContext<FabricClientCommandSource> ctx) {
+        ColorLightEngine engine = ColorLightEngineHolder.get();
+        if (engine == null) {
+            ctx.getSource().sendError(Translatable.ENGINE_OFF);
+            return 0;
+        }
+
+        BlockPos pos;
+        HitResult hit = Minecraft.getInstance().hitResult;
+        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
+            pos = blockHit.getBlockPos().relative(blockHit.getDirection());
+            ctx.getSource().sendFeedback(Component.literal("in front of the face:"));
+            ctx.getSource().sendFeedback(Component.literal(engine.debugCell(pos.getX(), pos.getY(), pos.getZ())));
+            pos = blockHit.getBlockPos();
+            ctx.getSource().sendFeedback(Component.literal("the targeted block:"));
+        } else {
+            var player = Minecraft.getInstance().player;
+            if (player == null) return 0;
+            pos = player.blockPosition();
+            ctx.getSource().sendFeedback(Component.literal("your cell:"));
+        }
+        ctx.getSource().sendFeedback(Component.literal(engine.debugCell(pos.getX(), pos.getY(), pos.getZ())));
         return 1;
     }
 

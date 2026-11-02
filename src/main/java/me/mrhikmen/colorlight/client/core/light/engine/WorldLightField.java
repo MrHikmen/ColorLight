@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
+import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightField;
 import me.mrhikmen.colorlight.client.core.light.util.PassMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
@@ -10,8 +11,8 @@ import net.minecraft.world.level.LevelAccessor;
 import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTables.MAX_OPACITY;
 
 /**
- * The {@link LightField} both propagation models spread through: block opacity comes from the level (looked up once
- * per cell per pass), values live in a {@link LightStorage}.
+ * The {@link LightField} the propagation methods spread through: block opacity comes from the level (looked up once
+ * per cell per pass), lights live in a {@link LightStorage} as {@link LightCell}s.
  * <ul>
  *     <li>For the world's static light it wraps the engine's storage and reports every stored change to a listener
  *     (that is how the engine learns which render sections became dirty).</li>
@@ -19,8 +20,7 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
  *     the result from the propagator's working values.</li>
  * </ul>
  * Both uses are deliberately the same class rather than two implementations of the interface: the propagators'
- * inner loops then only ever see one receiver type, which keeps the JIT able to inline them (with two
- * implementations live at once, SMOOTH ran about 10% slower).
+ * inner loops then only ever see one receiver type, which keeps the JIT able to inline them.
  * <p>
  * Holds scratch memory: single-threaded, one instance per user.
  */
@@ -58,6 +58,8 @@ final class WorldLightField implements LightField {
         if (cached >= 0)
             return (int) cached;
 
+        if (FloodStats.ON)
+            FloodStats.opacityLookup();
         scratchPos.set(x, y, z);
         int opacity = level.getBlockState(scratchPos).getLightDampening();
         opacity = Math.max(0, Math.min(MAX_OPACITY, opacity));
@@ -65,34 +67,17 @@ final class WorldLightField implements LightField {
         return opacity;
     }
 
-    /** Own colours of the light sources by position key (the engine's map; read under the engine's lock only). */
-    private me.mrhikmen.colorlight.client.core.light.util.LongIntMap sourceColors;
-
-    void setSourceColors(me.mrhikmen.colorlight.client.core.light.util.LongIntMap sourceColors) {
-        this.sourceColors = sourceColors;
-    }
-
     @Override
-    public int seedColor(int x, int y, int z) {
-        if (sourceColors != null) {
-            int own = sourceColors.get(PosKey.pack(x, y, z), -1);
-            if (own != -1)
-                return own;
-        }
-        return get(x, y, z);
-    }
-
-    @Override
-    public int get(int x, int y, int z) {
-        return storage == null ? 0 : storage.get(x, y, z);
-    }
-
-    @Override
-    public void set(int x, int y, int z, int value) {
+    public void raise(int x, int y, int z, int id, int level) {
         if (storage == null)
             return;
 
-        storage.put(x, y, z, value);
+        long cell = storage.get(x, y, z);
+        long next = LightCell.insert(cell, id, level);
+        if (next == cell)
+            return;
+
+        storage.put(x, y, z, next);
         if (onStored != null)
             onStored.cellChanged(x, y, z);
     }

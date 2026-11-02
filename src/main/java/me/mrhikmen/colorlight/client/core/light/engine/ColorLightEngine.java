@@ -2,6 +2,8 @@ package me.mrhikmen.colorlight.client.core.light.engine;
 
 import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
 import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
+import me.mrhikmen.colorlight.client.core.light.cell.LightPalette;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
 import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
@@ -42,24 +44,45 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
  *     <li><b>Dynamic lights live in their own layer</b> ({@link DynamicLightLayer}); sampling returns
  *     {@code max(static, dynamic)}. Moving a light never runs a darkening pass through static light.</li>
  * </ul>
- * The stored int per cell is {@code flags(8) | b(8) | g(8) | r(8)}; flags mark a cell as a source
- * (and which propagation model it uses) so {@link #hasSource} is a lock-free single read.
+ * The stored value per cell is a {@link LightCell}: up to two lights (a brightness and the id of a colour in the
+ * {@link #palette()}) plus flags that mark the cell as a source (and which propagation model it uses), so
+ * {@link #hasSource} is a lock-free single read. A flood spreads one number, the brightness of one colour; the colour
+ * itself never changes on the way.
  */
 public class ColorLightEngine {
 
     protected static final int VANILLA_MAX_OPACITY = MAX_OPACITY;
 
-    static final int FLAG_SOURCE = 1 << 24;
+    /** The engine's flags live in the top bits of a {@link LightCell}. */
+    private static final long FLAG_MASK = LightCell.FLAGS;
+    /** The flags the engine itself sets (the rest of the flag bits belong to {@link LightCell}). */
+    private static final long ENGINE_FLAGS = (1L << 32) | (1L << 34);
+
+    static final long FLAG_SOURCE = 1L << 32;
     /**
      * Set on a source cell that spreads with a propagation method other than the engine's default one -
      * which method exactly is looked up in {@link #customMethodByKey}, since an arbitrary number of
      * methods (from resource pack JSON or other mods) can't each get their own bit here. A source without this
      * flag uses the default method.
      */
-    static final int FLAG_CUSTOM = 1 << 26;
+    static final long FLAG_CUSTOM = 1L << 34;
 
-    /** How many sources are flooded per lock acquisition when adding a batch (keeps game-thread stalls short). */
-    private static final int BATCH_GROUP_SIZE = 4;
+    /**
+     * How many sources are placed and flooded together when adding a batch. With several flood threads the floods of a
+     * group run side by side, so a group must hold enough sources to be worth splitting (a group of 4 never reached
+     * {@link ParallelFlood#MIN_SEEDS}, so extra threads did nothing).
+     */
+    /** Most seeds (of one colour, in one chunk column) flooded in one go, see {@link #buildTasks}. {@code -Dcolorlight.flood.maxseeds=N}. */
+    private static final int MAX_TASK_SEEDS = Integer.getInteger("colorlight.flood.maxseeds", 8192);
+
+    /** {@code -Dcolorlight.batch.group=N} forces the group size (for measuring). */
+    private static final int GROUP_OVERRIDE = Integer.getInteger("colorlight.batch.group", 0);
+
+    private int batchGroupSize() {
+        if (GROUP_OVERRIDE > 0)
+            return GROUP_OVERRIDE;
+        return 1024;
+    }
 
     private static final long[] NO_KEYS = new long[0];
     private static final long TIME_FACTOR_TTL_NANOS = 50_000_000L;
@@ -78,20 +101,55 @@ public class ColorLightEngine {
      * that method is actually used by this engine. Only touched while holding {@link #lock}.
      */
     private final Map<Identifier, LightPropagator> customPropagators = new HashMap<>();
+    /** Cells to flood again from what they store (after a removal), by the method they spread with. Guarded by {@link #lock}. */
     private final Map<Identifier, LongQueue> customQueues = new HashMap<>();
-    /** Seed queues of sources, one per (method, colour hue): each is flooded on its own, see {@link LightPropagator#propagateIsolated}. */
-    private record HueQueueKey(Identifier method, int hue) {}
-    private final Map<HueQueueKey, LongQueue> hueQueues = new HashMap<>();
+
+    /** What one flood spreads: one colour (palette id) with one propagation method. */
+    private record JobKey(Identifier method, int id) {}
+
+    /** Seeds of one flood: cell keys and the brightness each starts with. */
+    private static final class SeedList {
+        long[] keys = new long[16];
+        int[] levels = new int[16];
+        int size;
+
+        void add(long key, int level) {
+            if (size == keys.length) {
+                keys = java.util.Arrays.copyOf(keys, size << 1);
+                levels = java.util.Arrays.copyOf(levels, size << 1);
+            }
+            keys[size] = key;
+            levels[size] = level;
+            size++;
+        }
+
+        void clear() {
+            size = 0;
+            if (keys.length > (1 << 15)) { // don't keep the arrays of a huge batch alive
+                keys = new long[16];
+                levels = new int[16];
+            }
+        }
+    }
+
+    /** Sources (and re-seeded cells) waiting to be flooded, one list per flood. Guarded by {@link #lock}. */
+    private final Map<JobKey, SeedList> jobs = new HashMap<>();
     /** key -> propagation method id, for sources whose method isn't the engine default. Guarded by {@link #lock}. */
     private final Map<Long, Identifier> customMethodByKey = new HashMap<>();
 
     private final LightStorage data = new LightStorage();
+    /** The static sources by section; kept in step with {@link #sourceColors}. Guarded by {@link #lock}. */
+    private final SourceIndex sourceIndex = new SourceIndex();
     private final DynamicLightLayer dynamic;
+    /** The colours of this world's lights; ids are never reused, so stored cells stay valid. */
+    private final LightPalette palette = new LightPalette();
 
     /** key -> the source's own (pre-spread) colour. Guarded by {@link #lock}. */
     private final LongIntMap sourceColors = new LongIntMap(256);
     /** Sections changed by the mutation currently running. Guarded by {@link #lock}; published by {@link #unlock()}. */
     private final LongIntMap dirtySections = new LongIntMap(256);
+    /** The section most recently marked by {@link #markDirty} (a flood marks the same one thousands of times in a row). */
+    private long lastDirtySection = Long.MIN_VALUE;
     /**
      * Sections waiting to be handed to the renderer. Guarded by its own tiny monitor, so the game thread
      * can read and add to it without ever waiting for a flood that holds {@link #lock}. Floods publish into it
@@ -104,8 +162,14 @@ public class ColorLightEngine {
 
     // ---- scratch state, only touched while holding the lock ----
     private final PassMap seedSeen = new PassMap(1 << 10);
+    /**
+     * Set when taking light away touched a cell that had no room for one of its colours ({@link LightCell#OVERFLOW}):
+     * what such a cell hides cannot be followed cell by cell, so the surroundings are rebuilt, see {@link #rebuildAround}.
+     */
+    private boolean rebuildNeeded;
     private final LongQueue darkenKeys = new LongQueue(1 << 10);
-    private final IntQueue darkenColors = new IntQueue(1 << 10);
+    private final IntQueue darkenIds = new IntQueue(1 << 10);
+    private final IntQueue darkenLevels = new IntQueue(1 << 10);
 
     private volatile int sourceVersion;
     private volatile SourceSnapshot snapshot;
@@ -119,6 +183,7 @@ public class ColorLightEngine {
             if (!dirtySections.isEmpty()) {
                 long[] keys = dirtySections.keysToArray();
                 dirtySections.clear();
+                lastDirtySection = Long.MIN_VALUE;
                 synchronized (externalDirty) {
                     for (long key : keys) {
                         externalDirty.put(key, 1);
@@ -146,7 +211,7 @@ public class ColorLightEngine {
         this.defaultMethodId = PropagationMethodRegistry.contains(defaultMethodId) ? defaultMethodId : PropagationMethodRegistry.GRID;
         this.dynamicMethodId = (dynamicMethodId != null) ? dynamicMethodId : PropagationMethodRegistry.SMOOTH;
         this.staticField = new WorldLightField(level, data, this::markDirty);
-        this.staticField.setSourceColors(sourceColors);
+        this.parallel = new ParallelFlood(level, this::newPropagator);
         this.dynamic = new DynamicLightLayer(this::markDirty);
     }
 
@@ -173,18 +238,24 @@ public class ColorLightEngine {
     }
 
     public int getColor(int x, int y, int z) {
-        int color = data.get(x, y, z) & RGB_MASK;
+        long cell = data.get(x, y, z) & LightCell.SLOTS;
         if (dynamic.isActive()) {
-            int dyn = dynamic.storage().get(x, y, z);
+            long dyn = dynamic.storage().get(x, y, z);
             if (dyn != 0)
-                color = ColorLightUtil.max(color, dyn);
+                cell = LightCell.merge(cell, dyn);
         }
-        return color;
+        return cell == 0 ? 0 : LightCell.toRgb(cell, palette);
     }
 
     /** Static (block) light only - what block edits can affect. */
     public int getStaticColor(BlockPos pos) {
-        return data.get(pos.getX(), pos.getY(), pos.getZ()) & RGB_MASK;
+        long cell = data.get(pos.getX(), pos.getY(), pos.getZ()) & LightCell.SLOTS;
+        return cell == 0 ? 0 : LightCell.toRgb(cell, palette);
+    }
+
+    /** The colours the lights of this world use; the GPU needs it to turn the ids in a packed cell back into colours. */
+    public LightPalette palette() {
+        return palette;
     }
 
     /** Lock-free: reads the source flag stored with the cell. */
@@ -322,17 +393,22 @@ public class ColorLightEngine {
 
         boolean changed = false;
         int total = batch.size();
-        for (int from = 0; from < total; from += BATCH_GROUP_SIZE) {
-            int to = Math.min(total, from + BATCH_GROUP_SIZE);
+        int groupSize = batchGroupSize();
+        for (int from = 0; from < total; from += groupSize) {
+            int to = Math.min(total, from + groupSize);
             lock.lock();
             try {
+                long t0 = FloodStats.ON ? System.nanoTime() : 0L;
                 clearCustomQueuesLocked();
                 for (int i = from; i < to; i++) {
                     long key = batch.key(i);
                     Identifier methodId = resolveMethod(batch.method(i));
                     changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), methodId);
                 }
+                long t1 = FloodStats.ON ? System.nanoTime() : 0L;
                 flushQueuesLocked();
+                if (FloodStats.ON)
+                    FloodStats.group(to - from, t1 - t0, System.nanoTime() - t1);
             } finally {
                 unlock();
             }
@@ -349,11 +425,11 @@ public class ColorLightEngine {
     /** Writes the source cell and queues it as a seed; the caller floods afterwards. @return whether anything changed */
     private boolean placeSourceLocked(int x, int y, int z, int packed, Identifier methodId) {
         long key = PosKey.pack(x, y, z);
-        int flags = FLAG_SOURCE | methodFlags(methodId);
+        long flags = FLAG_SOURCE | methodFlags(methodId);
 
-        int existing = data.get(x, y, z);
+        long existing = data.get(x, y, z);
         if ((existing & FLAG_SOURCE) != 0) {
-            boolean sameFlags = (existing & FLAG_MASK) == flags;
+            boolean sameFlags = (existing & ENGINE_FLAGS) == flags;
             boolean sameMethod = sameFlags && ((flags & FLAG_CUSTOM) == 0 || methodId.equals(customMethodByKey.get(key)));
             if (sameMethod && sourceColors.get(key, -1) == packed)
                 return false; // identical source already there
@@ -365,6 +441,7 @@ public class ColorLightEngine {
         }
 
         sourceColors.put(key, packed);
+        sourceIndex.add(key);
         if ((flags & FLAG_CUSTOM) != 0) {
             customMethodByKey.put(key, methodId);
         } else {
@@ -372,11 +449,15 @@ public class ColorLightEngine {
         }
         sourceVersion++;
 
-        int merged = ColorLightUtil.max(existing & RGB_MASK, packed);
+        // the light the source itself gives: its brightest channel as the brightness, its hue as the colour
+        int level = LightPalette.peakOf(packed);
+        int id = palette.idFor(packed);
+        long merged = LightCell.insert(existing & (LightCell.SLOTS | LightCell.OVERFLOW), id, level);
         data.put(x, y, z, flags | merged);
         markDirty(x, y, z);
 
-        hueQueueFor(methodId, hueOf(packed)).add(key);
+        if (level > 0)
+            seedList(methodId, id).add(key, level);
         return true;
     }
 
@@ -391,16 +472,17 @@ public class ColorLightEngine {
 
     private void removeSourceLocked(int x, int y, int z) {
         long key = PosKey.pack(x, y, z);
-        int cell = data.get(x, y, z);
+        long cell = data.get(x, y, z);
         if ((cell & FLAG_SOURCE) == 0)
             return;
 
         sourceColors.remove(key);
+        sourceIndex.remove(key);
         customMethodByKey.remove(key);
         sourceVersion++;
 
-        int old = cell & RGB_MASK;
-        data.put(x, y, z, 0);
+        long old = cell & LightCell.SLOTS;
+        data.put(x, y, z, 0L);
         if (old != 0)
             markDirty(x, y, z);
 
@@ -419,7 +501,7 @@ public class ColorLightEngine {
         try {
             dynamic.markStaleAround(x, y, z);
 
-            int cell = data.get(x, y, z);
+            long cell = data.get(x, y, z);
             if ((cell & FLAG_SOURCE) != 0)
                 return;
             if (!hasStaticLightNear(x, y, z))
@@ -433,8 +515,8 @@ public class ColorLightEngine {
                 snapshotRegion(x, y, z, radius);
 
             long key = PosKey.pack(x, y, z);
-            int old = cell & RGB_MASK;
-            data.put(x, y, z, 0);
+            long old = cell & LightCell.SLOTS;
+            data.put(x, y, z, 0L);
             if (old != 0)
                 markDirty(x, y, z);
 
@@ -443,8 +525,8 @@ public class ColorLightEngine {
             seedOnce(defaultMethodId, key);
             for (int n = 0; n < NEIGHBOR_COUNT; n++) {
                 int nx = x + NEIGHBOR_DX[n], ny = y + NEIGHBOR_DY[n], nz = z + NEIGHBOR_DZ[n];
-                int nCell = data.get(nx, ny, nz);
-                if ((nCell & RGB_MASK) == 0 && (nCell & FLAG_SOURCE) == 0)
+                long nCell = data.get(nx, ny, nz);
+                if (!LightCell.isLit(nCell) && (nCell & FLAG_SOURCE) == 0)
                     continue; // nothing there that could spread into the changed cell
                 long nKey = PosKey.pack(nx, ny, nz);
                 seedOnce(methodIdOf(nCell, nKey), nKey);
@@ -452,19 +534,21 @@ public class ColorLightEngine {
 
             flushQueuesLocked();
 
-            if (snapshot && regionUnchanged(x, y, z, radius))
+            if (snapshot && regionUnchanged(x, y, z, radius)) {
                 dirtySections.clear();
+                lastDirtySection = Long.MIN_VALUE;
+            }
         } finally {
             unlock();
         }
     }
 
-    private int[] regionSnapshot = new int[0];
+    private long[] regionSnapshot = new long[0];
 
     private void snapshotRegion(int cx, int cy, int cz, int r) {
         int side = 2 * r + 1;
         if (regionSnapshot.length < side * side * side)
-            regionSnapshot = new int[side * side * side];
+            regionSnapshot = new long[side * side * side];
         int i = 0;
         for (int y = cy - r; y <= cy + r; y++)
             for (int z = cz - r; z <= cz + r; z++)
@@ -494,7 +578,7 @@ public class ColorLightEngine {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    if ((data.get(x + dx, y + dy, z + dz) & RGB_MASK) != 0)
+                    if (LightCell.isLit(data.get(x + dx, y + dy, z + dz)))
                         return true;
                 }
             }
@@ -511,6 +595,7 @@ public class ColorLightEngine {
             data.clear();
             dynamic.clear();
             sourceColors.clear();
+            sourceIndex.clear();
             customMethodByKey.clear();
             sourceVersion++;
         } finally {
@@ -561,6 +646,7 @@ public class ColorLightEngine {
 
             for (int i = 0; i < count[0]; i++) {
                 sourceColors.remove(holder[0][i]);
+                sourceIndex.remove(holder[0][i]);
                 customMethodByKey.remove(holder[0][i]);
             }
             if (count[0] > 0)
@@ -579,14 +665,14 @@ public class ColorLightEngine {
     // =====================================================================================
 
     /** Which flag bit(s) to set on a source cell for {@code methodId} - none for the default method, see {@link #FLAG_CUSTOM}. */
-    private int methodFlags(Identifier methodId) {
+    private long methodFlags(Identifier methodId) {
         if (methodId == null || defaultMethodId.equals(methodId))
             return 0;
         return FLAG_CUSTOM;
     }
 
     /** The propagation method a stored cell actually spreads with; {@code key} is only consulted for a non-default source. */
-    private Identifier methodIdOf(int cell, long key) {
+    private Identifier methodIdOf(long cell, long key) {
         if ((cell & FLAG_SOURCE) == 0)
             return defaultMethodId; // an ordinary (non-source) cell always falls back to the engine default
         if ((cell & FLAG_CUSTOM) != 0)
@@ -596,65 +682,162 @@ public class ColorLightEngine {
 
     /** The propagator for {@code methodId}, created and cached on first use. Call only while holding {@link #lock}. */
     private LightPropagator propagatorFor(Identifier methodId) {
-        return customPropagators.computeIfAbsent(methodId == null ? defaultMethodId : methodId, id -> {
-            JsonPropagationMethod method = PropagationMethodRegistry.get(id);
-            if (method == null)
-                method = PropagationMethodRegistry.get(defaultMethodId); // unregistered in the meantime
-            if (method == null)
-                method = PropagationMethodRegistry.get(PropagationMethodRegistry.GRID);
-            return method.create(decayPerOpacityUnit);
-        });
+        return customPropagators.computeIfAbsent(methodId == null ? defaultMethodId : methodId, this::newPropagator);
     }
 
-    /** The seed queue for {@code methodId}, created on first use. Call only while holding {@link #lock}. */
+    /** A fresh propagator for a method (they hold scratch memory, so every thread needs its own). Thread-safe. */
+    private LightPropagator newPropagator(Identifier id) {
+        JsonPropagationMethod method = PropagationMethodRegistry.get(id);
+        if (method == null)
+            method = PropagationMethodRegistry.get(defaultMethodId); // unregistered in the meantime
+        if (method == null)
+            method = PropagationMethodRegistry.get(PropagationMethodRegistry.GRID);
+        return method.create(decayPerOpacityUnit);
+    }
+
+    /** The re-seed queue for {@code methodId}, created on first use. Call only while holding {@link #lock}. */
     private LongQueue queueFor(Identifier methodId) {
         return customQueues.computeIfAbsent(methodId == null ? defaultMethodId : methodId, id -> new LongQueue(1 << 8));
     }
 
+    /** The seeds of the flood of one colour with one method, created on first use. Call only while holding {@link #lock}. */
+    private SeedList seedList(Identifier methodId, int id) {
+        return jobs.computeIfAbsent(new JobKey(methodId == null ? defaultMethodId : methodId, id), k -> new SeedList());
+    }
+
     private void clearCustomQueuesLocked() {
-        if (!customQueues.isEmpty()) {
-            for (LongQueue queue : customQueues.values()) {
-                queue.clear();
-            }
-        }
-        if (!hueQueues.isEmpty()) {
-            for (LongQueue queue : hueQueues.values()) {
-                queue.clear();
-            }
-        }
-    }
-
-    /** The seed queue of the sources of one method and one hue (the colour with its brightest channel set to 1, in 1/15 steps). */
-    private LongQueue hueQueueFor(Identifier methodId, int hue) {
-        Identifier id = methodId == null ? defaultMethodId : methodId;
-        return hueQueues.computeIfAbsent(new HueQueueKey(id, hue), k -> new LongQueue(1 << 8));
-    }
-
-    private static int hueOf(int packed) {
-        int r = packed & 0xFF, g = (packed >> 8) & 0xFF, b = (packed >> 16) & 0xFF;
-        int peak = Math.max(r, Math.max(g, b));
-        if (peak <= 0)
-            return 0;
-        int half = peak >> 1;
-        return ((r * 15 + half) / peak) | (((g * 15 + half) / peak) << 4) | (((b * 15 + half) / peak) << 8);
+        for (LongQueue queue : customQueues.values())
+            queue.clear();
+        for (SeedList list : jobs.values())
+            list.clear();
     }
 
     private void flushQueuesLocked() {
+        // cells to re-flood: every light a cell stores spreads on from its stored brightness
         if (!customQueues.isEmpty()) {
             for (Map.Entry<Identifier, LongQueue> entry : customQueues.entrySet()) {
                 LongQueue queue = entry.getValue();
-                if (!queue.isEmpty())
-                    propagatorFor(entry.getKey()).propagate(queue, staticField);
+                Identifier method = entry.getKey();
+                while (!queue.isEmpty()) {
+                    long key = queue.poll();
+                    long cell = data.get(PosKey.x(key), PosKey.y(key), PosKey.z(key));
+                    int a = LightCell.levelA(cell);
+                    if (a != 0)
+                        seedList(method, LightCell.idA(cell)).add(key, a);
+                    int b = LightCell.levelB(cell);
+                    if (b != 0)
+                        seedList(method, LightCell.idB(cell)).add(key, b);
+                }
             }
         }
-        if (!hueQueues.isEmpty()) {
-            // each colour is spread on its own, so overlapping lights only mix where they meet
-            for (Map.Entry<HueQueueKey, LongQueue> entry : hueQueues.entrySet()) {
-                LongQueue queue = entry.getValue();
-                if (!queue.isEmpty())
-                    propagatorFor(entry.getKey().method()).propagateIsolated(queue, staticField);
+        if (!jobs.isEmpty())
+            floodJobsLocked();
+    }
+
+    private void floodJobsLocked() {
+        // each colour is spread on its own, so overlapping lights only meet where they reach the same cell
+        List<ParallelFlood.Task> tasks = new java.util.ArrayList<>();
+        int totalSeeds = buildTasks(tasks);
+
+        if (floodThreads > 1 && totalSeeds >= ParallelFlood.MIN_SEEDS && tasks.size() > 1) {
+            long t0 = FloodStats.ON ? System.nanoTime() : 0L;
+            parallel.run(tasks, staticField, this::floodTaskLocked);
+            if (FloodStats.ON)
+                FloodStats.parallel(tasks.size(), System.nanoTime() - t0);
+        } else {
+            for (ParallelFlood.Task task : tasks)
+                floodTaskLocked(task);
+        }
+
+        for (SeedList list : jobs.values())
+            list.clear();
+    }
+
+    private void floodTaskLocked(ParallelFlood.Task task) {
+        long[] keys = java.util.Arrays.copyOfRange(task.keys(), task.from(), task.to());
+        int[] levels = java.util.Arrays.copyOfRange(task.levels(), task.from(), task.to());
+        propagatorFor(task.method()).spread(task.id(), keys, levels, keys.length, staticField);
+    }
+
+    /**
+     * Cuts the queued jobs into floods: the seeds of one colour that lie in the same chunk column are flooded <b>together</b>.
+     * One flood with many seeds costs about as much as the area it lights, however many seeds start it (neighbouring lamps
+     * overlap almost completely), while a flood per lamp pays for that area over and over - a chunk full of lamps took
+     * hundreds of times longer. Seeds in different columns stay apart: lamps far from each other in one flood make its
+     * scratch maps huge and cache-unfriendly.
+     *
+     * @return the number of seeds
+     */
+    private int buildTasks(List<ParallelFlood.Task> out) {
+        int total = 0;
+        for (Map.Entry<JobKey, SeedList> entry : jobs.entrySet()) {
+            SeedList list = entry.getValue();
+            int n = list.size;
+            if (n == 0)
+                continue;
+            total += n;
+
+            Identifier method = entry.getKey().method();
+            int id = entry.getKey().id();
+            long[] keys = list.keys;
+            int[] levels = list.levels;
+
+            if (n < 2 || n >= (1 << 20)) {
+                ParallelFlood.addSlices(out, method, id, keys, levels, 0, n, MAX_TASK_SEEDS);
+                continue;
+            }
+
+            long[] order = new long[n]; // (column << 20) | index: sorts the seeds by chunk column
+            for (int i = 0; i < n; i++) {
+                long k = keys[i];
+                long column = (((long) (PosKey.x(k) >> 4) & 0x3FFFFFL) << 22) | ((long) (PosKey.z(k) >> 4) & 0x3FFFFFL);
+                order[i] = (column << 20) | i;
+            }
+            java.util.Arrays.sort(order);
+
+            long[] sortedKeys = new long[n];
+            int[] sortedLevels = new int[n];
+            for (int i = 0; i < n; i++) {
+                int from = (int) (order[i] & 0xFFFFFL);
+                sortedKeys[i] = keys[from];
+                sortedLevels[i] = levels[from];
+            }
+
+            int start = 0;
+            for (int i = 1; i <= n; i++) {
+                if (i == n || (order[i] >>> 20) != (order[start] >>> 20)) {
+                    ParallelFlood.addSlices(out, method, id, sortedKeys, sortedLevels, start, i, MAX_TASK_SEEDS);
+                    start = i;
+                }
             }
         }
+        return total;
+    }
+
+    /** Threads the static flood may use (1 = everything on the calling thread). */
+    public void setFloodThreads(int threads) {
+        this.floodThreads = Math.max(1, threads);
+        if (this.floodThreads > 1)
+            ParallelFlood.resize(this.floodThreads);
+    }
+
+    /**
+     * The thread count a setting stands for: 0 (or less) = automatic (about a third of the machine's threads, at most 6,
+     * or {@code -Dcolorlight.threads}), otherwise that many, but never more than the machine has.
+     */
+    public static int resolveFloodThreads(int configured) {
+        if (configured <= 0)
+            return ParallelFlood.DEFAULT_THREADS;
+        return Math.min(configured, Math.max(1, Runtime.getRuntime().availableProcessors()));
+    }
+
+    /** What "automatic" means on this machine, for the settings screen. */
+    public static int automaticFloodThreads() {
+        return ParallelFlood.DEFAULT_THREADS;
+    }
+
+    public int floodThreads() {
+        return floodThreads;
     }
 
     /**
@@ -663,6 +846,8 @@ public class ColorLightEngine {
      * Only used while holding {@link #lock}.
      */
     private final WorldLightField staticField;
+    private final ParallelFlood parallel;
+    private volatile int floodThreads = ParallelFlood.DEFAULT_THREADS;
 
     /**
      * Invalidates the region downstream of a removed/changed colour and queues the cells that
@@ -679,76 +864,97 @@ public class ColorLightEngine {
      *     instead of keeping the stale glow forever.</li>
      * </ul>
      */
-    private void darkenAndCollectSeeds(long startKey, int oldColorAtStart) {
+    private void darkenAndCollectSeeds(long startKey, long oldCell) {
+        darkenCells(startKey, oldCell);
+        recoverHiddenLight(startKey);
+    }
+
+    private void darkenCells(long startKey, long oldCell) {
         clearCustomQueuesLocked();
         darkenKeys.clear();
-        darkenColors.clear();
+        darkenIds.clear();
+        darkenLevels.clear();
         seedSeen.clear();
+        rebuildNeeded = false;
 
-        if (oldColorAtStart == 0)
+        if (!LightCell.isLit(oldCell))
             return;
 
-        darkenKeys.add(startKey);
-        darkenColors.add(oldColorAtStart);
+        // each light the removed cell held is taken away on its own
+        int a = LightCell.levelA(oldCell);
+        if (a != 0) {
+            darkenKeys.add(startKey);
+            darkenIds.add(LightCell.idA(oldCell));
+            darkenLevels.add(a);
+        }
+        int b = LightCell.levelB(oldCell);
+        if (b != 0) {
+            darkenKeys.add(startKey);
+            darkenIds.add(LightCell.idB(oldCell));
+            darkenLevels.add(b);
+        }
 
         while (!darkenKeys.isEmpty()) {
             long curKey = darkenKeys.poll();
-            int curColor = darkenColors.poll();
-            int r = curColor & 0xFF, g = (curColor >> 8) & 0xFF, b = (curColor >> 16) & 0xFF;
+            int id = darkenIds.poll();
+            int v = darkenLevels.poll();
 
             int x = PosKey.x(curKey), y = PosKey.y(curKey), z = PosKey.z(curKey);
 
             for (int n = 0; n < NEIGHBOR_COUNT; n++) {
                 int nx = x + NEIGHBOR_DX[n], ny = y + NEIGHBOR_DY[n], nz = z + NEIGHBOR_DZ[n];
-                int nCell = data.get(nx, ny, nz);
-
-                int nr = nCell & 0xFF, ng = (nCell >> 8) & 0xFF, nb = (nCell >> 16) & 0xFF;
+                long nCell = data.get(nx, ny, nz);
+                int nl = LightCell.levelOf(nCell, id);
+                long nKey = PosKey.pack(nx, ny, nz);
 
                 if ((nCell & FLAG_SOURCE) != 0) {
-                    long nKey = PosKey.pack(nx, ny, nz);
                     int own = sourceColors.get(nKey, 0);
-                    int or = own & 0xFF, og = (own >> 8) & 0xFF, ob = (own >> 16) & 0xFF;
+                    int ownLevel = LightPalette.peakOf(own);
+                    int ownId = ownLevel > 0 ? palette.idFor(own) : 0;
 
-                    // channels above the source's own value but below what was removed were fed by the removed light
-                    int fr = (nr > or && nr < r) ? or : nr;
-                    int fg = (ng > og && ng < g) ? og : ng;
-                    int fb = (nb > ob && nb < b) ? ob : nb;
+                    // brightness above the source's own but below what was removed was fed by the removed light
+                    int target = nl;
+                    if (nl > 0 && nl < v) {
+                        if (id == ownId) {
+                            if (nl > ownLevel)
+                                target = ownLevel;
+                        } else {
+                            target = 0; // not the source's own colour: nothing of it is the source's own
+                        }
+                    }
 
-                    if (fr != nr || fg != ng || fb != nb) {
-                        data.put(nx, ny, nz, (nCell & FLAG_MASK) | fr | (fg << 8) | (fb << 16));
+                    if (target != nl) {
+                        recoverIfHidden(nCell, nKey);
+                        data.put(nx, ny, nz, LightCell.withLevel(nCell, id, target));
                         markDirty(nx, ny, nz);
                         darkenKeys.add(nKey);
-                        darkenColors.add(nr | (ng << 8) | (nb << 16));
+                        darkenIds.add(id);
+                        darkenLevels.add(nl);
                     }
                     seedOnce(methodIdOf(nCell, nKey), nKey);
                     continue;
                 }
 
-                if ((nr | ng | nb) == 0)
+                if (nl == 0) {
+                    recoverIfHidden(nCell, nKey); // it may have passed the colour on without keeping it
                     continue;
+                }
 
-                int fr = nr, fg = ng, fb = nb;
-                boolean darkened = false;
                 // a dim cell within one unit of the removed value counts as fed by it too: smooth light is stored rounded,
                 // so the far fringe of a light can come out equal to (or one above) its parent and would otherwise stay
                 // behind as a faint ghost glow after the light is removed
-                if (nr != 0 && (nr < r || (nr <= r + 1 && nr <= 8))) { fr = 0; darkened = true; }
-                if (ng != 0 && (ng < g || (ng <= g + 1 && ng <= 8))) { fg = 0; darkened = true; }
-                if (nb != 0 && (nb < b || (nb <= b + 1 && nb <= 8))) { fb = 0; darkened = true; }
-
-                long nKey = PosKey.pack(nx, ny, nz);
-
-                if (darkened) {
-                    data.put(nx, ny, nz, fr | (fg << 8) | (fb << 16));
+                if (nl < v || (nl <= v + 1 && nl <= 8)) {
+                    recoverIfHidden(nCell, nKey);
+                    data.put(nx, ny, nz, LightCell.withLevel(nCell, id, 0));
                     markDirty(nx, ny, nz);
                     darkenKeys.add(nKey);
-                    darkenColors.add(nr | (ng << 8) | (nb << 16));
+                    darkenIds.add(id);
+                    darkenLevels.add(nl);
                 }
 
-                // independent light in a channel the removed light carried -> must radiate again
-                if ((r > 0 && nr >= r) || (g > 0 && ng >= g) || (b > 0 && nb >= b)) {
+                // independent light of this colour that is at least as bright -> must radiate again
+                if (v > 0 && nl >= v)
                     seedOnce(defaultMethodId, nKey);
-                }
             }
         }
     }
@@ -758,79 +964,74 @@ public class ColorLightEngine {
             return;
         seedSeen.put(key, 1L);
         queueFor(methodId).add(key);
+        // what it stores is all it can spread on; a light it had no room for has to come from the sources again
+        recoverIfHidden(data.get(PosKey.x(key), PosKey.y(key), PosKey.z(key)), key);
     }
-
-    // =====================================================================================
-    // Dynamic (entity) lights
-    // =====================================================================================
 
     /**
-     * Creates a helper that computes dynamic-light footprints off the game thread. Give each
-     * worker thread its own instance.
+     * A cell that had no room for a third colour ({@link LightCell#OVERFLOW}) may have passed that colour on without
+     * keeping it, so taking light away around it cannot be followed cell by cell any more: note that the surroundings
+     * need a rebuild.
      */
-    public DynamicLightWorker newDynamicWorker() {
-        return newDynamicWorker(null);
+    private void recoverIfHidden(long cell, long key) {
+        if ((cell & LightCell.OVERFLOW) != 0)
+            rebuildNeeded = true;
     }
 
-    /** Like {@link #newDynamicWorker()}, spreading with {@code methodId} instead of the moving-light method (null = that one). */
-    public DynamicLightWorker newDynamicWorker(Identifier methodId) {
-        return new DynamicLightWorker(new DynamicFlood(level, decayPerOpacityUnit, methodId != null ? methodId : dynamicMethodId, defaultMethodId));
-    }
+    /**
+     * Rebuilds everything the removed or changed cell could have influenced: the cells within light range of it are
+     * emptied, then every source that can reach them floods again. Only done where cells overflowed, which is rare
+     * (three or more colours meeting), so the price of the brute force is paid seldom.
+     */
+    private void recoverHiddenLight(long centerKey) {
+        if (!rebuildNeeded)
+            return;
+        rebuildNeeded = false;
 
-    /** Thread-confined handle used to (re)compute and apply one dynamic light at a time. */
-    public final class DynamicLightWorker {
-        private final DynamicFlood flood;
-
-        private DynamicLightWorker(DynamicFlood flood) {
-            this.flood = flood;
-        }
-
-        /**
-         * Floods the light at its exact sub-block position (no engine lock needed) and then applies
-         * the result to the dynamic layer under the lock, changing only the cells that differ.
-         */
-        public void update(int id, double x, double y, double z, int r, int g, int b, int strength) {
-            DynamicFootprint footprint = flood.compute(x-0.5, y, z-0.5, r, g, b, strength);
-            lock.lock();
-            try {
-                dynamic.replace(id, footprint);
-            } finally {
-                unlock();
+        int cx = PosKey.x(centerKey), cy = PosKey.y(centerKey), cz = PosKey.z(centerKey);
+        int radius = maxRangeBlocks + 1;
+        for (int x = cx - radius; x <= cx + radius; x++) {
+            for (int y = cy - radius; y <= cy + radius; y++) {
+                for (int z = cz - radius; z <= cz + radius; z++) {
+                    long cell = data.get(x, y, z);
+                    if ((cell & (LightCell.SLOTS | LightCell.OVERFLOW)) == 0)
+                        continue;
+                    data.put(x, y, z, cell & ENGINE_FLAGS);
+                    markDirty(x, y, z);
+                }
             }
         }
 
-        public void remove(int id) {
-            lock.lock();
-            try {
-                dynamic.remove(id);
-            } finally {
-                unlock();
+        // every source whose light can reach that box
+        sourceIndex.forEachNear(cx, cy, cz, 2 * radius, sourceKey -> {
+            int own = sourceColors.get(sourceKey, 0);
+            int level = LightPalette.peakOf(own);
+            if (level <= 0)
+                return;
+            int sx = PosKey.x(sourceKey), sy = PosKey.y(sourceKey), sz = PosKey.z(sourceKey);
+            long cell = data.get(sx, sy, sz);
+            int ownId = palette.idFor(own);
+            long restored = LightCell.insert(cell, ownId, level);
+            if (restored != cell) {
+                data.put(sx, sy, sz, restored);
+                markDirty(sx, sy, sz);
             }
-        }
+            seedList(methodIdOf(cell, sourceKey), ownId).add(sourceKey, level);
+        });
     }
 
-    /** True if a block changed inside this dynamic light's footprint since it was computed. */
-    public boolean isDynamicStale(int id) {
-        return dynamic.isStale(id);
-    }
-
-    /** Flags dynamic lights near a changed block for recomputation without touching static light. Lock-free. */
-    public void invalidateDynamicAround(BlockPos pos) {
-        dynamic.markStaleAround(pos.getX(), pos.getY(), pos.getZ());
-    }
-
-    public boolean hasDynamic(int id) {
-        return dynamic.has(id);
-    }
-
-    // =====================================================================================
-    // Dirty section tracking
-    // =====================================================================================
-
-    /** The cell's colour changed: every mesh block within 1 cell of it reads it, so mark those sections. */
     private void markDirty(int x, int y, int z) {
         int sx = x >> 4, sy = y >> 4, sz = z >> 4;
         int lx = x & 15, ly = y & 15, lz = z & 15;
+        if (lx != 0 && lx != 15 && ly != 0 && ly != 15 && lz != 0 && lz != 15) {
+            // not on a section border: only this section is affected, and a flood marks it over and over
+            long key = PosKey.pack(sx, sy, sz);
+            if (key == lastDirtySection)
+                return;
+            lastDirtySection = key;
+            dirtySections.put(key, 1);
+            return;
+        }
         int x0 = lx == 0 ? sx - 1 : sx, x1 = lx == 15 ? sx + 1 : sx;
         int y0 = ly == 0 ? sy - 1 : sy, y1 = ly == 15 ? sy + 1 : sy;
         int z0 = lz == 0 ? sz - 1 : sz, z1 = lz == 15 ? sz + 1 : sz;
@@ -905,22 +1106,53 @@ public class ColorLightEngine {
             dynamic.storage().forEachLitSectionNear(csx, csy, csz, radiusXZ, radiusY, consumer);
     }
 
+    private static final ThreadLocal<long[]> SECTION_SCRATCH = ThreadLocal.withInitial(() -> new long[16 * 16 * 16]);
+
     /**
-     * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the colours of one section as the
-     * renderer sees them: static and moving light merged, flags stripped. Lock-free.
+     * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the cells of one section as the GPU
+     * reads them: static and moving light merged, each cell packed by {@link LightCell#pack}. Lock-free.
      *
      * @return false if the section holds no light at all
      */
-    public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
-        boolean lit = data.copySection(sx, sy, sz, out);
+    public boolean copySectionPacked(int sx, int sy, int sz, int[] out) {
+        long[] cells = SECTION_SCRATCH.get();
+        boolean lit = data.copySection(sx, sy, sz, cells);
         if (dynamic.isActive())
-            lit |= dynamic.storage().mergeMaxInto(sx, sy, sz, out);
-        return lit;
+            lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+        if (!lit) {
+            java.util.Arrays.fill(out, 0, cells.length, 0);
+            return false;
+        }
+        for (int i = 0; i < cells.length; i++)
+            out[i] = LightCell.pack(cells[i], palette);
+        return true;
+    }
+
+    /**
+     * Like {@link #copySectionPacked} but with the colours the cells show ({@code 0x00BBGGRR}), for code that wants
+     * plain colours.
+     */
+    public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
+        long[] cells = SECTION_SCRATCH.get();
+        boolean lit = data.copySection(sx, sy, sz, cells);
+        if (dynamic.isActive())
+            lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+        if (!lit) {
+            java.util.Arrays.fill(out, 0, cells.length, 0);
+            return false;
+        }
+        for (int i = 0; i < cells.length; i++)
+            out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
+        return true;
     }
 
     /** Like {@link #copySectionColors} but only the static light (no moving lights). */
     public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
-        return data.copySection(sx, sy, sz, out);
+        long[] cells = SECTION_SCRATCH.get();
+        boolean lit = data.copySection(sx, sy, sz, cells);
+        for (int i = 0; i < cells.length; i++)
+            out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
+        return lit;
     }
 
     /** Hands every section that holds light, and its neighbours, to the mesh-rebuild queue. Never waits for a flood. */
@@ -953,6 +1185,69 @@ public class ColorLightEngine {
             externalDirty.clear();
             return out;
         }
+    }
+
+    // =====================================================================================
+    // Dynamic (entity) lights
+    // =====================================================================================
+
+    /**
+     * Creates a helper that computes dynamic-light footprints off the game thread. Give each
+     * worker thread its own instance.
+     */
+    public DynamicLightWorker newDynamicWorker() {
+        return newDynamicWorker(null);
+    }
+
+    /** Like {@link #newDynamicWorker()}, spreading with {@code methodId} instead of the moving-light method (null = that one). */
+    public DynamicLightWorker newDynamicWorker(Identifier methodId) {
+        return new DynamicLightWorker(new DynamicFlood(level, palette, decayPerOpacityUnit, methodId != null ? methodId : dynamicMethodId, defaultMethodId));
+    }
+
+    /** Thread-confined handle used to (re)compute and apply one dynamic light at a time. */
+    public final class DynamicLightWorker {
+        private final DynamicFlood flood;
+
+        private DynamicLightWorker(DynamicFlood flood) {
+            this.flood = flood;
+        }
+
+        /**
+         * Floods the light at its exact sub-block position (no engine lock needed) and then applies
+         * the result to the dynamic layer under the lock, changing only the cells that differ.
+         */
+        public void update(int id, double x, double y, double z, int r, int g, int b, int strength) {
+            DynamicFootprint footprint = flood.compute(x - 0.5, y, z - 0.5, r, g, b, strength);
+            lock.lock();
+            try {
+                dynamic.replace(id, footprint);
+            } finally {
+                unlock();
+            }
+        }
+
+        public void remove(int id) {
+            lock.lock();
+            try {
+                dynamic.remove(id);
+            } finally {
+                unlock();
+            }
+        }
+    }
+
+    /** True if a block changed inside this dynamic light's footprint since it was computed. */
+    public boolean isDynamicStale(int id) {
+        return dynamic.isStale(id);
+    }
+
+    /** Flags dynamic lights near a changed block for recomputation without touching static light. Lock-free. */
+    public void invalidateDynamicAround(BlockPos pos) {
+        dynamic.markStaleAround(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    public boolean hasDynamic(int id) {
+        return dynamic.has(id);
     }
 
     // =====================================================================================
@@ -1006,6 +1301,47 @@ public class ColorLightEngine {
         if (dayTime < 23800) return 0.8f;
         if (dayTime < 23900) return 0.9f;
         return 1f;
+    }
+
+    /** What the new engine holds in one cell, for {@code /colorlight cell}: slots, flags, the word the GPU gets. */
+    public String debugCell(int x, int y, int z) {
+        long st = data.get(x, y, z);
+        long dyn = dynamic.isActive() ? dynamic.storage().get(x, y, z) : 0L;
+        long both = LightCell.merge(st & LightCell.SLOTS, dyn);
+        int word = LightCell.pack(both, palette);
+        StringBuilder sb = new StringBuilder();
+        sb.append("cell ").append(x).append(' ').append(y).append(' ').append(z).append('\n');
+        sb.append("static : ").append(describe(st)).append((st & FLAG_SOURCE) != 0 ? "  [source]" : "").append('\n');
+        sb.append("dynamic: ").append(describe(dyn)).append('\n');
+        sb.append("GPU word: 0x").append(String.format("%08X", word));
+        if ((word & LightCell.PACKED_TWO_LIGHTS_BIT) != 0)
+            sb.append("  two lights: I=").append(word & 0xFF).append(" id1=").append((word >> 8) & 0xFF)
+                    .append(" id2=").append((word >> 16) & 0xFF).append(" ratio=").append((word >> 24) & 31).append("/31");
+        else
+            sb.append("  one light: baked colour");
+        sb.append("\n  ")
+                .append("  colour=0x").append(String.format("%06X", LightCell.packedToRgb(word, palette))).append('\n');
+        sb.append("palette: ").append(palette.size()).append(" of ").append(LightPalette.MAX_ID).append(" hues (v").append(palette.version()).append(')');
+        return sb.toString();
+    }
+
+    private String describe(long cell) {
+        StringBuilder sb = new StringBuilder();
+        appendSlot(sb, "A", LightCell.idA(cell), LightCell.levelA(cell));
+        sb.append("  ");
+        appendSlot(sb, "B", LightCell.idB(cell), LightCell.levelB(cell));
+        if ((cell & LightCell.OVERFLOW) != 0)
+            sb.append("  OVERFLOW");
+        return sb.toString();
+    }
+
+    private void appendSlot(StringBuilder sb, String name, int id, int level) {
+        if (level == 0) {
+            sb.append(name).append(": -");
+            return;
+        }
+        sb.append(name).append(": id ").append(id).append(" (hue 0x").append(String.format("%06X", palette.rgbOf(id)))
+                .append(") level ").append(level);
     }
 
     public String debugDaylight(BlockPos pos) {

@@ -260,7 +260,8 @@ public final class ColorLightGpu {
         // While a pack switch is still unnoticed the meshes have vertex colours; "disabled" makes the shader use them.
         boolean enabled = isActive() && ColorLightClient.config.ENABLE && ColorLightEngineHolder.get() != null;
         v.writeHeader(camBlockX, camBlockY, camBlockZ, fracX, fracY, fracZ, enabled,
-                ColorLightClient.config.TINT_GAMMA, ColorLightClient.config.SMOOTH_LIGHTING);
+                ColorLightClient.config.TINT_GAMMA, ColorLightClient.config.SMOOTH_LIGHTING,
+                ColorLightEngineHolder.get() != null ? ColorLightEngineHolder.get().palette() : null);
 
         camSx = camBlockX >> 4;
         camSy = camBlockY >> 4;

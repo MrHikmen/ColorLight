@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
+import me.mrhikmen.colorlight.client.core.light.cell.LightPalette;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
@@ -11,7 +12,6 @@ import net.minecraft.world.level.LevelAccessor;
 
 import java.util.Arrays;
 
-import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTables.*;
 
 /**
  * Computes the {@link DynamicFootprint} of one moving light source.
@@ -32,6 +32,7 @@ final class DynamicFlood {
     private final LevelAccessor level;
     private final float decayPerOpacityUnit;
     private final TablePropagator smooth;
+    private final LightPalette palette;
     /** Working-value units per light unit of the chosen method (the method's {@code scale}). */
     private final int scale;
     private final int maxWorking;
@@ -45,8 +46,9 @@ final class DynamicFlood {
      */
     private final WorldLightField emptyField;
 
-    DynamicFlood(LevelAccessor level, float decayPerOpacityUnit, Identifier methodId, Identifier fallbackId) {
+    DynamicFlood(LevelAccessor level, LightPalette palette, float decayPerOpacityUnit, Identifier methodId, Identifier fallbackId) {
         this.level = level;
+        this.palette = palette;
         this.decayPerOpacityUnit = decayPerOpacityUnit;
         TablePropagator table = PropagationMethodRegistry.tableFor(methodId, fallbackId, decayPerOpacityUnit);
         if (table == null)
@@ -59,6 +61,12 @@ final class DynamicFlood {
 
     /** @return the footprint, or {@code null} if the light is too dim to reach any cell. */
     DynamicFootprint compute(double x, double y, double z, int r, int g, int b, int strength) {
+        int rgb = ColorLightUtil.pack(r, g, b);
+        int peak = LightPalette.peakOf(rgb);
+        if (peak <= 0)
+            return null;
+        int id = palette.idFor(rgb);
+
         emptyField.beginPass();
         smooth.beginPass();
         queue.clear();
@@ -66,9 +74,7 @@ final class DynamicFlood {
         // (not named "scale": that would hide the method's fixed-point scale field used below, seeding the light
         // 1/scale too weak - for smooth, scale 8, it then barely spread and showed as a small cube)
         float strengthFraction = ColorLightUtil.clamp01(strength / 15f);
-        float baseR = r * strengthFraction;
-        float baseG = g * strengthFraction;
-        float baseB = b * strengthFraction;
+        float brightness = peak * strengthFraction;
 
         long ex = Math.round(x * POSITION_SUBDIVISIONS);
         long ey = Math.round(y * POSITION_SUBDIVISIONS);
@@ -110,45 +116,39 @@ final class DynamicFlood {
                     double ddz = z - cornerZ;
                     float decay = (float) Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz) * decayPerOpacityUnit;
 
-                    int er = clampEighths(Math.round((baseR - decay) * scale));
-                    int eg = clampEighths(Math.round((baseG - decay) * scale));
-                    int eb = clampEighths(Math.round((baseB - decay) * scale));
-                    if (er == 0 && eg == 0 && eb == 0)
+                    long start = clampWorking(Math.round((brightness - decay) * scale));
+                    if (start <= 0)
                         continue;
 
                     long key = PosKey.pack((int) cornerX, (int) cornerY, (int) cornerZ);
-                    long existing = smooth.workingAt(key);
-                    int mr = Math.max(er, eighthsR(existing));
-                    int mg = Math.max(eg, eighthsG(existing));
-                    int mb = Math.max(eb, eighthsB(existing));
-                    smooth.seed(key, packEighths(mr, mg, mb));
+                    smooth.seedWorking(key, start);
                     queue.add(key);
                 }
             }
         }
 
-        if (queue.isEmpty())
-            return null;
-
-        smooth.run(queue, emptyField);
-        DynamicFootprint result = buildFootprint();
+        DynamicFootprint result = null;
+        if (!queue.isEmpty()) {
+            smooth.run(id, queue, emptyField);
+            result = buildFootprint(id);
+        }
 
         emptyField.endPass();
         smooth.trim();
         return result;
     }
 
-    private int clampEighths(int v) {
+    private long clampWorking(long v) {
         return v < 0 ? 0 : Math.min(v, maxWorking);
     }
 
-    private DynamicFootprint buildFootprint() {
+    private DynamicFootprint buildFootprint(int id) {
         long[] keys = new long[smooth.cellCount()];
         int n = smooth.collectKeys(keys);
 
         int kept = 0;
         for (int i = 0; i < n; i++) {
-            if (toRgb(smooth.workingAt(keys[i])) != 0)
+            if (smooth.toLevel(smooth.workingAt(keys[i])) != 0)
                 keys[kept++] = keys[i];
         }
         if (kept == 0)
@@ -157,17 +157,10 @@ final class DynamicFlood {
         long[] sorted = Arrays.copyOf(keys, kept);
         Arrays.sort(sorted);
 
-        int[] colors = new int[kept];
+        int[] levels = new int[kept];
         for (int i = 0; i < kept; i++) {
-            colors[i] = toRgb(smooth.workingAt(sorted[i]));
+            levels[i] = smooth.toLevel(smooth.workingAt(sorted[i]));
         }
-        return new DynamicFootprint(sorted, colors);
-    }
-
-    private int toRgb(long eighths) {
-        int r = Math.round(eighthsR(eighths) / (float) scale);
-        int g = Math.round(eighthsG(eighths) / (float) scale);
-        int b = Math.round(eighthsB(eighths) / (float) scale);
-        return ColorLightUtil.pack(r, g, b);
+        return new DynamicFootprint(sorted, levels, id);
     }
 }

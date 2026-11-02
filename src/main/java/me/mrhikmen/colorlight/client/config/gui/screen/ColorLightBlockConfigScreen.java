@@ -12,6 +12,7 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -28,7 +29,7 @@ public class ColorLightBlockConfigScreen extends Screen {
     private BlockSettings entry;
     private final Runnable onSave;
     private final Runnable onApply;
-
+    private EditBox hexColorField;
     private ColorPickerMath colorMath;
 
     private static final int MARGIN = 20;
@@ -69,6 +70,30 @@ public class ColorLightBlockConfigScreen extends Screen {
             }
         }
         return configEntry.copy();
+    }
+
+    private void applyHexColor() {
+        String hex = this.hexColorField.getValue()
+                .replace("#", "")
+                .replaceAll("[^0-9a-fA-F]", "");
+
+        if (hex.isEmpty()) return;
+
+        hex = (hex + "000000").substring(0, 6);
+
+        int color = Integer.parseInt(hex, 16);
+
+        this.entry.r = (color >> 16) & 0xFF;
+        this.entry.g = (color >> 8) & 0xFF;
+        this.entry.b = color & 0xFF;
+
+        this.colorMath = new ColorPickerMath(
+                this.entry.r, this.entry.g, this.entry.b
+        );
+
+        this.commit();
+        this.clearWidgets();
+        this.init();
     }
 
     /** The player changed something: the values on screen become their own entry, which wins over scan and packs. */
@@ -133,45 +158,49 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.addRenderableWidget(propagationButton);
 
         int colorLabelY = propagationY + ROW_HEIGHT;
-        StringWidget colorLabel = new StringWidget(
-                rightX, colorLabelY, 260, 16,
-                Translatable.COLORED_LIGHTING, this.font
-        );
+        StringWidget colorLabel = new StringWidget(rightX, colorLabelY, 260, 16, Translatable.COLORED_LIGHTING, this.font);
         this.addRenderableWidget(colorLabel);
 
-        int pickerY = colorLabelY + 16 + 8;
+        this.hexColorField = new EditBox(this.font,
+                rightX, colorLabelY + 18,
+                180, 20,
+                Component.literal("#RRGGBB")
+        );
+        this.hexColorField.setMaxLength(7);
+        this.hexColorField.setValue(String.format("#%02X%02X%02X", this.entry.r, this.entry.g, this.entry.b));
+        this.hexColorField.setHint(Component.literal("#RRGGBB"));
+        this.addRenderableWidget(this.hexColorField);
+        Button hexApplyButton = Button.builder(Translatable.APPLY, button -> this.applyHexColor())
+                .pos(rightX + 184, colorLabelY + 18)
+                .size(76, 20)
+                .build();
+        this.addRenderableWidget(hexApplyButton);
+
+        int pickerY = colorLabelY + 18 + 28;
 
         ColorSquareWidget square = new ColorSquareWidget(
-                rightX, pickerY, SQUARE_SIZE, SQUARE_SIZE,
+                rightX, pickerY, SQUARE_SIZE + 90, SQUARE_SIZE,
                 this.colorMath, this::applyColorFromPicker
         );
         this.addRenderableWidget(square);
 
         HueBarWidget hueBar = new HueBarWidget(
-                rightX + SQUARE_SIZE + HUE_BAR_GAP, pickerY, HUE_BAR_WIDTH, SQUARE_SIZE,
+                rightX + SQUARE_SIZE + HUE_BAR_GAP + 90, pickerY, HUE_BAR_WIDTH, SQUARE_SIZE,
                 this.colorMath, this::applyColorFromPicker
         );
         this.addRenderableWidget(hueBar);
 
         int actionRow1Y = pickerY + SQUARE_SIZE + ACTION_ROW_GAP;
+        int actionButtonWidth = (260 - ACTION_ROW_GAP) / 2;
 
         Button resetButton = Button.builder(Translatable.RESET_TO_DEFAULT, button -> this.resetToDefault())
                 .pos(rightX, actionRow1Y)
-                .size(260, ACTION_BUTTON_HEIGHT)
+                .size(actionButtonWidth, ACTION_BUTTON_HEIGHT)
                 .build();
         this.addRenderableWidget(resetButton);
 
-        int actionRow2Y = actionRow1Y + ACTION_BUTTON_HEIGHT + ACTION_ROW_GAP;
-        int actionButtonWidth = (260 - ACTION_ROW_GAP) / 2;
-
-        Button applyButton = Button.builder(Translatable.APPLY, button -> this.onApply.run())
-                .pos(rightX, actionRow2Y)
-                .size(actionButtonWidth, ACTION_BUTTON_HEIGHT)
-                .build();
-        this.addRenderableWidget(applyButton);
-
         Button doneButton = Button.builder(Component.translatable("gui.done"), button -> this.onClose())
-                .pos(rightX + actionButtonWidth + ACTION_ROW_GAP, actionRow2Y)
+                .pos(rightX + actionButtonWidth + ACTION_ROW_GAP, actionRow1Y)
                 .size(actionButtonWidth, ACTION_BUTTON_HEIGHT)
                 .build();
         this.addRenderableWidget(doneButton);
@@ -182,6 +211,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.entry.r = rgb[0];
         this.entry.g = rgb[1];
         this.entry.b = rgb[2];
+        this.hexColorField.setValue(String.format("#%02X%02X%02X", this.entry.r, this.entry.g, this.entry.b));
         this.commit();
     }
 
