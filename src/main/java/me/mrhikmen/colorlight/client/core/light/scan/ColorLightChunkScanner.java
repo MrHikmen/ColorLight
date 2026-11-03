@@ -5,7 +5,6 @@ import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
-import me.mrhikmen.colorlight.client.core.light.engine.LoadStats;
 import me.mrhikmen.colorlight.client.core.light.engine.SourceBatch;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -266,7 +265,6 @@ public final class ColorLightChunkScanner {
             if (engine == null)
                 return;
 
-            long scanStart = LoadStats.ON ? System.nanoTime() : 0L;
             SourceBatch found = new SourceBatch();
 
             chunk.findBlockLightSources((pos, state) -> {
@@ -286,9 +284,6 @@ public final class ColorLightChunkScanner {
                 found.add(pos.getX(), pos.getY(), pos.getZ(), entry.r, entry.g, entry.b,
                         Math.min(entry.light, emission), entry.getPropagationId());
             });
-
-            if (LoadStats.ON)
-                LoadStats.scan(System.nanoTime() - scanStart, found.size());
 
             if (!found.isEmpty()) {
                 var player = Minecraft.getInstance().player;

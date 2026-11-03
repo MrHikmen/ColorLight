@@ -10,7 +10,6 @@ import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
 import me.mrhikmen.colorlight.client.core.light.cell.LightPalette;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
-import me.mrhikmen.colorlight.client.core.light.engine.LoadStats;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
 
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -489,8 +488,6 @@ public final class GpuLightVolume {
             upload(engine, level, key);
             uploaded++;
         }
-        if (LoadStats.ON)
-            LoadStats.upload(uploaded, System.nanoTime() - start, keys.length);
     }
 
     private long[] nearestFirst(long[] keys) {

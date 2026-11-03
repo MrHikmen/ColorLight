@@ -58,8 +58,6 @@ final class WorldLightField implements LightField {
         if (cached >= 0)
             return (int) cached;
 
-        if (FloodStats.ON)
-            FloodStats.opacityLookup();
         scratchPos.set(x, y, z);
         int opacity = level.getBlockState(scratchPos).getLightDampening();
         opacity = Math.max(0, Math.min(MAX_OPACITY, opacity));

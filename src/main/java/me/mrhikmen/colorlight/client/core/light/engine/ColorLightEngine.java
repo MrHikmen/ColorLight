@@ -67,11 +67,6 @@ public class ColorLightEngine {
      */
     static final long FLAG_CUSTOM = 1L << 34;
 
-    /**
-     * How many sources are placed and flooded together when adding a batch. With several flood threads the floods of a
-     * group run side by side, so a group must hold enough sources to be worth splitting (a group of 4 never reached
-     * {@link ParallelFlood#MIN_SEEDS}, so extra threads did nothing).
-     */
     /** Most seeds (of one colour, in one chunk column) flooded in one go, see {@link #buildTasks}. {@code -Dcolorlight.flood.maxseeds=N}. */
     private static final int MAX_TASK_SEEDS = Integer.getInteger("colorlight.flood.maxseeds", 8192);
 
@@ -211,7 +206,6 @@ public class ColorLightEngine {
         this.defaultMethodId = PropagationMethodRegistry.contains(defaultMethodId) ? defaultMethodId : PropagationMethodRegistry.GRID;
         this.dynamicMethodId = (dynamicMethodId != null) ? dynamicMethodId : PropagationMethodRegistry.SMOOTH;
         this.staticField = new WorldLightField(level, data, this::markDirty);
-        this.parallel = new ParallelFlood(level, this::newPropagator);
         this.dynamic = new DynamicLightLayer(this::markDirty);
     }
 
@@ -398,17 +392,13 @@ public class ColorLightEngine {
             int to = Math.min(total, from + groupSize);
             lock.lock();
             try {
-                long t0 = FloodStats.ON ? System.nanoTime() : 0L;
                 clearCustomQueuesLocked();
                 for (int i = from; i < to; i++) {
                     long key = batch.key(i);
                     Identifier methodId = resolveMethod(batch.method(i));
                     changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), methodId);
                 }
-                long t1 = FloodStats.ON ? System.nanoTime() : 0L;
                 flushQueuesLocked();
-                if (FloodStats.ON)
-                    FloodStats.group(to - from, t1 - t0, System.nanoTime() - t1);
             } finally {
                 unlock();
             }
@@ -736,24 +726,17 @@ public class ColorLightEngine {
 
     private void floodJobsLocked() {
         // each colour is spread on its own, so overlapping lights only meet where they reach the same cell
-        List<ParallelFlood.Task> tasks = new java.util.ArrayList<>();
-        int totalSeeds = buildTasks(tasks);
+        List<FloodTask> tasks = new java.util.ArrayList<>();
+        buildTasks(tasks);
 
-        if (floodThreads > 1 && totalSeeds >= ParallelFlood.MIN_SEEDS && tasks.size() > 1) {
-            long t0 = FloodStats.ON ? System.nanoTime() : 0L;
-            parallel.run(tasks, staticField, this::floodTaskLocked);
-            if (FloodStats.ON)
-                FloodStats.parallel(tasks.size(), System.nanoTime() - t0);
-        } else {
-            for (ParallelFlood.Task task : tasks)
-                floodTaskLocked(task);
-        }
+        for (FloodTask task : tasks)
+            floodTaskLocked(task);
 
         for (SeedList list : jobs.values())
             list.clear();
     }
 
-    private void floodTaskLocked(ParallelFlood.Task task) {
+    private void floodTaskLocked(FloodTask task) {
         long[] keys = java.util.Arrays.copyOfRange(task.keys(), task.from(), task.to());
         int[] levels = java.util.Arrays.copyOfRange(task.levels(), task.from(), task.to());
         propagatorFor(task.method()).spread(task.id(), keys, levels, keys.length, staticField);
@@ -768,7 +751,7 @@ public class ColorLightEngine {
      *
      * @return the number of seeds
      */
-    private int buildTasks(List<ParallelFlood.Task> out) {
+    private int buildTasks(List<FloodTask> out) {
         int total = 0;
         for (Map.Entry<JobKey, SeedList> entry : jobs.entrySet()) {
             SeedList list = entry.getValue();
@@ -783,7 +766,7 @@ public class ColorLightEngine {
             int[] levels = list.levels;
 
             if (n < 2 || n >= (1 << 20)) {
-                ParallelFlood.addSlices(out, method, id, keys, levels, 0, n, MAX_TASK_SEEDS);
+                FloodTask.addSlices(out, method, id, keys, levels, 0, n, MAX_TASK_SEEDS);
                 continue;
             }
 
@@ -806,38 +789,12 @@ public class ColorLightEngine {
             int start = 0;
             for (int i = 1; i <= n; i++) {
                 if (i == n || (order[i] >>> 20) != (order[start] >>> 20)) {
-                    ParallelFlood.addSlices(out, method, id, sortedKeys, sortedLevels, start, i, MAX_TASK_SEEDS);
+                    FloodTask.addSlices(out, method, id, sortedKeys, sortedLevels, start, i, MAX_TASK_SEEDS);
                     start = i;
                 }
             }
         }
         return total;
-    }
-
-    /** Threads the static flood may use (1 = everything on the calling thread). */
-    public void setFloodThreads(int threads) {
-        this.floodThreads = Math.max(1, threads);
-        if (this.floodThreads > 1)
-            ParallelFlood.resize(this.floodThreads);
-    }
-
-    /**
-     * The thread count a setting stands for: 0 (or less) = automatic (about a third of the machine's threads, at most 6,
-     * or {@code -Dcolorlight.threads}), otherwise that many, but never more than the machine has.
-     */
-    public static int resolveFloodThreads(int configured) {
-        if (configured <= 0)
-            return ParallelFlood.DEFAULT_THREADS;
-        return Math.min(configured, Math.max(1, Runtime.getRuntime().availableProcessors()));
-    }
-
-    /** What "automatic" means on this machine, for the settings screen. */
-    public static int automaticFloodThreads() {
-        return ParallelFlood.DEFAULT_THREADS;
-    }
-
-    public int floodThreads() {
-        return floodThreads;
     }
 
     /**
@@ -846,8 +803,6 @@ public class ColorLightEngine {
      * Only used while holding {@link #lock}.
      */
     private final WorldLightField staticField;
-    private final ParallelFlood parallel;
-    private volatile int floodThreads = ParallelFlood.DEFAULT_THREADS;
 
     /**
      * Invalidates the region downstream of a removed/changed colour and queues the cells that

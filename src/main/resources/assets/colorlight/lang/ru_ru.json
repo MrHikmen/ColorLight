@@ -24,11 +24,6 @@
   "me.colorlight.compatibility.dynamic_propagation": "Способ света движущихся источников",
   "me.colorlight.compatibility.dynamic_propagation.tooltip": "Как распространяется свет движущихся источников (например, сущностей с LambDynamicLights). Подходят только способы, заданные таблицей (без собственной функции propagate); иначе используется Smooth.",
 
-  "me.colorlight.general.performance": "Производительность",
-  "me.colorlight.general.flood_threads": "Потоки света",
-  "me.colorlight.general.flood_threads.tooltip": "Сколько потоков процессора одновременно распространяют свет, когда добавляется много источников сразу (загрузка области, установка множества ламп). «Авто» использует примерно треть ваших потоков. 1 — один поток. Больше потоков — свет загружается быстрее, но забирает процессорное время у игры. Применяется сразу.",
-  "me.colorlight.general.flood_threads.auto": "Авто (%s)",
-  "me.colorlight.general.flood_threads.value": "%s",
   "me.colorlight.general.gpu_experiments": "Эксперименты с GPU",
   "me.colorlight.general.gpu_pipeline": "Шейдерное освещение (GPU)",
   "me.colorlight.general.gpu_pipeline.tooltip": "Освещает террейн попиксельно в шейдере вместо запекания цвета в меши чанков. Свет плавнее, а его изменение больше не перестраивает чанки. Нужна поддерживаемая версия Sodium, иначе автоматически используются цвета вершин. Применяется сразу. Нельзя менять, пока включён шейдерпак.",

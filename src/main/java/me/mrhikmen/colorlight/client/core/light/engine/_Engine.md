@@ -28,35 +28,16 @@ so the surroundings are emptied and every source that can reach them floods agai
 ### Loading pipeline (what a loaded chunk goes through)
 1. `ColorLightChunkScanner` scans the chunk for light blocks (2 scanner threads, nearest chunk first).
 2. The single "apply" thread collects the sources of **all chunks that are waiting** (`queueSources`) and floods them
-   together (`addSources`, groups of 1024 sources, the columns nearest to the player first). Flooding every chunk alone would never give the flood threads
-   enough work (a group below `colorlight.parallel.min` runs on one thread).
+   together (`addSources`, groups of 1024 sources, the columns nearest to the player first).
 3. The sources of one colour **in one chunk column** are flooded by a single flood (`buildTasks`, at most
    `-Dcolorlight.flood.maxseeds` = 8192 seeds each). A flood costs about as much as the area it lights, however many
    lamps start it, so a chunk packed with lamps is one flood instead of thousands of overlapping ones (12x faster on a
    dense test). Lamps in different columns stay apart: far-apart seeds make a flood's scratch maps huge and slow.
 4. The changed sections are uploaded to the graphics card by the render thread (`GpuLightVolume.uploadPending`): 48
-   sections / 2 ms per tick, and up to 256 sections / 6 ms per tick while more than 96 are waiting.
+   sections / 2 ms per tick.
 
-`-Dcolorlight.batch.group=N` forces the group size of step 2 (for measuring).
+`-Dcolorlight.batch.group=N` forces the group size of step 2.
 
-### Profiling
-Start the game with **`-Dcolorlight.profile=true`** (it is off by default). About every ten seconds, while sources are
-being added, a line is logged:
-
-`[ColorLight] flood profile: G groups / S sources, placing P ms, flooding F ms (N parallel floods, T tasks, W ms of it waiting for workers), L block-state lookups`
-
-- *placing* - writing the source cells; *flooding* - spreading the light.
-- *parallel floods / tasks / waiting* - how much was handed to the workers and how long the lock holder waited.
-- *block-state lookups* - world reads, the main cost of a flood.
-
-Two more lines appear while loading, one per stage:
-
-- `[ColorLight] scan profile: N chunks in X ms (all scanner threads together), S sources found`
-- `[ColorLight] GPU upload profile: N sections in X ms on the render thread over T ticks, most waiting at once B`
-
-If *flooding* is small but loading is slow, look at the upload line (many waiting sections, few uploaded per tick).
-
-Compare the numbers with `Light threads = 1` and with the automatic value to see what the threads give.
 
 ### Checking that the new engine is the one running
 `/colorlight cell` prints the two slots (id, hue, level), the `OVERFLOW` flag, `[source]`, the 32-bit word the GPU gets
@@ -91,37 +72,16 @@ and the palette size for the cell in front of the face you look at and for the b
 ### Конвейер загрузки (что проходит загруженный чанк)
 1. `ColorLightChunkScanner` ищет в чанке источники света (2 потока сканера, сначала ближайшие чанки).
 2. Единственный поток «apply» собирает источники **всех ожидающих чанков** (`queueSources`) и заливает их вместе
-   (`addSources`, группы по 1024 источника, сначала колонки, ближайшие к игроку). Если заливать каждый чанк отдельно, потокам заливки не хватает работы
-   (группа меньше `colorlight.parallel.min` идёт в одном потоке).
+   (`addSources`, группы по 1024 источника, сначала колонки, ближайшие к игроку).
 3. Источники одного цвета **в одной колонке чанка** заливаются одной заливкой (`buildTasks`, не более
    `-Dcolorlight.flood.maxseeds` = 8192 источников). Заливка стоит примерно как площадь, которую она освещает, сколько бы
    ламп её ни начинало, поэтому чанк, плотно набитый лампами, — одна заливка вместо тысяч перекрывающихся (на плотном
    тесте в 12 раз быстрее). Лампы из разных колонок остаются раздельно: далёкие друг от друга источники раздувают
    рабочие таблицы заливки и замедляют её.
-4. Изменённые секции загружает на видеокарту поток рендера (`GpuLightVolume.uploadPending`): 48 секций / 2 мс за тик, а
-   пока ждут больше 96 секций — до 256 секций / 6 мс за тик.
+4. Изменённые секции загружает на видеокарту поток рендера (`GpuLightVolume.uploadPending`): 48 секций / 2 мс за тик.
 
-`-Dcolorlight.batch.group=N` задаёт размер группы из шага 2 (для замеров).
+`-Dcolorlight.batch.group=N` задаёт размер группы из шага 2.
 
-### Профилирование
-Запустите игру с аргументом **`-Dcolorlight.profile=true`** (по умолчанию выключено). Примерно раз в десять секунд, пока
-добавляются источники, в лог пишется строка:
-
-`[ColorLight] flood profile: G groups / S sources, placing P ms, flooding F ms (N parallel floods, T tasks, W ms of it waiting for workers), L block-state lookups`
-
-- *placing* - запись ячеек источников; *flooding* - распространение света.
-- *parallel floods / tasks / waiting* - сколько отдано рабочим потокам и сколько ждал поток, держащий блокировку.
-- *block-state lookups* - обращения к миру, основная цена заливки.
-
-Пока идёт загрузка, появляются ещё две строки, по одной на этап:
-
-- `[ColorLight] scan profile: N chunks in X ms (all scanner threads together), S sources found`
-- `[ColorLight] GPU upload profile: N sections in X ms on the render thread over T ticks, most waiting at once B`
-
-Если *flooding* мало, а загрузка медленная, смотрите на строку про загрузку на GPU (много секций ждёт, за тик
-загружается мало).
-
-Сравните цифры при `Потоки света = 1` и при автоматическом значении, чтобы увидеть выигрыш от потоков.
 
 ### Как убедиться, что работает новый движок
 `/colorlight cell` показывает два слота (id, оттенок, уровень), флаг `OVERFLOW`, `[source]`, 32-битное слово для GPU и
