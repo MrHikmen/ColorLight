@@ -7,6 +7,8 @@ import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
 import me.mrhikmen.colorlight.client.core.light.cell.LightPalette;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
+import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
 import me.mrhikmen.colorlight.client.core.light.util.LongIntMap;
 import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
@@ -22,6 +24,7 @@ import net.minecraft.world.level.LightLayer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -87,6 +90,12 @@ public class ColorLightEngine {
         thread.setDaemon(true);
         return thread;
     });
+
+    /** A batch with more sources than this gets its quick light first, the exact light a moment later. */
+    private static final int FAST_LIGHT_MIN_SOURCES = Integer.getInteger("colorlight.fast.minsources", 2000);
+
+    /** Quick light of batches whose exact light is still to come. Read by the render side, so copy-on-write. */
+    private final CopyOnWriteArrayList<FastBatch> fastBatches = new CopyOnWriteArrayList<>();
 
     /** Propagators of the helper thread (they hold scratch memory). Used by that thread only. */
     private final Map<Identifier, LightPropagator> helperPropagators = new HashMap<>();
@@ -259,6 +268,11 @@ public class ColorLightEngine {
             if (dyn != 0)
                 cell = LightCell.merge(cell, dyn);
         }
+        for (FastBatch batch : fastBatches) {
+            long quick = batch.storage.get(x, y, z) & LightCell.SLOTS;
+            if (quick != 0)
+                cell = LightCell.merge(cell, quick);
+        }
         return cell == 0 ? 0 : LightCell.toRgb(cell, palette);
     }
 
@@ -408,6 +422,7 @@ public class ColorLightEngine {
 
         boolean changed = false;
         int total = batch.size();
+
         int groupSize = batchGroupSize();
         for (int from = 0; from < total; from += groupSize) {
             int to = Math.min(total, from + groupSize);
@@ -419,13 +434,95 @@ public class ColorLightEngine {
                     Identifier methodId = resolveMethod(batch.method(i));
                     changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), methodId);
                 }
-                flushQueuesLocked();
+                if (customQueues.isEmpty())
+                    flushQueuesLocked();
             } finally {
                 unlock();
             }
         }
         return changed;
     }
+
+    /**
+     * The exact light of a batch that was lit quickly: floods the seeds that are still sources, then drops the quick
+     * light. Does nothing if the batch was dropped meanwhile (world change, unloaded chunks).
+     */
+    private void completeFast(FastBatch batch) {
+        lock.lock();
+        try {
+            if (!fastBatches.remove(batch))
+                return;
+
+            clearCustomQueuesLocked();
+            for (DeferredSeeds d : batch.deferred) {
+                for (int i = 0; i < d.keys().length; i++) {
+                    long key = d.keys()[i];
+                    if ((data.get(PosKey.x(key), PosKey.y(key), PosKey.z(key)) & FLAG_SOURCE) == 0)
+                        continue; // removed since it was queued
+                    if (d.levels()[i] > 0)
+                        seedList(d.key().method(), d.key().id()).add(key, d.levels()[i]);
+                }
+            }
+            flushQueuesLocked();
+
+            int[] sections = {0};
+            batch.storage.forEachLitSection(key -> sections[0]++);
+            ColorLightClient.LOGGER.info("[ColorLight] quick light done: {} sections, read by renderer {} times, {} ticks alive, gpu={}",
+                    sections[0], batch.served, batch.age, ColorLightGpu.isActive());
+            batch.storage.forEachLitSection(this::markSectionAndNeighborsDirty);
+            batch.storage.clear();
+        } finally {
+            unlock();
+        }
+    }
+
+    /**
+     * Called on the game thread every tick. A quick batch keeps its quick light until the renderer has taken it: only
+     * ticks in which nothing is waiting for upload count down. Then the exact flood starts (on the apply thread). A hard
+     * age limit makes sure the exact light comes even if the renderer never reports idle.
+     *
+     * @param renderCaughtUp true when the renderer has no section waiting for upload
+     */
+    public void onClientTick(boolean renderCaughtUp) {
+        if (fastBatches.isEmpty())
+            return;
+        boolean quiet = renderCaughtUp && !hasUndrainedDirty();
+        for (FastBatch batch : fastBatches) {
+            if (batch.scheduled)
+                continue;
+            batch.age++;
+            if (quiet && batch.ticksLeft > 0)
+                batch.ticksLeft--;
+            if (batch.ticksLeft == 0 || batch.age >= FastBatch.MAX_AGE_TICKS) {
+                batch.scheduled = true;
+                ColorLightClient.LOGGER.info("[ColorLight] quick light: exact light scheduled after {} ticks, reason: {}",
+                        batch.age, batch.ticksLeft == 0 ? "renderer idle" : "age limit");
+                ColorLightChunkScanner.runOnApplyThread(() -> completeFast(batch));
+            }
+        }
+    }
+
+    /** Quick light of one batch of sources, with what the exact flood needs later. */
+    private static final class FastBatch {
+        /** Quiet ticks the renderer needs after the last upload before the exact light replaces the quick one. */
+        static final int TICKS_BEFORE_EXACT = 3;
+        /** About 20 seconds at 20 ticks per second: the exact light arrives even if the renderer stays busy. */
+        static final int MAX_AGE_TICKS = 400;
+        final LightStorage storage = new LightStorage();
+        final List<DeferredSeeds> deferred = new java.util.ArrayList<>();
+        int ticksLeft = TICKS_BEFORE_EXACT;
+        int age;
+        boolean scheduled;
+        /** How often the renderer read a section through this batch (diagnostics only, racy by design). */
+        long served;
+
+        boolean hasSources() {
+            return !deferred.isEmpty();
+        }
+    }
+
+    /** The seeds of one job as they were queued, kept until the exact flood runs. */
+    private record DeferredSeeds(JobKey key, long[] keys, int[] levels) {}
 
     private void addSourceLocked(int x, int y, int z, int packed, Identifier methodId) {
         clearCustomQueuesLocked();
@@ -605,6 +702,7 @@ public class ColorLightEngine {
             dynamic.storage().forEachLitSection(this::markSectionAndNeighborsDirty);
             data.clear();
             dynamic.clear();
+            fastBatches.clear();
             sourceColors.clear();
             sourceIndex.clear();
             customMethodByKey.clear();
@@ -640,6 +738,8 @@ public class ColorLightEngine {
         LongIntMap wanted = new LongIntMap(chunkKeys.length * 2);
         for (long key : chunkKeys) {
             wanted.put(key, 1);
+            for (FastBatch batch : fastBatches)
+                batch.storage.removeColumn(PosKey.x(key), PosKey.z(key));
         }
 
         lock.lock();
@@ -1153,6 +1253,8 @@ public class ColorLightEngine {
         data.forEachLitSection(consumer);
         if (dynamic.isActive())
             dynamic.storage().forEachLitSection(consumer);
+        for (FastBatch batch : fastBatches)
+            batch.storage.forEachLitSection(consumer);
     }
 
     /** {@link #forEachLitSection} restricted to sections within the radii of a centre section (cheap; for periodic rescans). */
@@ -1160,6 +1262,15 @@ public class ColorLightEngine {
         data.forEachLitSectionNear(csx, csy, csz, radiusXZ, radiusY, consumer);
         if (dynamic.isActive())
             dynamic.storage().forEachLitSectionNear(csx, csy, csz, radiusXZ, radiusY, consumer);
+        for (FastBatch batch : fastBatches)
+            batch.storage.forEachLitSectionNear(csx, csy, csz, radiusXZ, radiusY, consumer);
+    }
+
+    /** True while changed sections are still waiting in the queue that the renderer drains. */
+    public boolean hasUndrainedDirty() {
+        synchronized (externalDirty) {
+            return !externalDirty.isEmpty();
+        }
     }
 
     private static final ThreadLocal<long[]> SECTION_SCRATCH = ThreadLocal.withInitial(() -> new long[16 * 16 * 16]);
@@ -1175,6 +1286,8 @@ public class ColorLightEngine {
         boolean lit = data.copySection(sx, sy, sz, cells);
         if (dynamic.isActive())
             lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+        for (FastBatch batch : fastBatches)
+            lit |= mergeFast(batch, sx, sy, sz, cells);
         if (!lit) {
             java.util.Arrays.fill(out, 0, cells.length, 0);
             return false;
@@ -1193,6 +1306,8 @@ public class ColorLightEngine {
         boolean lit = data.copySection(sx, sy, sz, cells);
         if (dynamic.isActive())
             lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+        for (FastBatch batch : fastBatches)
+            lit |= mergeFast(batch, sx, sy, sz, cells);
         if (!lit) {
             java.util.Arrays.fill(out, 0, cells.length, 0);
             return false;
@@ -1206,8 +1321,18 @@ public class ColorLightEngine {
     public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
         long[] cells = SECTION_SCRATCH.get();
         boolean lit = data.copySection(sx, sy, sz, cells);
+        for (FastBatch batch : fastBatches)
+            lit |= mergeFast(batch, sx, sy, sz, cells);
         for (int i = 0; i < cells.length; i++)
             out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
+        return lit;
+    }
+
+    /** Merges one quick batch into a section copy for the renderer, counting the reads for the log. */
+    private static boolean mergeFast(FastBatch batch, int sx, int sy, int sz, long[] cells) {
+        boolean lit = batch.storage.mergeInto(sx, sy, sz, cells);
+        if (lit)
+            batch.served++;
         return lit;
     }
 

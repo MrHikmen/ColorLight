@@ -109,5 +109,6 @@
   "me.colorlight.block.reset_to_default": "Сбросить",
   "me.colorlight.block.apply": "Применить",
   "me.colorlight.block.propagation": "Распространение",
-  "me.colorlight.block.propagation.default": "Как в настройках мода"
+  "me.colorlight.block.propagation.default": "Как в настройках мода",
+  "me.colorlight.gui.no_model": "Нет модели"
 }

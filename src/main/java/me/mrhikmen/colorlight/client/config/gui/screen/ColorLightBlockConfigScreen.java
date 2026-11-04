@@ -123,8 +123,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         int iconSize = 64;
         int iconX = leftX + (LEFT_COLUMN_WIDTH - iconSize) / 2;
 
-        DividerWidget iconPlaceholder = new DividerWidget(iconX, topY, iconSize, iconSize, 0xFF222222);
-        this.addRenderableWidget(iconPlaceholder);
+        this.addRenderableWidget(new ItemIconWidget(iconX, topY, iconSize, this.target.getBlock(), 0xFF222222));
 
         StringWidget nameLabel = new StringWidget(
                 leftX, topY + iconSize + 12, LEFT_COLUMN_WIDTH, 20,
