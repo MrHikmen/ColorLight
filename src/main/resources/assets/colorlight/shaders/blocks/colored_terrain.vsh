@@ -20,12 +20,10 @@ layout(location = 3) out float fadeFactor;
 
 // COLORLIGHT: what the fragment shader needs to light the pixel itself
 #ifndef OIT_ALPHA_ONLY
-#define CL_VERTEX_LIGHT
 #include <colorlight:colorlight_data.glsl>
 layout(location = 4) out vec4 v_ColorBase;
 layout(location = 5) out vec2 v_LightUV;
 layout(location = 6) out vec3 v_CLRel;
-layout(location = 7) out vec3 v_CLLight; // smooth light of this vertex, interpolated to the pixels
 #endif
 
 uniform isamplerBuffer u_SectionTimeInfo;
@@ -84,7 +82,6 @@ void main() {
     v_ColorBase = _vert_color;
     v_LightUV = _vert_tex_light_coord;
     v_CLRel = position + cl_cameraFrac(); // position relative to the camera's integer block
-    v_CLLight = (cl_enabled() && cl_smooth()) ? cl_vertexLight(v_CLRel, cl_cameraBlock()) : vec3(0.0);
 #else
     v_Color = _vert_color;
 #endif

@@ -18,9 +18,8 @@ import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTa
  *     {@code loss} formula, so no formula is evaluated inside the flood loop);</li>
  *     <li>the fixed-point precision the running value is kept in ({@code scale}, 1 = whole units).</li>
  * </ul>
- * <b>What stays here:</b> the loop itself, a label-correcting flood: a cell is queued again whenever a brighter value
- * reaches it. Since brightness only falls along a path, the result is the same for any visiting order and equal to the
- * per-cell maximum over the seeds taken one by one.
+ * <b>What stays here:</b> the loop itself. Cells are expanded brightest first, so each cell is expanded once, when no
+ * brighter value can still reach it; the result is the per-cell maximum over the seeds taken one by one.
  * <p>
  * Holds scratch memory: not thread-safe, use one instance per thread.
  */
@@ -126,42 +125,71 @@ public final class TablePropagator implements LightPropagator {
         field.endPass();
     }
 
+    /** Keys waiting to be expanded at each brightness (1/scale units); index = brightness. */
+    private LongQueue[] buckets = new LongQueue[0];
+
+    private LongQueue bucket(int b) {
+        if (b >= buckets.length)
+            buckets = java.util.Arrays.copyOf(buckets, Math.max(b + 1, buckets.length * 2));
+        LongQueue q = buckets[b];
+        if (q == null) {
+            q = new LongQueue(16);
+            buckets[b] = q;
+        }
+        return q;
+    }
+
     /**
-     * The flood proper: spreads from the queued cells, whose brightness must already be in the working values
-     * ({@link #seedWorking}). Every time a cell's brightness rises by at least one whole unit the field is told.
+     * The flood proper. Cells are expanded in order of brightness, brightest first. Every hop costs at least 1, so
+     * brightness only falls along a path: a cell expanded at brightness b can never be reached brighter later, and it
+     * is expanded once. Same per-cell maximum as the label-correcting loop, without re-queueing on every improvement.
      * The queue is consumed.
      */
     public void run(int id, LongQueue queue, LightField field) {
         final int count = dx.length;
+        int top = 0;
         while (!queue.isEmpty()) {
             long key = queue.poll();
-            long cur = working.get(key, 0L);
-            if (cur <= 0)
+            long v = working.get(key, 0L);
+            if (v <= 0)
                 continue;
-            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
+            int b = (int) Math.min(v, 1 << 20);
+            bucket(b).add(key);
+            if (b > top)
+                top = b;
+        }
 
-            for (int n = 0; n < count; n++) {
-                int nx = x + dx[n], ny = y + dy[n], nz = z + dz[n];
+        for (int b = top; b > 0; b--) {
+            LongQueue q = buckets[b];
+            if (q == null)
+                continue;
+            while (!q.isEmpty()) {
+                long key = q.poll();
+                long cur = working.get(key, 0L);
+                if (cur != b)
+                    continue; // improved after it was queued: it is expanded from its higher bucket
+                int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
+                field.raise(x, y, z, id, toLevel(cur));
 
-                int opacity = field.opacityAt(nx, ny, nz);
-                if (opacity >= maxOpacity)
-                    continue;
+                for (int n = 0; n < count; n++) {
+                    int nx = x + dx[n], ny = y + dy[n], nz = z + dz[n];
 
-                long next = cur - decay[n][opacity];
-                if (next <= 0)
-                    continue;
+                    int opacity = field.opacityAt(nx, ny, nz);
+                    if (opacity >= maxOpacity)
+                        continue;
 
-                long nKey = PosKey.pack(nx, ny, nz);
-                long previous = working.get(nKey, 0L);
-                if (next <= previous)
-                    continue; // this pass already reached the cell with at least this much
+                    long next = cur - decay[n][opacity];
+                    if (next <= 0)
+                        continue;
 
-                working.put(nKey, next);
+                    long nKey = PosKey.pack(nx, ny, nz);
+                    long previous = working.get(nKey, 0L);
+                    if (next <= previous)
+                        continue;
 
-                int level = toLevel(next);
-                if (level > toLevel(previous))
-                    field.raise(nx, ny, nz, id, level);
-                queue.add(nKey);
+                    working.put(nKey, next);
+                    bucket((int) Math.min(next, 1 << 20)).add(nKey); // next < cur: expanded later in this sweep
+                }
             }
         }
     }

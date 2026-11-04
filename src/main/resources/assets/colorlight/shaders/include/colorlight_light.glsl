@@ -24,9 +24,6 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     float rawLvl = lvl;
     lvl = cl_shapeLevel(lvl);
 
-    float tintStrength = cl_tintStrength();
-    float tintGamma = cl_tintGamma();
-
     // Sodium encodes light levels 0..15 as (level * 16 + 8) / 256
     float vanillaBlock = clamp((lightUV.x * 256.0 - 8.0) / 240.0, 0.0, 1.0);
     float vanillaSky = clamp((lightUV.y * 256.0 - 8.0) / 240.0, 0.0, 1.0);
@@ -40,6 +37,9 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     if (lvl <= 0.0) {
         return clamp(textureLod(CL_LIGHT_TEX, uv, 0.0).rgb, vec3(0.0), vec3(1.0));
     }
+
+    float tintStrength = cl_tintStrength(); // PERF: read only for lit pixels
+    float tintGamma = cl_tintGamma();
 
     vec3 full = textureLod(CL_LIGHT_TEX, uv, 0.0).rgb;
     vec3 skyOnly = textureLod(CL_LIGHT_TEX, vec2(8.0 / 256.0, uv.y), 0.0).rgb;          // block 0, sky level

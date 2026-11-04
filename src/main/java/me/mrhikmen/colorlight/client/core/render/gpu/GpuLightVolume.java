@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
@@ -69,12 +70,15 @@ public final class GpuLightVolume {
     private static final int MAX_SLOTS = 4096;
 
     private static final int RESCAN_TICKS = 20;
-    private static final int MAX_UPLOADS_PER_TICK = 48;
-    private static final long UPLOAD_BUDGET_NANOS = 2_000_000L;
+    /** Sections uploaded per tick. Light changes arrive in bursts of hundreds of sections (see ColorLightDirtyFlusher). */
+    private static final int MAX_UPLOADS_PER_TICK = 256;
+    /** Main-thread time per tick for uploads. Each upload used to re-read the blocks of its section; now it is cached. */
+    private static final long UPLOAD_BUDGET_NANOS = 3_000_000L;
 
     /** Brightest tint the light colour can reach; 1 = fully the light's hue at full strength. */
     private static final float TINT_STRENGTH = 1.0f;
 
+    /** The header is rewritten every frame by mapping it, so it must be mappable. */
     private static final int USAGE = GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER | GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_WRITE;
 
     private final int slotCount;
@@ -98,6 +102,13 @@ public final class GpuLightVolume {
     private final LongOpenHashSet pending = new LongOpenHashSet();
 
     private final int[] cells = new int[SECTION_CELLS];
+
+    /**
+     * Solid cells of each uploaded section (bit i = cell i), so a light change does not have to read the blocks of the
+     * section again. Dropped when the section leaves the volume or one of its blocks changes ({@link #blockChanged}).
+     */
+    private final Long2ObjectOpenHashMap<long[]> solidMasks = new Long2ObjectOpenHashMap<>();
+    private final int[] scratchSolid = new int[SECTION_CELLS];
     private final ByteBuffer sectionBytes = MemoryUtil.memAlloc(SECTION_CELLS * Integer.BYTES);
     private final ByteBuffer wordBytes = MemoryUtil.memAlloc(Integer.BYTES);
     private final int[] header = new int[HEADER_TOTAL];
@@ -411,6 +422,7 @@ public final class GpuLightVolume {
 
     private void resetBookkeeping() {
         slotOf.clear();
+        solidMasks.clear();
         for (int i = 0; i < slotCount; i++)
             freeSlots[i] = slotCount - 1 - i; // pop() hands out slot 0 first
         freeCount = slotCount;
@@ -549,7 +561,31 @@ public final class GpuLightVolume {
 
     /** Sets {@link #OPAQUE_BIT} on every cell of the section that holds a light-blocking block. */
     private void markSolidCells(ClientLevel level, int sx, int sy, int sz) {
-        markSolid(level, sx, sy, sz, cells, cursor);
+        long key = PosKey.pack(sx, sy, sz);
+        long[] mask = solidMasks.get(key);
+        if (mask == null) {
+            Arrays.fill(scratchSolid, 0);
+            markSolid(level, sx, sy, sz, scratchSolid, cursor);
+            mask = new long[SECTION_CELLS / 64];
+            for (int i = 0; i < SECTION_CELLS; i++) {
+                if ((scratchSolid[i] & OPAQUE_BIT) != 0)
+                    mask[i >> 6] |= 1L << (i & 63);
+            }
+            // cache only when the chunk is there: an empty mask read from a missing chunk would be wrong later
+            if (level.getChunk(sx, sz, ChunkStatus.FULL, false) != null)
+                solidMasks.put(key, mask);
+        }
+        for (int i = 0; i < SECTION_CELLS; i++) {
+            if (((mask[i >> 6] >>> (i & 63)) & 1L) != 0)
+                cells[i] |= OPAQUE_BIT;
+        }
+    }
+
+    /** A block of the section at (sx, sy, sz) changed: its solid mask is read again on the next upload. */
+    public void blockChanged(int sx, int sy, int sz) {
+        long key = PosKey.pack(sx, sy, sz);
+        if (solidMasks.remove(key) != null && slotOf.containsKey(key))
+            pending.add(key);
     }
 
     /**
@@ -617,6 +653,7 @@ public final class GpuLightVolume {
     }
 
     private void release(long key) {
+        solidMasks.remove(key);
         int slot = slotOf.remove(key);
         if (slot < 0)
             return;

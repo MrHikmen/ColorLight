@@ -18,7 +18,6 @@ layout(location = 3) in float fadeFactor;
 layout(location = 4) in vec4 v_ColorBase; // vertex colour without the lightmap
 layout(location = 5) in vec2 v_LightUV;   // Sodium's lightmap coordinate (block, sky)
 layout(location = 6) in vec3 v_CLRel;     // position relative to the camera's integer block
-layout(location = 7) in vec3 v_CLLight;   // smooth light, worked out per vertex (only valid while smooth lighting is on)
 
 uniform sampler2D u_LightTex;
 
@@ -122,19 +121,15 @@ vec4 cl_resolveVertexColor() {
         return v_Color;
     }
 
-    vec3 cl;
-    if (cl_smooth()) {
-        cl = v_CLLight; // read per vertex: no normal and no volume reads per pixel
-    } else {
-        // one sample per block face; the normal comes from screen-space derivatives, flipped to face the camera
-        vec3 n = cross(dFdx(v_CLRel), dFdy(v_CLRel));
-        float nLength = length(n);
-        n = (nLength > 1.0e-12) ? (n / nLength) : vec3(0.0, 1.0, 0.0);
-        if (dot(n, v_CLRel - cl_cameraFrac()) > 0.0) {
-            n = -n;
-        }
-        cl = cl_fetchLightFlat(v_CLRel, n, cl_cameraBlock());
+    // Smooth or flat light, decided by the header. The normal comes from screen-space derivatives (taken in uniform
+    // control flow: the enabled flag is in the header), flipped to face the camera.
+    vec3 n = cross(dFdx(v_CLRel), dFdy(v_CLRel));
+    float nLength = length(n);
+    n = (nLength > 1.0e-12) ? (n / nLength) : vec3(0.0, 1.0, 0.0);
+    if (dot(n, v_CLRel - cl_cameraFrac()) > 0.0) {
+        n = -n;
     }
+    vec3 cl = cl_fetchLight(v_CLRel, n, cl_cameraBlock());
     float lvl = max(cl.r, max(cl.g, cl.b));
 
     return v_ColorBase * vec4(cl_lightColor(v_LightUV, cl, lvl), 1.0);

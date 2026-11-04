@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.client.core.light.engine;
 
+import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
 import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
@@ -21,6 +22,10 @@ import net.minecraft.world.level.LightLayer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static me.mrhikmen.colorlight.client.core.light.propagation.PropagationTables.*;
@@ -69,6 +74,22 @@ public class ColorLightEngine {
 
     /** Most seeds (of one colour, in one chunk column) flooded in one go, see {@link #buildTasks}. {@code -Dcolorlight.flood.maxseeds=N}. */
     private static final int MAX_TASK_SEEDS = Integer.getInteger("colorlight.flood.maxseeds", 8192);
+
+    /** A batch with fewer seeds than this is flooded on one thread: handing it over would cost more than it saves. */
+    private static final int PARALLEL_MIN_SEEDS = Integer.getInteger("colorlight.flood.parallelseeds", 128);
+
+    /**
+     * The second flood thread (the apply thread is the first). Runs only the floods of the batch it is given, while the
+     * apply thread floods the other half, both under the engine lock. Daemon, so it never keeps the game alive.
+     */
+    private static final ExecutorService FLOOD_HELPER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "ColorLight Flood Helper");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    /** Propagators of the helper thread (they hold scratch memory). Used by that thread only. */
+    private final Map<Identifier, LightPropagator> helperPropagators = new HashMap<>();
 
     /** {@code -Dcolorlight.batch.group=N} forces the group size (for measuring). */
     private static final int GROUP_OVERRIDE = Integer.getInteger("colorlight.batch.group", 0);
@@ -727,13 +748,93 @@ public class ColorLightEngine {
     private void floodJobsLocked() {
         // each colour is spread on its own, so overlapping lights only meet where they reach the same cell
         List<FloodTask> tasks = new java.util.ArrayList<>();
-        buildTasks(tasks);
+        int seeds = buildTasks(tasks);
 
-        for (FloodTask task : tasks)
-            floodTaskLocked(task);
+        if (tasks.size() >= 2 && seeds >= PARALLEL_MIN_SEEDS) {
+            floodTasksInParallelLocked(tasks);
+        } else {
+            for (FloodTask task : tasks)
+                floodTaskLocked(task);
+        }
 
         for (SeedList list : jobs.values())
             list.clear();
+    }
+
+    /**
+     * Two threads flood the tasks of one batch: this one and {@link #FLOOD_HELPER}. The tasks are split into two halves
+     * of similar work. A flood reads block opacity and writes only its own working values, so it can run without the
+     * storage; each one records its raises, and the records are replayed into the storage in task order, exactly the
+     * order the one-thread path writes them in. So the result does not depend on how the tasks were split.
+     * If the helper fails, its tasks are flooded here, after the replay of the ones before them.
+     */
+    private void floodTasksInParallelLocked(List<FloodTask> tasks) {
+        int n = tasks.size();
+        boolean[] onHelper = new boolean[n];
+        long here = 0, there = 0;
+        for (int i = 0; i < n; i++) {
+            int size = tasks.get(i).size();
+            if (there < here) {
+                onHelper[i] = true;
+                there += size;
+            } else {
+                here += size;
+            }
+        }
+
+        DeferredLightField[] logs = new DeferredLightField[n];
+        Future<?> helper = FLOOD_HELPER.submit(() -> {
+            for (int i = 0; i < n; i++) {
+                if (!onHelper[i])
+                    continue;
+                FloodTask task = tasks.get(i);
+                DeferredLightField log = new DeferredLightField(level);
+                helperPropagators.computeIfAbsent(task.method() == null ? defaultMethodId : task.method(), this::newPropagator)
+                        .spread(task.id(), copyKeys(task), copyLevels(task), task.size(), log);
+                logs[i] = log; // only once the flood is complete
+            }
+        });
+
+        for (int i = 0; i < n; i++) {
+            if (onHelper[i])
+                continue;
+            FloodTask task = tasks.get(i);
+            DeferredLightField log = new DeferredLightField(level);
+            propagatorFor(task.method()).spread(task.id(), copyKeys(task), copyLevels(task), task.size(), log);
+            logs[i] = log;
+        }
+
+        boolean interrupted = false;
+        boolean helperFailed = false;
+        while (true) {
+            try {
+                helper.get();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true; // keep waiting: the helper still reads the batch
+            } catch (ExecutionException e) {
+                ColorLightClient.LOGGER.error("[ColorLight] Flood helper failed, flooding its share here: {}", e.getCause().toString());
+                helperFailed = true;
+                break;
+            }
+        }
+        if (interrupted)
+            Thread.currentThread().interrupt();
+
+        for (int i = 0; i < n; i++) {
+            if (logs[i] != null)
+                logs[i].replayInto(staticField);
+            else if (helperFailed)
+                floodTaskLocked(tasks.get(i));
+        }
+    }
+
+    private static long[] copyKeys(FloodTask task) {
+        return java.util.Arrays.copyOfRange(task.keys(), task.from(), task.to());
+    }
+
+    private static int[] copyLevels(FloodTask task) {
+        return java.util.Arrays.copyOfRange(task.levels(), task.from(), task.to());
     }
 
     private void floodTaskLocked(FloodTask task) {

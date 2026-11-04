@@ -69,8 +69,8 @@ vec3 cl_decodeCell(int raw) {
     return c / 255.0;
 }
 
-// CL_FRAGMENT: the pixel shader reads the volume per pixel. CL_VERTEX_LIGHT: the vertex shader reads it (cl_vertexLight).
-#if defined(CL_FRAGMENT) || defined(CL_VERTEX_LIGHT)
+// CL_FRAGMENT: the pixel shader reads the volume per pixel.
+#ifdef CL_FRAGMENT
 
 uniform isamplerBuffer u_CLData;
 uniform isamplerBuffer u_CLPool;
@@ -200,22 +200,6 @@ vec3 cl_fetchLight(vec3 rel, vec3 n, ivec3 camBlock) {
     }
 
     return (wsum > 0.0) ? (sum / (wsum * 255.0)) : vec3(0.0);
-}
-
-// Smooth light at a vertex, from its position alone (no face normal needed): the mean of the light of the cells that
-// touch the nearest block corner. Solid cells are left out, so for a vertex on a block face only the open side counts,
-// like vanilla's smooth lighting. The fragment shader gets the interpolated value instead of reading the volume
-// itself: a few thousand vertices do this work instead of every pixel.
-// rel: position relative to the camera's integer block.
-vec3 cl_vertexLight(vec3 rel, ivec3 camBlock) {
-    ivec3 camSection = (camBlock - (camBlock & 15)) / 16;
-    ivec3 base = ivec3(floor(rel + 0.5)) + camBlock - 1; // the 8 cells around the corner
-    vec3 sum = vec3(0.0);
-    float wsum = 0.0;
-    for (int i = 0; i < 8; i++) {
-        cl_tap(base + ivec3(i & 1, (i >> 1) & 1, (i >> 2) & 1), 1.0, camSection, sum, wsum);
-    }
-    return (wsum > 0.0) ? (sum / wsum) : vec3(0.0);
 }
 
 // The cell in front of the face only (one read), what the pixel shader uses when smooth lighting is off.

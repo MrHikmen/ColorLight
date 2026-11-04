@@ -5,6 +5,7 @@ import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
 import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
+import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -35,6 +36,7 @@ public abstract class LevelChunkMixin {
         if (!(this.level instanceof ClientLevel))
             return;
 
+        ColorLightGpu.onBlockChanged(pos); // the GPU volume caches solid cells per section
         ColorLightEngine engine = ColorLightEngineHolder.get();
         if (engine == null)
             return;

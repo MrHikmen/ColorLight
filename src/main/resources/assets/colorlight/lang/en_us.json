@@ -24,7 +24,7 @@
 
   "me.colorlight.general.gpu_experiments": "GPU experiments",
   "me.colorlight.general.gpu_pipeline": "Shader lighting (GPU)",
-  "me.colorlight.general.gpu_pipeline.tooltip": "Lights terrain per pixel in a shader instead of baking colours into chunk meshes. Smoother light, and light changes no longer rebuild chunks. Needs a Sodium version ColorLight supports, otherwise vertex colours are used automatically. Takes effect immediately. Can't be changed while a shader pack is on.",
+  "me.colorlight.general.gpu_pipeline.tooltip": "Lights terrain per pixel in a shader instead of baking colours into chunk meshes. Smoother light, and light changes no longer rebuild chunks. Needs a Sodium version ColorLight supports, otherwise vertex colours are used automatically. Switching it OFF applies immediately; switching it ON after the game was started with it off needs a restart. Can't be changed while a shader pack is on.",
   "me.colorlight.general.gpu_light_sections": "GPU light memory",
   "me.colorlight.general.gpu_light_sections.tooltip": "How many 16x16x16 sections of coloured light the shader pipeline keeps on the graphics card at once (16 KiB each). Only sections that actually hold light use a slot. Raise it if light is missing far from you in a big lit area; lower it to save video memory. Applies immediately.",
   "me.colorlight.general.gpu_light_sections.value": "%s sections (%s MiB)",

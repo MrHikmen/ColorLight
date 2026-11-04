@@ -13,6 +13,7 @@ import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 import net.fabricmc.loader.api.FabricLoader;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.Identifier;
 
@@ -183,6 +184,11 @@ public final class ColorLightGpu {
 
     private static boolean decide() {
         if (Boolean.getBoolean("colorlight.noGpu"))
+            return false;
+        // PERF: our terrain shader copy (extra varyings, header reads in every vertex/pixel) costs frames even when the
+        // light is switched off. If the GPU pipeline is off in the config at launch, leave Sodium's own shader alone
+        // (vertex colours are used). Turning it on later needs a game restart.
+        if (!ColorLightClient.config.GPU_PIPELINE && !Boolean.getBoolean("colorlight.forceGpu"))
             return false;
         return sodiumHooksApplied();
     }
@@ -378,6 +384,13 @@ public final class ColorLightGpu {
             return null;
         GpuLightVolume v = volume;
         return v == null ? null : v.anyGlNames();
+    }
+
+    /** Client-side block change (from the chunk mixin, main thread): the section's solid cells may have changed. */
+    public static void onBlockChanged(BlockPos pos) {
+        GpuLightVolume v = volume;
+        if (v != null)
+            v.blockChanged(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
     }
 
     /** The engine reported these sections as changed. */
