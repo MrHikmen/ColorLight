@@ -434,8 +434,7 @@ public class ColorLightEngine {
                     Identifier methodId = resolveMethod(batch.method(i));
                     changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), methodId);
                 }
-                if (customQueues.isEmpty())
-                    flushQueuesLocked();
+                flushQueuesLocked();
             } finally {
                 unlock();
             }
