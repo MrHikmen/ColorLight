@@ -33,6 +33,18 @@ public final class TablePropagator implements LightPropagator {
 
     /** Brightness (1/scale units) the current pass has reached in the cells it touched. */
     private final PassMap working = new PassMap(1 << 12);
+
+    /** Smallest cost of any hop into a block the flood can pass (opacity below maxOpacity). Bounds how far light reaches. */
+    private final int minCost;
+
+    /**
+     * Dense scratch for {@link #spread}: one int per cell of the reachable box. Layout (low to high bits):
+     * value 11 bits | opacity 4 bits | opacity known 1 bit | generation 16 bits. One memory access per neighbour.
+     */
+    private static final int DENSE_MAX_CELLS = 1 << 20;
+    private static final int VAL_MASK = 0x7FF, OPAC_SHIFT = 11, OPAC_KNOWN = 1 << 15, GEN_SHIFT = 16, GEN_MAX = 0xFFFF;
+    private int[] dense = new int[0];
+    private int dGen = 0;
     private final LongQueue queue = new LongQueue(1 << 10);
 
     /**
@@ -49,6 +61,11 @@ public final class TablePropagator implements LightPropagator {
         this.decay = decay;
         this.scale = scale;
         this.maxOpacity = Math.max(1, Math.min(maxOpacity, MAX_OPACITY));
+        int mc = Integer.MAX_VALUE;
+        for (int[] row : decay)
+            for (int o = 0; o < Math.min(this.maxOpacity, row.length); o++)
+                mc = Math.min(mc, row[o]);
+        this.minCost = Math.max(1, mc);
     }
 
     /** Offset of neighbour n of a hop. */
@@ -110,6 +127,131 @@ public final class TablePropagator implements LightPropagator {
 
     @Override
     public void spread(int id, long[] seedKeys, int[] seedLevels, int seedCount, LightField field) {
+        // Bounding box of everything the flood can reach: a cell at Chebyshev distance k from a seed has value
+        // <= start - k * minCost, so only k <= (maxStart - 1) / minCost can be lit at all.
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        long maxStart = 0;
+        for (int i = 0; i < seedCount; i++) {
+            long start = (long) seedLevels[i] * scale;
+            if (start <= 0)
+                continue;
+            long k = seedKeys[i];
+            int x = PosKey.x(k), y = PosKey.y(k), z = PosKey.z(k);
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+            minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+            maxStart = Math.max(maxStart, start);
+        }
+        if (maxStart <= 0) {
+            field.beginPass();
+            field.endPass();
+            return;
+        }
+        if (maxStart > VAL_MASK) {
+            spreadHashed(id, seedKeys, seedLevels, seedCount, field);
+            return;
+        }
+        long reach = (maxStart - 1) / minCost;
+        long sx = (long) maxX - minX + 1 + 2 * reach;
+        long sy = (long) maxY - minY + 1 + 2 * reach;
+        long sz = (long) maxZ - minZ + 1 + 2 * reach;
+        if (sx * sy * sz > DENSE_MAX_CELLS) {
+            spreadHashed(id, seedKeys, seedLevels, seedCount, field);
+            return;
+        }
+        final int x0 = (int) (minX - reach), y0 = (int) (minY - reach), z0 = (int) (minZ - reach);
+        final int nx0 = (int) sx, ny0 = (int) sy, nz0 = (int) sz;
+        final int vol = nx0 * ny0 * nz0;
+        if (dense.length < vol) {
+            dense = new int[vol];
+            dGen = 0;
+        }
+
+        field.beginPass();
+        if (++dGen > GEN_MAX) {
+            java.util.Arrays.fill(dense, 0);
+            dGen = 1;
+        }
+        final int gen = dGen;
+        final int[] cells = dense;
+        final int genTag = gen << GEN_SHIFT;
+        final int OPAC_BITS = 0xF << OPAC_SHIFT;
+
+        for (int i = 0; i < seedCount; i++) {
+            long start = (long) seedLevels[i] * scale;
+            if (start <= 0)
+                continue;
+            long key = seedKeys[i];
+            int s = (int) start;
+            int idx = ((PosKey.x(key) - x0) * ny0 + (PosKey.y(key) - y0)) * nz0 + (PosKey.z(key) - z0);
+            int c = cells[idx];
+            if ((c >>> GEN_SHIFT) == gen) {
+                if (s > (c & VAL_MASK))
+                    cells[idx] = (c & ~VAL_MASK) | s;      // same pass: keep the opacity already cached
+            } else {
+                cells[idx] = genTag | s;                    // first touch this pass
+            }
+            bucket(s).add(key);
+        }
+
+        final int count = dx.length;
+        for (int b = (int) maxStart; b > 0; b--) {
+            LongQueue q = buckets[b];
+            if (q == null)
+                continue;
+            while (!q.isEmpty()) {
+                long key = q.poll();
+                int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
+                int idx = ((x - x0) * ny0 + (y - y0)) * nz0 + (z - z0);
+                int c = cells[idx];
+                int cur = (c >>> GEN_SHIFT) == gen ? (c & VAL_MASK) : 0;
+                if (cur != b)
+                    continue; // improved after it was queued: expanded from its higher bucket
+                field.raise(x, y, z, id, toLevel(cur));
+
+                for (int n = 0; n < count; n++) {
+                    int nx = x + dx[n], ny = y + dy[n], nz = z + dz[n];
+                    int ax = nx - x0, ay = ny - y0, az = nz - z0;
+                    if (ax < 0 || ay < 0 || az < 0 || ax >= nx0 || ay >= ny0 || az >= nz0)
+                        continue; // unreachable by the bound above: its value would not be positive
+                    int nIdx = (ax * ny0 + ay) * nz0 + az;
+                    int nc = cells[nIdx];
+
+                    int opacity;
+                    int previous;
+                    if ((nc >>> GEN_SHIFT) == gen) {
+                        previous = nc & VAL_MASK;
+                        if ((nc & OPAC_KNOWN) != 0) {
+                            opacity = (nc & OPAC_BITS) >>> OPAC_SHIFT;
+                        } else {
+                            opacity = field.opacityAt(nx, ny, nz) & 0xF;
+                            cells[nIdx] = (nc & ~OPAC_BITS) | (opacity << OPAC_SHIFT) | OPAC_KNOWN;
+                        }
+                    } else {
+                        previous = 0;
+                        opacity = field.opacityAt(nx, ny, nz) & 0xF;
+                        cells[nIdx] = genTag | (opacity << OPAC_SHIFT) | OPAC_KNOWN;
+                    }
+                    if (opacity >= maxOpacity)
+                        continue;
+
+                    int next = cur - decay[n][opacity];
+                    if (next <= 0)
+                        continue;
+                    if (next <= previous)
+                        continue;
+
+                    cells[nIdx] = genTag | (opacity << OPAC_SHIFT) | OPAC_KNOWN | next;
+                    bucket(next).add(PosKey.pack(nx, ny, nz));
+                }
+            }
+        }
+        field.endPass();
+    }
+
+    /** The original hashed path, used only when the reachable box would be too big for dense scratch. */
+    private void spreadHashed(int id, long[] seedKeys, int[] seedLevels, int seedCount, LightField field) {
         field.beginPass();
         beginPass();
         queue.clear();
