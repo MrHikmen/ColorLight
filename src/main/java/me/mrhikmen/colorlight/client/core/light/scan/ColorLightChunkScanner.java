@@ -133,13 +133,24 @@ public final class ColorLightChunkScanner {
                     continue;
                 all.addAll(chunk.found());
             }
-            if (all.isEmpty() || current == null)
+            if (current == null)
                 return;
 
-            var player = Minecraft.getInstance().player;
-            if (player != null)
-                all.sortByDistance(player.getBlockX(), player.getBlockY(), player.getBlockZ());
-            current.addSources(all);
+            if (!all.isEmpty()) {
+                var player = Minecraft.getInstance().player;
+                if (player != null)
+                    all.sortByDistance(player.getBlockX(), player.getBlockY(), player.getBlockZ());
+                current.addSources(all);
+            }
+
+            // light of neighbouring chunks that spilled into these chunks was erased when they unloaded
+            long[] keys = new long[chunks.size()];
+            int n = 0;
+            for (PendingChunk chunk : chunks) {
+                if (chunk.engine() == current && chunk.level().hasChunk(chunk.chunkPos().x(), chunk.chunkPos().z()))
+                    keys[n++] = ColorLightEngine.chunkKey(chunk.chunkPos().x(), chunk.chunkPos().z());
+            }
+            current.reseedFromNeighbours(java.util.Arrays.copyOf(keys, n));
         } catch (Throwable t) {
             ColorLightClient.LOGGER.warn("[ColorLight] Failed to apply light sources of {} chunks", chunks.size(), t);
         }
@@ -285,13 +296,14 @@ public final class ColorLightChunkScanner {
                         Math.min(entry.light, emission), entry.getPropagationId());
             });
 
+            // also queued when empty: a chunk without lamps still needs the light of its neighbours
             if (!found.isEmpty()) {
                 var player = Minecraft.getInstance().player;
                 if (player != null)
                     found.sortByDistance(player.getBlockX(), player.getBlockY(), player.getBlockZ());
-                ChunkPos chunkPos = chunk.getPos();
-                submitApply(() -> queueSources(new PendingChunk(level, chunkPos, engine, found)), false);
             }
+            ChunkPos chunkPos = chunk.getPos();
+            submitApply(() -> queueSources(new PendingChunk(level, chunkPos, engine, found)), false);
         } catch (Throwable t) {
             ColorLightClient.LOGGER.warn("[ColorLight] Failed to scan chunk {}", chunk.getPos(), t);
         }

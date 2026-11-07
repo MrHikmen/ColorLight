@@ -194,6 +194,18 @@ public final class LightStorage {
             overflow.remove(overflowKey(cx, cz));
     }
 
+    /** Calls {@code consumer} with the section Y of every non-empty section of one column (nothing if the column is absent). */
+    public void forEachLitSectionY(int cx, int cz, java.util.function.IntConsumer consumer) {
+        Column col = columnOrNull(cx, cz);
+        if (col == null)
+            return;
+        for (int yIdx = 0; yIdx < SECTION_Y_COUNT; yIdx++) {
+            Section s = col.sections.get(yIdx);
+            if (s != null && s.nonEmpty > 0)
+                consumer.accept(yIdx - SECTION_Y_OFFSET);
+        }
+    }
+
     public void clear() {
         for (int i = 0; i < COLUMN_WINDOW * COLUMN_WINDOW; i++) {
             if (columns.get(i) != null)

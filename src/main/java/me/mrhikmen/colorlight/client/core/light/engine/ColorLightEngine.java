@@ -434,6 +434,10 @@ public class ColorLightEngine {
                     Identifier methodId = resolveMethod(batch.method(i));
                     changed |= placeSourceLocked(PosKey.x(key), PosKey.y(key), PosKey.z(key), batch.color(i), methodId);
                 }
+                // Always flood. customQueues is a map that keeps its (emptied) entries once any removal / block change
+                // has used queueFor(), so testing customQueues.isEmpty() here meant "never flood again after the first
+                // edit": the source cell was written but its light never spread (flushQueuesLocked is a no-op when
+                // there is nothing queued, so no check is needed).
                 flushQueuesLocked();
             } finally {
                 unlock();
@@ -765,6 +769,62 @@ public class ColorLightEngine {
             for (long key : chunkKeys) {
                 data.removeColumn(PosKey.x(key), PosKey.z(key));
             }
+        } finally {
+            unlock();
+        }
+    }
+
+    /**
+     * Light that came from sources in neighbouring chunks and had spilled into a chunk is erased with that chunk when it
+     * unloads ({@link #removeChunks}), and a reload only floods the chunk's own sources. So after chunks (re)load, the
+     * lit cells along the border of their still-loaded neighbours are queued as seeds: every light a cell stores spreads
+     * on from its stored brightness ({@link #flushQueuesLocked}), which refills the gap. A flood only ever raises cells,
+     * so cells that are already right are untouched and nothing is marked dirty for them.
+     *
+     * @param chunkKeys keys from {@link #chunkKey(int, int)} of chunks that just loaded
+     */
+    public void reseedFromNeighbours(long[] chunkKeys) {
+        if (chunkKeys == null || chunkKeys.length == 0)
+            return;
+
+        LongIntMap loaded = new LongIntMap(chunkKeys.length * 2);
+        for (long key : chunkKeys)
+            loaded.put(key, 1);
+
+        lock.lock();
+        try {
+            clearCustomQueuesLocked();
+            seedSeen.clear();
+            for (long key : chunkKeys) {
+                int cx = PosKey.x(key), cz = PosKey.z(key);
+                for (int dir = 0; dir < 4; dir++) {
+                    int ddx = dir == 0 ? 1 : dir == 1 ? -1 : 0;
+                    int ddz = dir == 2 ? 1 : dir == 3 ? -1 : 0;
+                    int ncx = cx + ddx, ncz = cz + ddz;
+                    if (loaded.containsKey(chunkKey(ncx, ncz)))
+                        continue; // reloaded too: it has nothing yet, and it reseeds from its own neighbours
+                    // the border cells of the neighbour that touch the chunk
+                    int fixed = ddx != 0 ? (ddx > 0 ? ncx << 4 : (ncx << 4) + 15)
+                                         : (ddz > 0 ? ncz << 4 : (ncz << 4) + 15);
+                    data.forEachLitSectionY(ncx, ncz, sy -> {
+                        for (int y = sy << 4; y < (sy << 4) + 16; y++) {
+                            for (int i = 0; i < 16; i++) {
+                                int x = ddx != 0 ? fixed : (ncx << 4) + i;
+                                int z = ddx != 0 ? (ncz << 4) + i : fixed;
+                                long cell = data.get(x, y, z);
+                                if ((cell & LightCell.SLOTS) != 0) {
+                                    long cellKey = PosKey.pack(x, y, z);
+                                    if (!seedSeen.contains(cellKey)) {
+                                        seedSeen.put(cellKey, 1L);
+                                        queueFor(methodIdOf(cell, cellKey)).add(cellKey);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            flushQueuesLocked();
         } finally {
             unlock();
         }
