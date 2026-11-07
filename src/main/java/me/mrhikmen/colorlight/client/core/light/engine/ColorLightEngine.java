@@ -1457,7 +1457,18 @@ public class ColorLightEngine {
          * the result to the dynamic layer under the lock, changing only the cells that differ.
          */
         public void update(int id, double x, double y, double z, int r, int g, int b, int strength) {
-            DynamicFootprint footprint = flood.compute(x - 0.5, y, z - 0.5, r, g, b, strength);
+            update(id, x, y, z, r, g, b, strength, null);
+        }
+
+        /**
+         * Like {@link #update(int, double, double, double, int, int, int, int)}, but with a view direction: when
+         * {@code beam} is not {@code null} the light fills only a cone from (x, y, z) along {@link LightBeam} and is
+         * not halved. Recompute it when the view turns, as well as when the source moves.
+         */
+        public void update(int id, double x, double y, double z, int r, int g, int b, int strength, LightBeam beam) {
+            DynamicFootprint footprint = beam == null
+                    ? flood.compute(x - 0.5, y, z - 0.5, r, g, b, strength)
+                    : flood.computeBeam(x, y, z, r, g, b, strength, beam);
             lock.lock();
             try {
                 dynamic.replace(id, footprint);

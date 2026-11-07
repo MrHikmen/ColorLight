@@ -52,6 +52,10 @@ public class ColorLightConfig {
 
     public boolean ENTITY_TRACKING_ENABLED = true;
     public boolean ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = true;
+    /** Turn LambDynamicLights off while the GPU pipeline draws the light (see ColorLightLambDynLightsCompat). */
+    public boolean DISABLE_LDL_ON_GPU = true;
+    /** Illuminated flashlight reach, in percent of the default (100 = as Illuminated). */
+    public int FLASHLIGHT_RANGE_PERCENT = 100;
     public int ENTITY_CHECK_RADIUS_CHUNKS = 12;
 
     public boolean CREATE_CONTRAPTION_LIGHT = true;
@@ -109,6 +113,8 @@ public class ColorLightConfig {
                 this.ENTITY_TRACKING_ENABLED = root.has("ENTITY_TRACKING_ENABLED") ? loaded.ENTITY_TRACKING_ENABLED : this.ENTITY_TRACKING_ENABLED;
                 this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE = root.has("ENTITY_CHECK_FOLLOW_RENDER_DISTANCE") ? loaded.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE : this.ENTITY_CHECK_FOLLOW_RENDER_DISTANCE;
                 this.ENTITY_CHECK_RADIUS_CHUNKS = loaded.ENTITY_CHECK_RADIUS_CHUNKS > 0 ? loaded.ENTITY_CHECK_RADIUS_CHUNKS : this.ENTITY_CHECK_RADIUS_CHUNKS;
+                this.DISABLE_LDL_ON_GPU = root.has("DISABLE_LDL_ON_GPU") ? loaded.DISABLE_LDL_ON_GPU : this.DISABLE_LDL_ON_GPU;
+                this.FLASHLIGHT_RANGE_PERCENT = loaded.FLASHLIGHT_RANGE_PERCENT > 0 ? Math.max(25, Math.min(400, loaded.FLASHLIGHT_RANGE_PERCENT)) : this.FLASHLIGHT_RANGE_PERCENT;
 
                 this.CREATE_CONTRAPTION_LIGHT = root.has("CREATE_CONTRAPTION_LIGHT") ? loaded.CREATE_CONTRAPTION_LIGHT : this.CREATE_CONTRAPTION_LIGHT;
                 this.SABLE_CROSS_LIGHT = root.has("SABLE_CROSS_LIGHT") ? loaded.SABLE_CROSS_LIGHT : this.SABLE_CROSS_LIGHT;

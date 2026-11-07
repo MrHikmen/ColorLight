@@ -51,10 +51,16 @@
   "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
   "me.colorlight.compatibility.entity_tracking_enabled": "Enable LDL compatibility",
   "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Master switch for scanning entities for glowing blocks LDL. Disable it to turn this feature off completely.",
+  "me.colorlight.compatibility.disable_ldl_on_gpu": "Turn LDL off on the GPU pipeline",
+  "me.colorlight.compatibility.disable_ldl_on_gpu.tooltip": "While shader lighting is on, LambDynamicLights stops its work (it lights nothing that ColorLight shows). Its mode comes back when you turn the GPU pipeline off. Your saved LDL setting is not changed.",
   "me.colorlight.compatibility.entity_follow_render_distance": "Follow render distance",
   "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Uses the client's render distance, in chunks, as the radius for scanning entities for glowing blocks LDL. Disable this to use a fixed radius.",
   "me.colorlight.compatibility.entity_check_radius_chunks": "Tracking radius",
   "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Radius, in chunks, used to scan entities for glowing blocks LDL. Only used when “Follow render distance” is disabled.",
+
+  "me.colorlight.compatibility.illuminated": "Illuminated",
+  "me.colorlight.compatibility.illuminated.flashlight_range": "Flashlight range",
+  "me.colorlight.compatibility.illuminated.flashlight_range.tooltip": "Reach of the Illuminated flashlight in ColorLight, in percent of the default. Radius, depth and offset scale together, so the cone keeps its angle.",
 
   "me.colorlight.compatibility.lod_import": "Import far light (LODs)",
   "me.colorlight.compatibility.lod_import.voxy": "Rescan far light from Voxy",

@@ -37,6 +37,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         boolean voxy = ColorLightVoxyCompat.isPresent();
         boolean distantHorizons = ColorLightDistantHorizonsCompat.isPresent();
         boolean create = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("create");
+        boolean illuminated = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("illuminated");
         var modOptions = builder.registerOwnModOptions()
                 .setNonTintedIcon(Identifier.parse("colorlight:icon.png"))
                 .setColorTheme(builder.createColorTheme().setBaseThemeRGB(0x73efff));
@@ -44,7 +45,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         modOptions.addPage(this.GeneralPage(builder));
         modOptions.addPage(this.BlockPage(builder));
         if (ldl || voxy || distantHorizons || create) {
-            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, create));
+            modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, create, illuminated));
         }
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
@@ -239,7 +240,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         }
         return built;
     }
-    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean create) {
+    private OptionPageBuilder CompatibilityPage(ConfigBuilder builder, boolean ldl, boolean voxy, boolean distantHorizons, boolean create, boolean illuminated) {
         Identifier entityEnabledId = Identifier.parse("colorlight:entity_tracking_enabled");
         Identifier entityFollowId = Identifier.parse("colorlight:entity_follow_render_distance");
         ColorLightClient.LOGGER.info("[ColorLight] Mods supported by ColorLight: ldl - {}, voxy - {}, distanthorizons - {}, create - {}.", ldl, voxy, distantHorizons, create);
@@ -271,6 +272,14 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                         () -> config.DYNAMIC_PROPAGATION, value -> config.DYNAMIC_PROPAGATION = value,
                                         this::applyImmediately, method -> method.createTable(255f / 15f) != null, PropagationMethodRegistry.SMOOTH)))
                         )
+                    .addOption(builder.createBooleanOption(Identifier.parse("colorlight:disable_ldl_on_gpu"))
+                            .setName(Translatable.DISABLE_LDL_ON_GPU)
+                            .setTooltip(Translatable.DISABLE_LDL_ON_GPU_Tooltip)
+                            .setImpact(OptionImpact.HIGH)
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.DISABLE_LDL_ON_GPU = value, () -> config.DISABLE_LDL_ON_GPU)
+                            .setDefaultValue(config.DISABLE_LDL_ON_GPU)
+                    )
                     .addOption(builder.createIntegerOption(Identifier.parse("colorlight:entity_check_radius_chunks"))
                             .setName(Translatable.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setTooltip(Translatable.ENTITY_CHECK_RADIUS_CHUNKS_Tooltip)
@@ -281,6 +290,21 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                             .setStorageHandler(this::save)
                             .setBinding(value -> config.ENTITY_CHECK_RADIUS_CHUNKS = value, () -> config.ENTITY_CHECK_RADIUS_CHUNKS)
                             .setDefaultValue(config.ENTITY_CHECK_RADIUS_CHUNKS)
+                    )
+            );
+        }
+        if (illuminated){
+            page.addOptionGroup(builder.createOptionGroup()
+                    .setName(Translatable.Illuminated)
+                    .addOption(builder.createIntegerOption(Identifier.parse("colorlight:flashlight_range_percent"))
+                            .setName(Translatable.FLASHLIGHT_RANGE)
+                            .setTooltip(Translatable.FLASHLIGHT_RANGE_Tooltip)
+                            .setImpact(OptionImpact.MEDIUM)
+                            .setRange(25, 400, 5)
+                            .setValueFormatter(value -> Component.literal(value + "%"))
+                            .setStorageHandler(this::save)
+                            .setBinding(value -> config.FLASHLIGHT_RANGE_PERCENT = value, () -> config.FLASHLIGHT_RANGE_PERCENT)
+                            .setDefaultValue(config.FLASHLIGHT_RANGE_PERCENT)
                     )
             );
         }

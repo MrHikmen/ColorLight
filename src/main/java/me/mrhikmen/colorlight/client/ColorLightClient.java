@@ -80,6 +80,7 @@ public class ColorLightClient implements ClientModInitializer {
 
         if (ColorLightLambDynLightsCompat.isPresent()) {
             ColorLightEntityLightTicker.register();
+            ClientTickEvents.END_CLIENT_TICK.register(client -> ColorLightLambDynLightsCompat.tick());
             ColorLightClient.LOGGER.info("[ColorLight] LambDynamicLights initialized");
         }
 

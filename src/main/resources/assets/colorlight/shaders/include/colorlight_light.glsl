@@ -6,7 +6,9 @@
 
 // COLORLIGHT: the vanilla lightmap look, but block light comes only from the light volume.
 //  - vanilla's own block-light level (vertex data) is ignored, so the stock light never shows up
-//  - exception: full-bright quads (emissive models) are lit by vanilla at 15/15; they keep that
+//  - no full-bright exception: vanilla's 15/15 is also what LambDynamicLights writes for its dynamic lights (a
+//    flashlight cone, a beacon beam ...) on open ground, where the sky is 15 too, so the lit floor came out pure white.
+//    Emissive blocks keep their glow through the light volume (lava, glowstone, ... are registered)
 //  - the block level is the smooth (trilinear) level from the volume, not vanilla's stepped 0..15
 //  - sky light is left alone, so daylight washes the tint out the way it should
 // COLORLIGHT: brightness curve of the light. Brighter close to the source, dimmer towards the edge.
@@ -24,10 +26,9 @@ vec3 cl_lightColor(vec2 lightUV, vec3 cl, float lvl) {
     float rawLvl = lvl;
     lvl = cl_shapeLevel(lvl);
 
-    // Sodium encodes light levels 0..15 as (level * 16 + 8) / 256
-    float vanillaBlock = clamp((lightUV.x * 256.0 - 8.0) / 240.0, 0.0, 1.0);
-    float vanillaSky = clamp((lightUV.y * 256.0 - 8.0) / 240.0, 0.0, 1.0);
-    float fullBright = step(0.99, vanillaBlock) * step(0.99, vanillaSky);
+    // Vanilla's full-bright (block 15 and sky 15) is not trusted, see the note at the top: block light comes only from
+    // the volume, so nothing from the vanilla lightmap's block channel reaches the pixel.
+    float fullBright = 0.0;
 
     float blockLevel = max(lvl, fullBright);
     vec2 uv = vec2((blockLevel * 240.0 + 8.0) / 256.0, lightUV.y);

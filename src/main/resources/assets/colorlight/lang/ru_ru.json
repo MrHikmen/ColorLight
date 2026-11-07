@@ -53,10 +53,16 @@
   "me.colorlight.compatibility.entity_tracking": "LambDynamicLights",
   "me.colorlight.compatibility.entity_tracking_enabled": "Включить совместимость с LDL",
   "me.colorlight.compatibility.entity_tracking_enabled.tooltip": "Основной переключатель для поиска у сущностей светящихся блоков LDL. Отключите его, чтобы полностью выключить эту функцию.",
+  "me.colorlight.compatibility.disable_ldl_on_gpu": "Выключать LDL на GPU-пути",
+  "me.colorlight.compatibility.disable_ldl_on_gpu.tooltip": "Пока шейдерное освещение включено, LambDynamicLights прекращает работу (то, что он считает, ColorLight не показывает). Его режим вернётся, когда GPU-путь выключится. Сохранённая настройка LDL не меняется.",
   "me.colorlight.compatibility.entity_follow_render_distance": "Использовать дальность прорисовки",
   "me.colorlight.compatibility.entity_follow_render_distance.tooltip": "Использует дальность прорисовки клиента в чанках как радиус поиска светящихся блоков LDL. Отключите, чтобы задать фиксированный радиус.",
   "me.colorlight.compatibility.entity_check_radius_chunks": "Радиус отслеживания",
   "me.colorlight.compatibility.entity_check_radius_chunks.tooltip": "Радиус в чанках, в пределах которого выполняется поиск светящихся блоков LDL. Используется только при отключённой настройке «Использовать дальность прорисовки».",
+
+  "me.colorlight.compatibility.illuminated": "Illuminated",
+  "me.colorlight.compatibility.illuminated.flashlight_range": "Дальность фонарика",
+  "me.colorlight.compatibility.illuminated.flashlight_range.tooltip": "Дальность фонарика Illuminated в ColorLight, в процентах от стандартной. Радиус, глубина и сдвиг растут вместе, поэтому угол конуса сохраняется.",
 
   "me.colorlight.compatibility.lod_import": "Импорт дальнего света (LOD)",
   "me.colorlight.compatibility.lod_import.voxy": "Пересканировать дальний свет из Voxy",

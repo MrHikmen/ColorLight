@@ -5,12 +5,15 @@ import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.client.core.light.engine.LightBeam;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -18,7 +21,9 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
@@ -43,13 +48,18 @@ public final class ColorLightEntityLightTicker {
     /** Light is only recomputed after the entity moved at least this fraction of a block (1/8). */
     private static final double POSITION_STEPS_PER_BLOCK = 8.0;
 
+    /** {@code beam} is non-null for a directional light: the cone along the holder's view. */
     private record Request(ColorLightEngine engine, int id, boolean remove,
-                           double x, double y, double z, int r, int g, int b, int strength) {
+                           double x, double y, double z, int r, int g, int b, int strength, LightBeam beam) {
     }
 
     /** Last state sent to the worker for one entity. Game thread only. */
     private static final class Tracked {
         long qx, qy, qz;
+        /** View angles, in whole degrees, of the last directional light sent (0 for point lights). */
+        int qYaw, qPitch;
+        /** Flashlight range, in percent, of the last directional light sent. */
+        int qRange;
         BlockSettings settings;
         int strength;
         int lastSeenTick;
@@ -68,6 +78,56 @@ public final class ColorLightEntityLightTicker {
         white.g = 255;
         white.b = 255;
         return white;
+    }
+
+    /**
+     * Illuminated's flashlight. Its light is a LambDynamicLights behaviour (a cone written into vanilla block light),
+     * and ColorLight never reads vanilla block light, so without this the flashlight lit nothing at all. Here it is a
+     * white directional light: a cone from the holder's eyes along the view, with the same shape as Illuminated's
+     * (radius 8 at depth 20).
+     */
+    private static final BlockSettings FLASHLIGHT_SETTINGS = flashlightSettings();
+
+    /** Light strength at the flashlight (0-15 scale, like a torch at full power). */
+    private static final int FLASHLIGHT_STRENGTH = 15;
+    /** Illuminated's cone: RADIUS 8, DEPTH 20, DISTANCE_DELTA 3 (same constants as its FlashlightLightBehavior). */
+    private static final double FLASHLIGHT_RADIUS = 8.0;
+    private static final double FLASHLIGHT_DEPTH = 20.0;
+    private static final double FLASHLIGHT_OFFSET = 3.0;
+
+    private static BlockSettings flashlightSettings() {
+        BlockSettings warm = new BlockSettings(Identifier.fromNamespaceAndPath("colorlight", "illuminated_flashlight"), 15, true);
+        warm.r = 255;
+        warm.g = 255;
+        warm.b = 255;
+        return warm;
+    }
+
+    private static final Identifier FLASHLIGHT_ITEM_ID = Identifier.fromNamespaceAndPath("illuminated", "flashlight");
+    private static final Identifier FLASHLIGHT_ON_COMPONENT_ID = Identifier.fromNamespaceAndPath("illuminated", "on");
+
+    // Resolved lazily, once the registries exist; null while Illuminated is not loaded (then never matches).
+    private static Item flashlightItem;
+    private static DataComponentType<?> flashlightOnComponent;
+
+    /** True if the entity holds an Illuminated flashlight that is switched on, in either hand (same rule as Illuminated). */
+    private static boolean holdsLitIlluminatedFlashlight(LivingEntity living) {
+        if (flashlightItem == null) {
+            Item item = BuiltInRegistries.ITEM.getValue(FLASHLIGHT_ITEM_ID);
+            if (item == null || item == Items.AIR)
+                return false;
+            flashlightItem = item;
+        }
+        if (flashlightOnComponent == null) {
+            flashlightOnComponent = BuiltInRegistries.DATA_COMPONENT_TYPE.getValue(FLASHLIGHT_ON_COMPONENT_ID);
+            if (flashlightOnComponent == null)
+                return false;
+        }
+        return isLitFlashlight(living.getMainHandItem()) || isLitFlashlight(living.getOffhandItem());
+    }
+
+    private static boolean isLitFlashlight(ItemStack stack) {
+        return stack.is(flashlightItem) && Boolean.TRUE.equals(stack.get(flashlightOnComponent));
     }
 
     private static final Map<Integer, Tracked> TRACKED = new HashMap<>();
@@ -183,11 +243,16 @@ public final class ColorLightEntityLightTicker {
                 : effectiveStrength(settings, glow.stack());
 
         double x = entity.getX();
-        double y = entity.getY();
+        double y = glow.directional() ? entity.getEyeY() : entity.getY();
         double z = entity.getZ();
         long qx = Math.round(x * POSITION_STEPS_PER_BLOCK);
         long qy = Math.round(y * POSITION_STEPS_PER_BLOCK);
         long qz = Math.round(z * POSITION_STEPS_PER_BLOCK);
+
+        // a cone also depends on where the holder looks: track the view in steps of 2 degrees
+        int qYaw = glow.directional() ? 2 * Math.round(entity.getYRot() / 2f) : 0;
+        int qPitch = glow.directional() ? 2 * Math.round(entity.getXRot() / 2f) : 0;
+        int qRange = glow.directional() ? ColorLightClient.config.FLASHLIGHT_RANGE_PERCENT : 0;
 
         if (tracked == null) {
             tracked = new Tracked();
@@ -196,6 +261,7 @@ public final class ColorLightEntityLightTicker {
             tracked.lastSeenTick = tickCounter;
             // unchanged and no block changed inside its light: nothing to do
             if (tracked.qx == qx && tracked.qy == qy && tracked.qz == qz
+                    && tracked.qYaw == qYaw && tracked.qPitch == qPitch && tracked.qRange == qRange
                     && tracked.settings == settings && tracked.strength == strength && !engine.isDynamicStale(id))
                 return;
         }
@@ -204,16 +270,24 @@ public final class ColorLightEntityLightTicker {
         tracked.qx = qx;
         tracked.qy = qy;
         tracked.qz = qz;
+        tracked.qYaw = qYaw;
+        tracked.qPitch = qPitch;
+        tracked.qRange = qRange;
         tracked.settings = settings;
         tracked.strength = strength;
 
+        // range scales radius, depth and offset together, so the cone keeps its angle
+        double scale = qRange / 100.0;
+        LightBeam beam = glow.directional()
+                ? LightBeam.fromView(qYaw, qPitch, FLASHLIGHT_RADIUS * scale, FLASHLIGHT_DEPTH * scale, FLASHLIGHT_OFFSET * scale)
+                : null;
         REQUESTS.put(id, new Request(engine, id, false, x, y, z,
-                settings.r, settings.g, settings.b, strength));
+                settings.r, settings.g, settings.b, strength, beam));
         scheduleDrain();
     }
 
     private static void submitRemove(ColorLightEngine engine, int id) {
-        REQUESTS.put(id, new Request(engine, id, true, 0, 0, 0, 0, 0, 0, 0));
+        REQUESTS.put(id, new Request(engine, id, true, 0, 0, 0, 0, 0, 0, 0, null));
         scheduleDrain();
     }
 
@@ -232,9 +306,14 @@ public final class ColorLightEntityLightTicker {
     // ---- item / block -> light settings (registry lookup, no config scans) ----
 
     /** A matched glow source: its settings, and the stack it came from (empty for the minecart/BlockState case). */
-    private record Glow(BlockSettings settings, ItemStack stack, int strengthOverride) {
+    /** {@code directional}: a cone from the eyes along the view (the flashlight), instead of a point at the entity. */
+    private record Glow(BlockSettings settings, ItemStack stack, int strengthOverride, boolean directional) {
         Glow(BlockSettings settings, ItemStack stack) {
-            this(settings, stack, -1);
+            this(settings, stack, -1, false);
+        }
+
+        Glow(BlockSettings settings, ItemStack stack, int strengthOverride) {
+            this(settings, stack, strengthOverride, false);
         }
     }
 
@@ -251,6 +330,10 @@ public final class ColorLightEntityLightTicker {
 
     private static Glow findKnownGlow(Entity entity) {
         if (entity instanceof LivingEntity living) {
+            // A switched-on flashlight comes first: the player turned it on on purpose.
+            if (holdsLitIlluminatedFlashlight(living))
+                return new Glow(FLASHLIGHT_SETTINGS, ItemStack.EMPTY, FLASHLIGHT_STRENGTH, true);
+
             ItemStack main = living.getMainHandItem();
             ItemStack off = living.getOffhandItem();
             if (main.isEmpty() && off.isEmpty())
@@ -348,6 +431,10 @@ public final class ColorLightEntityLightTicker {
 
         if (request.remove()) {
             worker.remove(request.id());
+        } else if (request.beam() != null) {
+            // a directional light keeps its full strength (see LightBeam)
+            worker.update(request.id(), request.x(), request.y(), request.z(),
+                    request.r(), request.g(), request.b(), request.strength(), request.beam());
         } else {
             worker.update(request.id(), request.x(), request.y(), request.z(),
                     request.r(), request.g(), request.b(), request.strength()/2);

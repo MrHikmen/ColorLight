@@ -80,8 +80,14 @@ public class Translatable {
     public static Component ENTITY_FOLLOW_RENDER_DISTANCE_Tooltip = Component.translatable("me.colorlight.compatibility.entity_follow_render_distance.tooltip");
     public static Component DYNAMIC_PROPAGATION = Component.translatable("me.colorlight.compatibility.dynamic_propagation");
     public static Component DYNAMIC_PROPAGATION_Tooltip = Component.translatable("me.colorlight.compatibility.dynamic_propagation.tooltip");
+    public static Component DISABLE_LDL_ON_GPU = Component.translatable("me.colorlight.compatibility.disable_ldl_on_gpu");
+    public static Component DISABLE_LDL_ON_GPU_Tooltip = Component.translatable("me.colorlight.compatibility.disable_ldl_on_gpu.tooltip");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks");
     public static Component ENTITY_CHECK_RADIUS_CHUNKS_Tooltip = Component.translatable("me.colorlight.compatibility.entity_check_radius_chunks.tooltip");
+
+    public static Component Illuminated = Component.translatable("me.colorlight.compatibility.illuminated");
+    public static Component FLASHLIGHT_RANGE = Component.translatable("me.colorlight.compatibility.illuminated.flashlight_range");
+    public static Component FLASHLIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.compatibility.illuminated.flashlight_range.tooltip");
 
     public static Component CREATE = Component.translatable("me.colorlight.compatibility.create");
     public static Component CREATE_CONTRAPTION_LIGHT = Component.translatable("me.colorlight.compatibility.create_contraption_light");
