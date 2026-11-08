@@ -1336,24 +1336,33 @@ public class ColorLightEngine {
 
     /**
      * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the cells of one section as the GPU
-     * reads them: static and moving light merged, each cell packed by {@link LightCell#pack}. Lock-free.
+     * reads them: static and moving light merged, each cell packed by {@link LightCell#pack}.
+     * <p>
+     * Under {@link #lock}: a change (a block that was placed or broken, a source) darkens the light first and floods it
+     * back under the same lock, so a copy taken in between would see a section with no light for a moment, and the
+     * renderer would drop it. Taking the lock means the copy sees the change whole or not at all.
      *
      * @return false if the section holds no light at all
      */
     public boolean copySectionPacked(int sx, int sy, int sz, int[] out) {
-        long[] cells = SECTION_SCRATCH.get();
-        boolean lit = data.copySection(sx, sy, sz, cells);
-        if (dynamic.isActive())
-            lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
-        for (FastBatch batch : fastBatches)
-            lit |= mergeFast(batch, sx, sy, sz, cells);
-        if (!lit) {
-            java.util.Arrays.fill(out, 0, cells.length, 0);
-            return false;
+        lock.lock();
+        try {
+            long[] cells = SECTION_SCRATCH.get();
+            boolean lit = data.copySection(sx, sy, sz, cells);
+            if (dynamic.isActive())
+                lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+            for (FastBatch batch : fastBatches)
+                lit |= mergeFast(batch, sx, sy, sz, cells);
+            if (!lit) {
+                java.util.Arrays.fill(out, 0, cells.length, 0);
+                return false;
+            }
+            for (int i = 0; i < cells.length; i++)
+                out[i] = LightCell.pack(cells[i], palette);
+            return true;
+        } finally {
+            lock.unlock(); // read-only: nothing to publish
         }
-        for (int i = 0; i < cells.length; i++)
-            out[i] = LightCell.pack(cells[i], palette);
-        return true;
     }
 
     /**
@@ -1361,30 +1370,40 @@ public class ColorLightEngine {
      * plain colours.
      */
     public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
-        long[] cells = SECTION_SCRATCH.get();
-        boolean lit = data.copySection(sx, sy, sz, cells);
-        if (dynamic.isActive())
-            lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
-        for (FastBatch batch : fastBatches)
-            lit |= mergeFast(batch, sx, sy, sz, cells);
-        if (!lit) {
-            java.util.Arrays.fill(out, 0, cells.length, 0);
-            return false;
+        lock.lock(); // see copySectionPacked
+        try {
+            long[] cells = SECTION_SCRATCH.get();
+            boolean lit = data.copySection(sx, sy, sz, cells);
+            if (dynamic.isActive())
+                lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+            for (FastBatch batch : fastBatches)
+                lit |= mergeFast(batch, sx, sy, sz, cells);
+            if (!lit) {
+                java.util.Arrays.fill(out, 0, cells.length, 0);
+                return false;
+            }
+            for (int i = 0; i < cells.length; i++)
+                out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
+            return true;
+        } finally {
+            lock.unlock(); // read-only: nothing to publish
         }
-        for (int i = 0; i < cells.length; i++)
-            out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
-        return true;
     }
 
     /** Like {@link #copySectionColors} but only the static light (no moving lights). */
     public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
-        long[] cells = SECTION_SCRATCH.get();
-        boolean lit = data.copySection(sx, sy, sz, cells);
-        for (FastBatch batch : fastBatches)
-            lit |= mergeFast(batch, sx, sy, sz, cells);
-        for (int i = 0; i < cells.length; i++)
-            out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
-        return lit;
+        lock.lock(); // see copySectionPacked
+        try {
+            long[] cells = SECTION_SCRATCH.get();
+            boolean lit = data.copySection(sx, sy, sz, cells);
+            for (FastBatch batch : fastBatches)
+                lit |= mergeFast(batch, sx, sy, sz, cells);
+            for (int i = 0; i < cells.length; i++)
+                out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
+            return lit;
+        } finally {
+            lock.unlock(); // read-only: nothing to publish
+        }
     }
 
     /** Merges one quick batch into a section copy for the renderer, counting the reads for the log. */

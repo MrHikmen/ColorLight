@@ -10,6 +10,8 @@
     "flywheel.EngineImplMixin",
     "flywheel.SourceFileMixin",
     "minecraft.LevelChunkMixin",
+    "minecraft.GameRendererMixin",
+    "minecraft.LevelRendererMixin",
     "nvidium.NvidiumShaderLoaderMixin",
     "nvidium.NvidiumRasterizerMixin",
     "sodium.DefaultChunkRendererMixin",
@@ -20,7 +22,10 @@
     "voxy.RenderGenerationServiceMixin",
     "voxy.ShaderLoaderMixin",
     "voxy.VkTerrainRendererMixin",
-    "voxy.VkBinderMixin"
+    "voxy.VkBinderMixin",
+    "minecraft.renderer.FrontendRenderPassMixin",
+    "minecraft.renderer.RenderPipelineBuilderMixin",
+    "minecraft.renderer.ShaderConfigsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

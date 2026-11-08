@@ -20,10 +20,12 @@ layout(location = 3) out float fadeFactor;
 
 // COLORLIGHT: what the fragment shader needs to light the pixel itself
 #ifndef OIT_ALPHA_ONLY
+#define CL_FRAGMENT // guards the sampling code of colorlight_data.glsl, which the vertex light uses
 #include <colorlight:colorlight_data.glsl>
+#include <colorlight:colorlight_vertex.glsl>
 layout(location = 4) out vec4 v_ColorBase;
 layout(location = 5) out vec2 v_LightUV;
-layout(location = 6) out vec3 v_CLRel;
+layout(location = 6) out vec3 v_CLLight; // the light of this vertex, interpolated per pixel
 #endif
 
 uniform isamplerBuffer u_SectionTimeInfo;
@@ -81,7 +83,7 @@ void main() {
     // COLORLIGHT: vanilla result above stays as the fallback; these let the fragment shader redo it
     v_ColorBase = _vert_color;
     v_LightUV = _vert_tex_light_coord;
-    v_CLRel = position + cl_cameraFrac(); // position relative to the camera's integer block
+    v_CLLight = cl_vertexLight(position); // COLORLIGHT: the volume's light at this vertex (colorlight_vertex.glsl)
 #else
     v_Color = _vert_color;
 #endif

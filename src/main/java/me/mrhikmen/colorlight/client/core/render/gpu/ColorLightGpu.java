@@ -1,6 +1,11 @@
 package me.mrhikmen.colorlight.client.core.render.gpu;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
+import com.mojang.renderpearl.api.pipeline.UniformType;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.compat.nvidium.NvidiumBridge;
@@ -16,6 +21,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.Identifier;
+
+import org.lwjgl.system.MemoryUtil;
+
+import java.util.Map;
 
 /**
  * The GPU light pipeline: instead of baking colours into chunk meshes, Sodium's terrain shader is swapped for
@@ -309,6 +318,137 @@ public final class ColorLightGpu {
     }
 
     // ------------------------------------------------------------------------------------------------------
+    // Entities, items and particles
+    // ------------------------------------------------------------------------------------------------------
+    // Vanilla draws them with core/entity, core/item and core/particle. ColorLight's copies (shaders/core/cl_*) light each
+    // pixel from the same volume the terrain uses. Three pieces, as for the terrain:
+    //   1. RenderPipelineBuilderMixin: those pipelines get ENTITY_LIGHT_GROUP (the volume's three buffers), always;
+    //   2. ShaderConfigsMixin: the shader files are swapped when a pipeline is compiled, only while the GPU pipeline is on;
+    //   3. FrontendRenderPassMixin + LevelRendererMixin: after every pipeline switch the buffers are bound. A uniform
+    //      a pipeline reads must be set, so outside the world pass (GUI, hand, inventory) or with the light off the
+    //      pipeline gets a disabled header (all zero: the shader returns the vanilla light).
+    // ------------------------------------------------------------------------------------------------------
+
+    /**
+     * The bind group added to every entity, item, particle and moving block pipeline. It is added whatever the mode is: the mode
+     * is decided at launch and the pipelines are built before the config is read, so the groups can't depend on it.
+     */
+    public static final BindGroupLayout ENTITY_LIGHT_GROUP = BindGroupLayout.builder()
+            .withUniform("u_CLHeader", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
+            .withUniform("u_CLData", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
+            .withUniform("u_CLPool", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
+            .withUniform("u_CLPass", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
+            .build();
+
+    private static final Identifier VANILLA_ENTITY_SHADER = Identifier.fromNamespaceAndPath("minecraft", "core/entity");
+    private static final Identifier VANILLA_ITEM_SHADER = Identifier.fromNamespaceAndPath("minecraft", "core/item");
+    private static final Identifier VANILLA_PARTICLE_SHADER = Identifier.fromNamespaceAndPath("minecraft", "core/particle");
+    // The block pipelines (falling blocks, piston heads: moving blocks) are not Sodium's, so they had no light at all.
+    private static final Identifier VANILLA_BLOCK_SHADER = Identifier.fromNamespaceAndPath("minecraft", "core/block");
+
+    /** Vanilla shader id -> ColorLight's copy (same name, in our namespace). */
+    private static final Map<Identifier, Identifier> ENTITY_SHADERS = Map.of(
+            VANILLA_ENTITY_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_entity"),
+            VANILLA_ITEM_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_item"),
+            VANILLA_PARTICLE_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_particle"),
+            VANILLA_BLOCK_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_block"));
+
+    private static final int USAGE_LIGHT = GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER | GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_WRITE;
+    /** The disabled pages and pool are never read (the header says "off"); they only have to be a valid texel buffer. */
+    private static final long DISABLED_PAGE_BYTES = 16L;
+
+    private static volatile boolean worldPass;
+    private static volatile boolean handPass;
+    private static GpuBuffer disabledHeader, disabledData, disabledPool;
+    /** The pass flag the shader reads (u_CLPass): 0 for the world, 1 for the first-person hand. */
+    private static GpuBuffer passWorld, passHand;
+    private static volatile boolean entityShaderLogged;
+
+    /** True for the vanilla entity, item and particle shader ids (the pipelines that get {@link #ENTITY_LIGHT_GROUP}). */
+    public static boolean isEntityShader(Identifier id) {
+        return ENTITY_SHADERS.containsKey(id);
+    }
+
+    /**
+     * For {@link me.mrhikmen.colorlight.client.mixin.minecraft.renderer.ShaderConfigsMixin}: the shader to compile for a vanilla id.
+     * ColorLight's copy while the GPU pipeline is on, the vanilla id otherwise.
+     */
+    public static Identifier entityShader(Identifier id) {
+        Identifier ours = ENTITY_SHADERS.get(id);
+        if (ours == null || !gpuMode())
+            return id;
+        if (!entityShaderLogged) {
+            entityShaderLogged = true;
+            ColorLightClient.LOGGER.info("[ColorLight] Entity, item and particle shaders: ColorLight copies ({})", ours);
+        }
+        return ours;
+    }
+
+    /** Called by LevelRendererMixin around the world render: entities, items and particles are drawn only there. */
+    public static void setWorldPass(boolean on) {
+        worldPass = on;
+    }
+
+    /** Called by GameRendererMixin around the first-person hand (renderItemInHand): lit from the camera's position. */
+    public static void setHandPass(boolean on) {
+        handPass = on;
+    }
+
+    /**
+     * Binds the light buffers to the pipeline that was just set. Called after every pipeline switch: the pass keeps the
+     * uniforms it was given, but the names only apply to pipelines that have them. Real buffers only in the world pass
+     * with the light on; anything else gets the disabled header, so the shader returns the vanilla light.
+     */
+    public static void bindEntityLight(RenderPass pass) {
+        GpuLightVolume v = volume;
+        ensureDisabledBuffers();
+        if ((worldPass || handPass) && isActive() && v != null && !v.isRawGl() && v.hasBuffers()) {
+            pass.setUniform("u_CLHeader", v.headerBuffer());
+            pass.setUniform("u_CLData", v.dataBuffer());
+            pass.setUniform("u_CLPool", v.poolBuffer());
+            pass.setUniform("u_CLPass", handPass ? passHand : passWorld);
+            return;
+        }
+        pass.setUniform("u_CLHeader", disabledHeader);
+        pass.setUniform("u_CLData", disabledData);
+        pass.setUniform("u_CLPool", disabledPool);
+        pass.setUniform("u_CLPass", passWorld);
+    }
+
+    private static GpuBuffer createPassFlag(int value) {
+        var device = RenderSystem.getDevice();
+        GpuBuffer buffer = device.createBuffer(() -> "ColorLight pass flag", USAGE_LIGHT, Integer.BYTES);
+        try (var mapping = buffer.map(false, true)) {
+            mapping.data().putInt(0, value);
+        }
+        return buffer;
+    }
+
+    private static void ensureDisabledBuffers() {
+        if (disabledHeader != null)
+            return;
+        var device = RenderSystem.getDevice();
+        disabledHeader = device.createBuffer(() -> "ColorLight disabled header", USAGE_LIGHT, (long) GpuLightVolume.HEADER_TOTAL * Integer.BYTES);
+        disabledData = device.createBuffer(() -> "ColorLight disabled pages", USAGE_LIGHT, DISABLED_PAGE_BYTES);
+        disabledPool = device.createBuffer(() -> "ColorLight disabled pool", USAGE_LIGHT, DISABLED_PAGE_BYTES);
+        for (GpuBuffer b : new GpuBuffer[] {disabledHeader, disabledData, disabledPool}) {
+            try (var mapping = b.map(false, true)) {
+                MemoryUtil.memSet(mapping.data(), 0); // all zero: header flag "off"
+            }
+        }
+        passWorld = createPassFlag(0);
+        passHand = createPassFlag(1);
+    }
+
+    private static void closeDisabledBuffers() {
+        for (GpuBuffer b : new GpuBuffer[] {disabledHeader, disabledData, disabledPool, passWorld, passHand}) {
+            if (b != null)
+                b.close();
+        }
+        disabledHeader = disabledData = disabledPool = passWorld = passHand = null;
+    }
+
+    // ------------------------------------------------------------------------------------------------------
     // Client tick side
     // ------------------------------------------------------------------------------------------------------
 
@@ -444,6 +584,7 @@ public final class ColorLightGpu {
             volume.close();
             volume = null;
         }
+        closeDisabledBuffers();
     }
 
     private ColorLightGpu() {

@@ -69,7 +69,8 @@ vec3 cl_decodeCell(int raw) {
     return c / 255.0;
 }
 
-// CL_FRAGMENT: the pixel shader reads the volume per pixel.
+// CL_FRAGMENT: this shader samples the volume (the fragment shaders of Nvidium's, and the vertex shaders since the
+// light moved to the vertices, colorlight_vertex.glsl). Without it only the uniforms are declared.
 #ifdef CL_FRAGMENT
 
 uniform isamplerBuffer u_CLData;

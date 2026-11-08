@@ -17,7 +17,7 @@ layout(location = 3) in float fadeFactor;
 #ifndef OIT_ALPHA_ONLY
 layout(location = 4) in vec4 v_ColorBase; // vertex colour without the lightmap
 layout(location = 5) in vec2 v_LightUV;   // Sodium's lightmap coordinate (block, sky)
-layout(location = 6) in vec3 v_CLRel;     // position relative to the camera's integer block
+layout(location = 6) in vec3 v_CLLight;   // the light of the vertex, from the volume (colorlight_vertex.glsl)
 
 uniform sampler2D u_LightTex;
 
@@ -121,15 +121,9 @@ vec4 cl_resolveVertexColor() {
         return v_Color;
     }
 
-    // Smooth or flat light, decided by the header. The normal comes from screen-space derivatives (taken in uniform
-    // control flow: the enabled flag is in the header), flipped to face the camera.
-    vec3 n = cross(dFdx(v_CLRel), dFdy(v_CLRel));
-    float nLength = length(n);
-    n = (nLength > 1.0e-12) ? (n / nLength) : vec3(0.0, 1.0, 0.0);
-    if (dot(n, v_CLRel - cl_cameraFrac()) > 0.0) {
-        n = -n;
-    }
-    vec3 cl = cl_fetchLight(v_CLRel, n, cl_cameraBlock());
+    // The light was taken per vertex (the vertex shader), so it is only interpolated here: no screen-space derivatives,
+    // which gave the wrong normal on block edges and sampled the wall for the pixels next to it.
+    vec3 cl = v_CLLight;
     float lvl = max(cl.r, max(cl.g, cl.b));
 
     return v_ColorBase * vec4(cl_lightColor(v_LightUV, cl, lvl), 1.0);
