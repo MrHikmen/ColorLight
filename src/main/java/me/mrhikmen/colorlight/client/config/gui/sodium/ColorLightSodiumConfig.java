@@ -17,8 +17,10 @@ import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
 import net.caffeinemc.mods.sodium.api.config.option.OptionFlag;
 import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
+import net.caffeinemc.mods.sodium.api.config.structure.OptionGroupBuilder;
 import net.caffeinemc.mods.sodium.api.config.structure.OptionPageBuilder;
 
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -202,16 +204,31 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
     }
     private OptionPageBuilder BlockPage(ConfigBuilder builder) {
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.BLOCK);
+        java.util.Set<String> namespaces = new java.util.HashSet<>();
         for (BlockSettings entry : ColorLightClient.config.blocks) {
             Identifier block = entry.getBlock();
-            page.addOptionGroup(
-                    builder.createOptionGroup()
-                            .addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + block.getPath()))
-                                    .setName(Component.translatable("block." + block.toLanguageKey()))
-                                    .setTooltip(Translatable.BLOCK_Tooltip)
-                                    .setScreenConsumer(parentScreen -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parentScreen, liveEntry(entry), this::save, this::applyImmediately)))
-                            )
+            String namespace = block.getNamespace();
+            if (!namespaces.add(namespace)) continue;
+            OptionGroupBuilder group = builder.createOptionGroup().setName(Component.literal(
+                    FabricLoader.getInstance().getModContainer(namespace).map(mod -> mod.getMetadata().getName()).orElse(namespace))
             );
+            int count = 0;
+            for (BlockSettings e : ColorLightClient.config.blocks) {
+                Identifier b = e.getBlock();
+                if (!namespace.equals(b.getNamespace())) continue;
+                Component id = Component.translatable(b.toLanguageKey("block"));
+                if (id.getString().contains("."))
+                    id = Component.translatable(b.toLanguageKey("item"));
+                if (id.getString().contains("."))
+                    continue;
+                group.addOption(builder.createExternalButtonOption(Identifier.parse("colorlight:block_" + b.getPath()))
+                        .setName(id)
+                        .setTooltip(Translatable.BLOCK_Tooltip)
+                        .setScreenConsumer(parent -> Minecraft.getInstance().setScreenAndShow(new ColorLightBlockConfigScreen(parent, liveEntry(e), this::save, this::applyImmediately)))
+                );
+                count++;
+            }
+            if (count > 0) page.addOptionGroup(group);
         }
         return page;
     }
