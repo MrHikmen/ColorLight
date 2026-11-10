@@ -213,6 +213,7 @@ public class ColorLightBlockConfigScreen extends Screen {
         this.entry.r = rgb[0];
         this.entry.g = rgb[1];
         this.entry.b = rgb[2];
+        this.hexColorField.setValue(String.format("#%02X%02X%02X", this.entry.r, this.entry.g, this.entry.b));
         this.commit();
     }
 
