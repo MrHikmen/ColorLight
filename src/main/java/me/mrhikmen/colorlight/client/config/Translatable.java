@@ -122,6 +122,7 @@ public class Translatable {
         return Component.translatable("me.colorlight.value", value);
     }
 
+    public static Component NO_MODEL = Component.translatable("me.colorlight.block.no_model");
     public static Component BLOCK_Tooltip = Component.translatable("me.colorlight.block.block.tooltip");
     public static Component COLORED_LIGHTING = Component.translatable("me.colorlight.block.colored_lighting");
     public static Component COLORED_LIGHTING_2 = Component.translatable("me.colorlight.block.colored_lighting_2");
