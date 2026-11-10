@@ -107,5 +107,6 @@
   "me.colorlight.block.reset_to_default": "Reset to default",
   "me.colorlight.block.apply": "Apply",
   "me.colorlight.block.propagation": "Propagation",
-  "me.colorlight.block.propagation.default": "Engine default"
+  "me.colorlight.block.propagation.default": "Engine default",
+  "me.colorlight.block.no_model": "No model"
 }
