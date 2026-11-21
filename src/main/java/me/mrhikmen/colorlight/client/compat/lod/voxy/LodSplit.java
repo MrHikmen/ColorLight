@@ -27,9 +27,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class LodSplit {
 
     /** Finest levels (0 = full detail) whose quads are split. */
-    public static final int MAX_LOD = 2;
+    public static final int MAX_LOD = Math.max(0, Math.min(2, Integer.getInteger("colorlight.lod.maxLod", 2)));
     /** Most extra quads one section mesh may get from splitting (keeps clear of the 65536 per buffer Voxy has room for). */
-    private static final int MAX_EXTRA_QUADS = 24_000;
+    private static final int MAX_EXTRA_QUADS = 8_000;
     /** Blocks around a source that are looked at, at most (the distance tables reach 16 blocks, plus one of slack). */
     public static final int MARGIN = 17;
     /** Size, in blocks, of one cell of the "light reaches here" mask. */
@@ -63,8 +63,11 @@ public final class LodSplit {
         return Math.min(MARGIN, (int) Math.ceil(top / 255.0 * range) + 1);
     }
 
+    /** DIAGNOSTIC: -Dcolorlight.diag.noSplit=true turns the quad splitting off. */
+    static final boolean DIAG_NO_SPLIT = Boolean.getBoolean("colorlight.diag.noSplit");
+
     public static boolean enabled() {
-        return ColorLightClient.config != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
+        return !DIAG_NO_SPLIT && ColorLightClient.config != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
                 && VoxyLightBridge.usesQuadShader();
     }
 

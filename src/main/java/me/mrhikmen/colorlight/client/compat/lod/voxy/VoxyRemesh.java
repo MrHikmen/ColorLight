@@ -4,6 +4,7 @@ import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
+import me.mrhikmen.colorlight.client.compat.lod.LodDiag;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
@@ -102,6 +103,7 @@ public final class VoxyRemesh {
 
         if (sections.isEmpty())
             return;
+        LodDiag.remeshSections.addAndGet(sections.size());
 
         INTERNAL.set(Boolean.TRUE);
         try {

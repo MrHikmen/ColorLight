@@ -2,6 +2,11 @@ package me.mrhikmen.colorlight.client.compat.lod.voxy;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
+import me.mrhikmen.colorlight.client.compat.lod.LodDiag;
+import me.mrhikmen.colorlight.client.compat.lod.LodLightStore;
+import me.mrhikmen.colorlight.client.compat.lod.LodLightVolume;
+import me.mrhikmen.colorlight.client.compat.lod.LodMethodTables;
+import me.mrhikmen.colorlight.client.compat.lod.LodVolumeBuilder;
 
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL30C;
@@ -47,6 +52,11 @@ public final class VoxyLightBridge {
     private static long uploadedTablesKey = Long.MIN_VALUE;
     /** Rebuild the table once the camera has moved this many columns (the shader keeps the same margin). */
     private static final int DRIFT_COLS = 8;
+
+    /** DIAGNOSTIC: -Dcolorlight.diag.noShader=true makes the LOD shader skip the light (header enabled = 0). */
+    static final boolean DIAG_NO_SHADER = Boolean.getBoolean("colorlight.diag.noShader");
+    /** DIAGNOSTIC: -Dcolorlight.diag.noUpload=true never copies the cell/source tables to the GPU. */
+    static final boolean DIAG_NO_UPLOAD = Boolean.getBoolean("colorlight.diag.noUpload");
 
     private static volatile boolean patched;
     private static volatile boolean vk;
@@ -94,7 +104,86 @@ public final class VoxyLightBridge {
 
     /** True while the LOD shader is the per-quad one ; {@code LodSplit} only splits quads then. */
     public static boolean usesQuadShader() {
-        return patched;
+        return patched && !volumeMode;
+    }
+
+    // Volume mode (OpenGL): the light is read per pixel from a volume the CPU keeps, instead of being added up per quad
+    // in the vertex shader. Three more anchors in the vertex shader, three in the fragment shader.
+    private static volatile boolean volumeMode;
+    private static volatile boolean volumeFailed;
+    private static volatile Boolean volumeDecision;
+    private static int glBinding = -2;
+
+    /**
+     * True when the volume mode is used: OpenGL, not switched off with -Dcolorlight.voxyLegacy=true, and Voxy's own
+     * shader files contain every place that has to be changed (so the vertex and the fragment shader always agree).
+     */
+    private static boolean volumeWanted() {
+        if (volumeFailed)
+            return false;
+        Boolean d = volumeDecision;
+        if (d == null) {
+            boolean want = !Boolean.getBoolean("colorlight.voxyLegacy") && !(isVulkanBackend() && Boolean.getBoolean("colorlight.voxyVkLegacy")) && volumeAnchorsInVoxyFiles();
+            volumeDecision = d = want;
+            ColorLightClient.LOGGER.info("[ColorLight] Far light for Voxy: {} mode", want ? "volume" : "legacy (per-quad)");
+        }
+        return d;
+    }
+
+    /** Looks at Voxy's raw shader files (not the parsed text), so the answer does not depend on which shader is parsed first. */
+    private static boolean volumeAnchorsInVoxyFiles() {
+        try {
+            Class<?> loader = Class.forName("me.cortex.voxy.client.core.gl.shader.ShaderLoader");
+            String vert = readVoxyAsset(loader, "/assets/voxy/shaders/lod/gl46/quads3.vert");
+            String util = readVoxyAsset(loader, "/assets/voxy/shaders/lod/quad_util.glsl");
+            String frag = readVoxyAsset(loader, "/assets/voxy/shaders/lod/gl46/quads.frag");
+            boolean ok = VoxyVolumePatch.filesHaveAnchors(vert, util, frag);
+            if (!ok)
+                ColorLightClient.LOGGER.warn("[ColorLight] Voxy's LOD shaders look different from the ones the volume mode was written for; using the legacy mode");
+            return ok;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static String readVoxyAsset(Class<?> loader, String path) throws Exception {
+        try (InputStream in = loader.getResourceAsStream(path)) {
+            return in == null ? null : new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static boolean isLodFragment(String src) {
+        return VoxyVolumePatch.isLodFragment(src);
+    }
+
+    /** The SSBO binding both shaders use (OpenGL), chosen once. */
+    private static int glBinding() {
+        if (glBinding == -2)
+            glBinding = chooseBinding();
+        return glBinding;
+    }
+
+    /** The fragment shader of the LODs (volume mode only; null leaves it as it is). */
+    private static String patchFragment(String src) {
+        if (!volumeWanted())
+            return null;
+        try {
+            // Vulkan: the binding is fixed (VoxyVkLight.BINDING), and there is no GL context to ask
+            int b = isVulkanBackend() ? VoxyVkLight.BINDING : glBinding();
+            if (b < 0)
+                return null;
+            String out = VoxyVolumePatch.fragment(src, readResource("/assets/colorlight/shaders/voxy/colorlight_vol_frag.glsl"), b);
+            ColorLightClient.LOGGER.info("[ColorLight] Far light volume added to Voxy's LOD fragment shader");
+            return out;
+        } catch (Throwable t) {
+            volumeFailed = true;
+            ColorLightClient.LOGGER.error("[ColorLight] Could not add the far light volume to Voxy's fragment shader: {}", t.toString());
+            return null;
+        }
+    }
+
+    private static String patchVertexVolume(String src, int chosen) throws Exception {
+        return VoxyVolumePatch.vertex(src, readResource("/assets/colorlight/shaders/voxy/colorlight_vol_vert.glsl").replace("__CL_BINDING__", Integer.toString(chosen)));
     }
 
     /**
@@ -102,7 +191,11 @@ public final class VoxyLightBridge {
      * @return the changed source, or null to leave it as it is
      */
     public static String patch(String shaderSource) {
-        if (shaderSource == null || !shaderSource.contains(ANCHOR_FUNCTION))
+        if (shaderSource == null)
+            return null;
+        if (isLodFragment(shaderSource))
+            return patchFragment(shaderSource);
+        if (!shaderSource.contains(ANCHOR_FUNCTION))
             return null; // not the LOD vertex shader
 
         try {
@@ -110,36 +203,49 @@ public final class VoxyLightBridge {
                     || !shaderSource.contains("LIGHTING_SAMPLER_BINDING") || !shaderSource.contains("baseSectionPos")
                     || !shaderSource.contains("ivec2 quadSize = extractSize(rawQuad);") || !shaderSource.contains("uint face = extractFace(rawQuad);")) {
                 ColorLightClient.LOGGER.warn("[ColorLight] Voxy's LOD shader looks different from the one this was written for; far light colours are off");
+                volumeFailed = true;
                 return null;
             }
 
             boolean useVk = isVulkanBackend();
+            boolean volume = volumeWanted();
             // Vulkan: Voxy's terrain pipelines use bindings 0,1,3,4,5,8,9,10; ours is added next to them by VkTerrainRendererMixin.
             // OpenGL: ask the driver. There is NO GL context at all while Minecraft runs on Vulkan, so never touch GL there.
-            int chosen = useVk ? VoxyVkLight.BINDING : chooseBinding();
+            int chosen = useVk ? VoxyVkLight.BINDING : glBinding();
             if (chosen < 0) {
                 ColorLightClient.LOGGER.warn("[ColorLight] Not enough shader storage bindings for far light colours");
+                volumeFailed = true;
                 return null;
             }
 
-            String block = assemble("colorlight_lod.glsl", chosen);
+            String out;
+            if (volume) {
+                out = patchVertexVolume(shaderSource, chosen);
+            } else {
+                String block = assemble("colorlight_lod.glsl", chosen);
 
-            String out = shaderSource;
-            out = replaceFirst(out, ANCHOR_FUNCTION, block + "\n" + ANCHOR_FUNCTION);
-            out = replaceFirst(out, ANCHOR_LIGHTING, "vec4 tinting = cl_getLighting(lighting);");
-            out = replaceFirst(out, ANCHOR_SETUP, "    cl_setQuad(extractPos(rawQuad), lodScale, baseSection, lodLevel, face, quadSize);\n" + ANCHOR_SETUP);
+                out = shaderSource;
+                out = replaceFirst(out, ANCHOR_FUNCTION, block + "\n" + ANCHOR_FUNCTION);
+                out = replaceFirst(out, ANCHOR_LIGHTING, "vec4 tinting = cl_getLighting(lighting);");
+                out = replaceFirst(out, ANCHOR_SETUP, "    cl_setQuad(extractPos(rawQuad), lodScale, baseSection, lodLevel, face, quadSize);\n" + ANCHOR_SETUP);
+            }
 
             binding = chosen;
             vk = useVk;
+            volumeMode = volume;
             patched = true;
             if (!useVk) {
-                ensureBuffer(); // so the very first draw already finds a bound (disabled) buffer
+                if (volume)
+                    ensureVolumeBuffer(); // so the very first draw already finds a bound (disabled) buffer
+                else
+                    ensureBuffer();
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer);
             }
-            ColorLightClient.LOGGER.info("[ColorLight] Far light colours added to Voxy's LOD shader ({} backend, SSBO binding {})",
-                    useVk ? "Vulkan" : "OpenGL", chosen);
+            ColorLightClient.LOGGER.info("[ColorLight] Far light colours added to Voxy's LOD shader ({} backend, {} mode, SSBO binding {})",
+                    useVk ? "Vulkan" : "OpenGL", volume ? "volume" : "per-quad", chosen);
             return out;
         } catch (Throwable t) {
+            volumeFailed = true;
             ColorLightClient.LOGGER.error("[ColorLight] Could not add far light colours to Voxy: {}", t.toString());
             return null;
         }
@@ -188,8 +294,27 @@ public final class VoxyLightBridge {
 
     /** Called every frame from the render thread (before the world is drawn) with the camera's block position. */
     public static void onFrame(int camBlockX, int camBlockZ) {
+        LodDiag.frame();
         if (!patched)
             return;
+
+        if (volumeMode) {
+            if (vk && vkVolumeFailed)
+                return;
+            try {
+                onFrameVolume(camBlockX, camBlockZ);
+            } catch (Throwable t) {
+                ColorLightClient.LOGGER.error("[ColorLight] Far light colours for Voxy turned off: {}", t.toString());
+                if (vk) {
+                    // the pipelines were built with the light buffer's binding: it has to stay bound, only "disabled"
+                    vkVolumeFailed = true;
+                } else {
+                    patched = false;
+                }
+                disableVolume();
+            }
+            return;
+        }
 
         if (vk) {
             try {
@@ -211,12 +336,12 @@ public final class VoxyLightBridge {
             boolean enabled = cache != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
                     && ColorLightEngineHolder.get() != null;
 
-            if (enabled)
+            if (enabled && !DIAG_NO_UPLOAD)
                 uploadMethodTables();
 
             writeHeader(camBlockX, camBlockZ, enabled);
 
-            if (enabled)
+            if (enabled && !DIAG_NO_UPLOAD)
                 uploadOneLevel(cache, camBlockX, camBlockZ);
         } catch (Throwable t) {
             ColorLightClient.LOGGER.error("[ColorLight] Far light colours for Voxy turned off: {}", t.toString());
@@ -325,7 +450,7 @@ public final class VoxyLightBridge {
         Arrays.fill(h, 0);
         h[0] = camX;
         h[1] = camZ;
-        h[2] = enabled ? 1 : 0;
+        h[2] = (enabled && !DIAG_NO_SHADER) ? 1 : 0;
         h[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
         h[4] = Float.floatToRawIntBits(1.0f);
         h[7] = me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil.additiveMix() ? 1 : 0;
@@ -343,6 +468,7 @@ public final class VoxyLightBridge {
         GL45C.glNamedBufferSubData(buffer, 0L, headerBytes);
         System.arraycopy(header, 0, lastHeader, 0, HEADER_INTS);
         headerWritten = true;
+        LodDiag.headerWrites.incrementAndGet();
     }
 
     /**
@@ -362,6 +488,8 @@ public final class VoxyLightBridge {
             int count = (int) stamp[3];
             if (count > 0)
                 GL45C.glNamedBufferSubData(buffer, (long) SOURCE_OFFSET_INTS * Integer.BYTES, cache.sourceBuffer(count));
+            LodDiag.uploads.incrementAndGet();
+            LodDiag.uploadBytes.addAndGet((long) (CELL_INTS + count * 4) * Integer.BYTES);
             uploadedVersion = stamp[0];
             uploadedColX = (int) stamp[1];
             uploadedColZ = (int) stamp[2];
@@ -386,6 +514,344 @@ public final class VoxyLightBridge {
                 GL45C.glNamedBufferSubData(buffer, 0L, headerBytes); // header[2] = 0: shader falls back to Voxy's lighting
             }
         } catch (Throwable ignored) {
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------------
+    // Volume mode (OpenGL): the CPU keeps the light as a sparse volume (LodLightVolume, built by LodVolumeBuilder), this
+    // class mirrors it into the SSBO that the vertex and fragment shaders read.
+    // ------------------------------------------------------------------------------------------------------
+
+    /** Vulkan guarantees a storage buffer range of 128 MiB; used when the device's real limit cannot be read. */
+    private static final long VK_GUARANTEED_BYTES = 128L << 20;
+    /** The largest storage buffer the graphics API allows, bytes (0 = not asked yet). */
+    private static long hwLimitBytes;
+    /** What the running volume (and its GPU buffer) was made for. */
+    private static int volumeTilesInUse;
+
+    /** Tiles for a given memory budget in MB: the hash table is paid for first, the rest is the pool of tiles. */
+    static int tilesForMegabytes(int mb) {
+        long bytes = (long) mb << 20;
+        long poolBytes = bytes - (long) LodLightVolume.POOL_OFFSET_INTS * Integer.BYTES;
+        long tiles = poolBytes / ((long) LodLightVolume.TILE_VOXELS * Integer.BYTES);
+        return (int) Math.max(LodLightVolume.MIN_TILES, Math.min(LodLightVolume.MAX_TILES, tiles));
+    }
+
+    /** The most tiles the graphics card can address in one storage buffer. */
+    static int hardwareTiles() {
+        long limit = hwLimitBytes;
+        if (limit <= 0) {
+            limit = vk ? VoxyVkLight.maxStorageBytes() : glStorageLimit();
+            if (limit <= 0)
+                limit = VK_GUARANTEED_BYTES; // not known yet (Vulkan before its first frame): the guarantee, asked again later
+            else
+                hwLimitBytes = limit;
+        }
+        long pool = limit - (long) LodLightVolume.POOL_OFFSET_INTS * Integer.BYTES;
+        return (int) Math.max(LodLightVolume.MIN_TILES, Math.min(LodLightVolume.MAX_TILES, pool / ((long) LodLightVolume.TILE_VOXELS * Integer.BYTES)));
+    }
+
+    private static long glStorageLimit() {
+        try {
+            return GL45C.glGetInteger64(GL43C.GL_MAX_SHADER_STORAGE_BLOCK_SIZE);
+        } catch (Throwable t) {
+            return 0L;
+        }
+    }
+
+    /** How many tiles the volume should hold now: the setting (MB), or -Dcolorlight.lod.maxTiles, limited by the hardware. */
+    private static int volumeTiles() {
+        Integer forced = Integer.getInteger("colorlight.lod.maxTiles");
+        int want = forced != null
+                ? Math.max(LodLightVolume.MIN_TILES, Math.min(LodLightVolume.MAX_TILES, forced))
+                : tilesForMegabytes(Math.max(32, Math.min(512, ColorLightClient.config.VOXY_LIGHT_MEMORY_MB)));
+        return Math.min(want, hardwareTiles());
+    }
+
+    // Vulkan: VoxyVkLight owns the GPU buffer and drains the volume into it while the frame's commands are recorded
+    private static volatile boolean vkVolumeFailed;
+    private static volatile boolean vkVolumeReset = true;
+    private static final int TILES_PER_FRAME = 96;
+    private static final int TILES_PER_FRAME_CATCHUP = 256;
+    private static final int ENTRIES_PER_FRAME = 512;
+    /** Tiles with consecutive slots are written with one call, this many at most. */
+    private static final int RUN_TILES = 256;
+
+    private static LodLightStore volumeStore;
+    private static LodLightVolume volume;
+    private static LodVolumeBuilder volumeBuilder;
+    private static LodLightVolume.Params volumeParams;
+    private static long volumeParamsKey = Long.MIN_VALUE;
+    private static final int[] volHeader = new int[LodLightVolume.HEADER_INTS];
+    private static final int[] volLastHeader = new int[LodLightVolume.HEADER_INTS];
+    private static boolean volHeaderWritten;
+    private static IntBuffer volHeaderBuf;
+    private static IntBuffer volRun;
+    private static IntBuffer volEntry;
+    private static java.nio.ByteBuffer volMinusOne;
+    private static boolean volBufferReady;
+    private static int volPending;
+    private static final VolumeSink VOLUME_SINK = new VolumeSink();
+
+    private static void ensureVolumeBuffer() {
+        if (volBufferReady)
+            return;
+        buffer = GL45C.glCreateBuffers();
+        volumeTilesInUse = volumeTiles();
+        long bytes = (long) LodLightVolume.totalInts(volumeTilesInUse) * Integer.BYTES;
+        GL45C.glNamedBufferStorage(buffer, bytes, GL44C.GL_DYNAMIC_STORAGE_BIT);
+        // a new buffer's contents are undefined: all zeros (header disabled, every tile empty)
+        GL45C.glClearNamedBufferData(buffer, GL30C.GL_R32UI, GL30C.GL_RED_INTEGER, GL11C.GL_UNSIGNED_INT, (java.nio.ByteBuffer) null);
+        volHeaderBuf = MemoryUtil.memAllocInt(LodLightVolume.HEADER_INTS);
+        volRun = MemoryUtil.memAllocInt(RUN_TILES * LodLightVolume.TILE_VOXELS);
+        volEntry = MemoryUtil.memAllocInt(4);
+        volMinusOne = MemoryUtil.memAlloc(4);
+        volMinusOne.putInt(0, -1);
+        volBufferReady = true;
+        volHeaderWritten = false;
+        resetGpuHash();
+        ColorLightClient.LOGGER.info("[ColorLight] Far light volume buffer: {} MB, up to {} tiles", bytes / (1024 * 1024), volumeTilesInUse);
+    }
+
+    /** Every hash entry "empty" (slot -1): no tile is found by the shader. */
+    private static void resetGpuHash() {
+        GL45C.glClearNamedBufferSubData(buffer, GL30C.GL_R32I, (long) LodLightVolume.HASH_OFFSET_INTS * Integer.BYTES,
+                (long) LodLightVolume.HASH_ENTRIES * 4 * Integer.BYTES, GL30C.GL_RED_INTEGER, GL11C.GL_INT, volMinusOne);
+    }
+
+    /** The setting changed: the OpenGL buffer is made again, in the new size. */
+    private static void releaseVolumeBuffer() {
+        if (!volBufferReady)
+            return;
+        GL45C.glDeleteBuffers(buffer);
+        buffer = 0;
+        MemoryUtil.memFree(volHeaderBuf);
+        MemoryUtil.memFree(volRun);
+        MemoryUtil.memFree(volEntry);
+        MemoryUtil.memFree(volMinusOne);
+        volHeaderBuf = null;
+        volRun = null;
+        volEntry = null;
+        volMinusOne = null;
+        volBufferReady = false;
+    }
+
+    private static void startVolume(LodLightStore store) {
+        if (vk || volumeTilesInUse == 0)
+            volumeTilesInUse = volumeTiles(); // OpenGL: the buffer already made decides
+        volume = new LodLightVolume(volumeTilesInUse);
+        volumeBuilder = new LodVolumeBuilder(store, volume);
+        volumeStore = store;
+        volumeParamsKey = Long.MIN_VALUE;
+        volumeParams = null;
+        volPending = 0;
+        resetGpuHashAny();
+    }
+
+    private static void teardownVolume() {
+        if (volumeBuilder != null) {
+            volumeBuilder.shutdown();
+            volumeBuilder = null;
+        }
+        volume = null;
+        volumeStore = null;
+        volumeParams = null;
+        volumeParamsKey = Long.MIN_VALUE;
+        volPending = 0;
+        if (volBufferReady || vk)
+            resetGpuHashAny(); // nothing of the old world may show
+    }
+
+    /** The GPU's hash table is emptied: now (OpenGL) or by VoxyVkLight before its next drain (Vulkan). */
+    private static void resetGpuHashAny() {
+        if (vk)
+            vkVolumeReset = true;
+        else if (volBufferReady)
+            resetGpuHash();
+    }
+
+    private static void onFrameVolume(int camX, int camZ) {
+        if (volumeTilesInUse != 0 && volumeTiles() != volumeTilesInUse) {
+            // the memory setting changed: the volume starts over in a buffer of the new size
+            teardownVolume();
+            if (!vk)
+                releaseVolumeBuffer();
+            volumeTilesInUse = 0;
+        }
+        if (!vk) {
+            ensureVolumeBuffer();
+            // bind every frame: an indexed binding is global GL state, and this is cheap
+            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer);
+        }
+
+        VoxyLightCache cache = LodLight.cache();
+        boolean enabled = cache != null && ColorLightClient.config.VOXY_LIGHT && ColorLightClient.config.ENABLE
+                && ColorLightEngineHolder.get() != null;
+        LodLightStore store = enabled ? cache.store() : null;
+        if (store != volumeStore) {
+            teardownVolume();
+            if (store != null)
+                startVolume(store);
+        }
+
+        writeVolumeHeader(enabled && volume != null);
+        if (!enabled || volume == null)
+            return;
+
+        refreshVolumeParams();
+        volumeBuilder.tick(camX, camZ);
+
+        if (!DIAG_NO_UPLOAD && !vk) { // Vulkan drains in VoxyVkLight, where the frame's commands are
+            int budget = volPending > 2000 ? TILES_PER_FRAME_CATCHUP : TILES_PER_FRAME;
+            volPending = volume.drain(VOLUME_SINK, budget, ENTRIES_PER_FRAME);
+            VOLUME_SINK.flush();
+        }
+        if (LodDiag.ENABLED) {
+            LodDiag.volTiles = volume.tileCount();
+            LodDiag.volPending = volPending;
+            LodDiag.volOverflow += volume.takeOverflow();
+        }
+    }
+
+    /** What turns sources into colours: rebuilt (and the whole volume with it) when the method tables, the reach or the mixing change. */
+    private static void refreshVolumeParams() {
+        int reach = Math.max(1, Math.min(16, ColorLightEngineHolder.getMaxRangeBlocks()));
+        boolean additive = me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil.additiveMix();
+        boolean whiteOverlay = me.mrhikmen.colorlight.client.core.light.LightTuning.whiteOverlay;
+        int whiteSpread = me.mrhikmen.colorlight.client.core.light.LightTuning.whiteSpread;
+        int whiteCover = me.mrhikmen.colorlight.client.core.light.LightTuning.whiteCoverPercent;
+        long key = LodMethodTables.key() * 31L + reach * 2L + (additive ? 1L : 0L);
+        key = key * 131L + (whiteOverlay ? 1L : 0L);
+        key = key * 131L + whiteSpread;
+        key = key * 131L + whiteCover;
+        if (volumeParams == null || key != volumeParamsKey) {
+            int[] bits = LodMethodTables.build();
+            float[][] d = new float[LodMethodTables.TABLES][LodMethodTables.TABLE_INTS];
+            for (int t = 0; t < LodMethodTables.TABLES; t++)
+                for (int i = 0; i < LodMethodTables.TABLE_INTS; i++)
+                    d[t][i] = Float.intBitsToFloat(bits[t * LodMethodTables.TABLE_INTS + i]);
+            volumeParams = new LodLightVolume.Params(d, 255f / reach, additive, whiteOverlay, whiteSpread, whiteCover, key);
+            volumeParamsKey = key;
+        }
+        volumeBuilder.setParams(volumeParams);
+    }
+
+    private static void writeVolumeHeader(boolean enabled) {
+        Arrays.fill(volHeader, 0);
+        volHeader[2] = (enabled && !DIAG_NO_SHADER) ? 1 : 0;
+        volHeader[3] = Float.floatToRawIntBits(Math.max(0f, ColorLightClient.config.TINT_GAMMA));
+        volHeader[4] = Float.floatToRawIntBits(1.0f);
+        if (vk)
+            return; // VoxyVkLight copies volHeader into the buffer when the frame is drawn
+        if (volHeaderWritten && Arrays.equals(volHeader, volLastHeader))
+            return;
+        volHeaderBuf.clear();
+        volHeaderBuf.put(volHeader).flip();
+        GL45C.glNamedBufferSubData(buffer, 0L, volHeaderBuf);
+        System.arraycopy(volHeader, 0, volLastHeader, 0, volHeader.length);
+        volHeaderWritten = true;
+    }
+
+    /** After a failure: the shader sees "disabled" and shows Voxy's own lighting. */
+    private static void disableVolume() {
+        try {
+            if (vk)
+                Arrays.fill(volHeader, 0); // VoxyVkLight writes this header: [2] = 0, disabled
+            if (volBufferReady) {
+                volHeaderBuf.clear();
+                for (int i = 0; i < LodLightVolume.HEADER_INTS; i++)
+                    volHeaderBuf.put(0);
+                volHeaderBuf.flip();
+                GL45C.glNamedBufferSubData(buffer, 0L, volHeaderBuf);
+            }
+            if (volumeBuilder != null)
+                volumeBuilder.shutdown();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    // ---- what VoxyVkLight (Vulkan) reads ----
+
+    static boolean vkVolumeActive() {
+        return patched && vk && volumeMode;
+    }
+
+    static LodLightVolume vkVolume() {
+        return volume;
+    }
+
+    static int[] vkVolumeHeader() {
+        return volHeader;
+    }
+
+    static int vkVolumeTiles() {
+        return volumeTilesInUse != 0 ? volumeTilesInUse : volumeTiles();
+    }
+
+    static boolean takeVkVolumeReset() {
+        boolean r = vkVolumeReset;
+        vkVolumeReset = false;
+        return r;
+    }
+
+    static int vkVolumeBudget() {
+        return volPending > 2000 ? TILES_PER_FRAME_CATCHUP : TILES_PER_FRAME;
+    }
+
+    static int vkVolumeEntryBudget() {
+        return ENTRIES_PER_FRAME;
+    }
+
+    static void vkVolumeDrained(int pending) {
+        volPending = pending;
+        if (LodDiag.ENABLED && volume != null) {
+            LodDiag.volTiles = volume.tileCount();
+            LodDiag.volPending = pending;
+            LodDiag.volOverflow += volume.takeOverflow();
+        }
+    }
+
+    /** Writes what the volume hands over into the buffer; tiles with consecutive slots go out in one call. */
+    private static final class VolumeSink implements LodLightVolume.GpuSink {
+        private int runStart = -1;
+        private int runCount;
+
+        @Override
+        public void reset() {
+            flush();
+            resetGpuHash();
+        }
+
+        @Override
+        public void tile(int slot, int[] voxels) {
+            if (runCount > 0 && (slot != runStart + runCount || runCount == RUN_TILES))
+                flush();
+            if (runCount == 0)
+                runStart = slot;
+            volRun.position(runCount * LodLightVolume.TILE_VOXELS);
+            volRun.put(voxels, 0, LodLightVolume.TILE_VOXELS);
+            runCount++;
+            LodDiag.volUploadTiles.incrementAndGet();
+        }
+
+        @Override
+        public void entry(int index, int a, int b, int c, int d) {
+            flush(); // a tile's data is always in before the entry that points to it
+            volEntry.clear();
+            volEntry.put(a).put(b).put(c).put(d).flip();
+            GL45C.glNamedBufferSubData(buffer, (long) (LodLightVolume.HASH_OFFSET_INTS + index * 4) * Integer.BYTES, volEntry);
+            LodDiag.volUploadEntries.incrementAndGet();
+        }
+
+        void flush() {
+            if (runCount == 0)
+                return;
+            volRun.position(0);
+            volRun.limit(runCount * LodLightVolume.TILE_VOXELS);
+            GL45C.glNamedBufferSubData(buffer, (long) (LodLightVolume.POOL_OFFSET_INTS + (long) runStart * LodLightVolume.TILE_VOXELS) * Integer.BYTES, volRun);
+            volRun.clear();
+            runCount = 0;
+            runStart = -1;
         }
     }
 

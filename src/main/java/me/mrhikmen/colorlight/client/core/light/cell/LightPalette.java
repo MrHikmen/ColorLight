@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.client.core.light.cell;
 
+import me.mrhikmen.colorlight.client.core.light.LightTuning;
+
 import java.util.Arrays;
 
 /**
@@ -21,8 +23,32 @@ public final class LightPalette {
     /** Largest per-channel difference (0..255) at which two hues count as the same colour. */
     public static final int TOLERANCE = 6;
 
-    /** Index = id; entry 0 is unused. Replaced (never modified) when a hue is added, so readers need no lock. */
-    private volatile int[] hues = new int[]{0};
+    /**
+     * Ids from here up are for white hues, ids below for coloured ones. Which range an id is in is all {@link LightCell}
+     * needs to know whether a light is white, so it can let white give way to colour (see {@link LightCell#insert})
+     * without having the palette at hand.
+     */
+    public static final int WHITE_FIRST = 224;
+
+    /** Whether this palette id is one of the white range. */
+    public static boolean isWhiteId(int id) {
+        return id >= WHITE_FIRST;
+    }
+
+    /**
+     * Whether a hue (brightest channel 255) is white: its weakest channel is within {@link LightTuning#whiteSpread} of it,
+     * i.e. it has hardly any colour. Read when a hue gets its id, so a change reaches the lights of a new engine (every
+     * setting change builds one).
+     */
+    public static boolean isWhiteHue(int hue) {
+        int min = Math.min(hue & 0xFF, Math.min((hue >> 8) & 0xFF, (hue >> 16) & 0xFF));
+        return hue != 0 && min >= 255 - LightTuning.whiteSpread;
+    }
+
+    /** Index = id (0..MAX_ID); 0 = unused. Replaced (never modified) when a hue is added, so readers need no lock. */
+    private volatile int[] hues = new int[MAX_ID + 1];
+    private int colourCount;
+    private int whiteCount;
     private volatile int version;
 
     /** The brightest channel of a packed {@code 0x00BBGGRR} colour: how bright the light it describes is (0..255). */
@@ -47,24 +73,33 @@ public final class LightPalette {
         int hue = hueOf(rgb);
         if (hue == 0)
             return 0;
+        boolean white = isWhiteHue(hue);
+        int from = white ? WHITE_FIRST : 1;
+        int to = white ? MAX_ID : WHITE_FIRST - 1; // inclusive
 
-        int match = firstWithin(hues, hue);
+        int match = firstWithin(hues, hue, from, to);
         if (match > 0)
             return match;
 
         synchronized (this) {
             int[] current = hues;
-            match = firstWithin(current, hue); // another thread may have added it meanwhile
+            match = firstWithin(current, hue, from, to); // another thread may have added it meanwhile
             if (match > 0)
                 return match;
-            if (current.length > MAX_ID)
-                return closest(current, hue); // full: the closest one
+            int used = white ? whiteCount : colourCount;
+            if (from + used > to)
+                return closest(current, hue, from, to); // this range is full: the closest one in it
 
-            int[] next = Arrays.copyOf(current, current.length + 1);
-            next[current.length] = hue;
+            int id = from + used;
+            int[] next = current.clone();
+            next[id] = hue;
             hues = next;
+            if (white)
+                whiteCount++;
+            else
+                colourCount++;
             version++;
-            return current.length;
+            return id;
         }
     }
 
@@ -76,7 +111,7 @@ public final class LightPalette {
 
     /** Number of ids in use. */
     public int size() {
-        return hues.length - 1;
+        return colourCount + whiteCount;
     }
 
     /** Changes whenever an id is added. */
@@ -88,7 +123,7 @@ public final class LightPalette {
     public void copyTo(int[] out, int offset) {
         int[] h = hues;
         for (int id = 1; id <= MAX_ID; id++)
-            out[offset + id] = id < h.length ? h[id] : 0;
+            out[offset + id] = h[id];
     }
 
     /**
@@ -96,17 +131,19 @@ public final class LightPalette {
      * hue never changes once there is one - a stored light keeps meaning the same colour (a source can be looked up again
      * by its own colour and find the id it was stored with).
      */
-    private static int firstWithin(int[] h, int hue) {
-        for (int id = 1; id < h.length; id++) {
-            if (distance(h[id], hue) <= TOLERANCE)
+    private static int firstWithin(int[] h, int hue, int from, int to) {
+        for (int id = from; id <= to; id++) {
+            if (h[id] != 0 && distance(h[id], hue) <= TOLERANCE)
                 return id;
         }
         return 0;
     }
 
-    private static int closest(int[] h, int hue) {
+    private static int closest(int[] h, int hue, int from, int to) {
         int best = 0, bestDistance = Integer.MAX_VALUE;
-        for (int id = 1; id < h.length; id++) {
+        for (int id = from; id <= to; id++) {
+            if (h[id] == 0)
+                continue;
             int d = distance(h[id], hue);
             if (d < bestDistance) {
                 bestDistance = d;

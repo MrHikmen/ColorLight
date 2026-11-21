@@ -68,6 +68,11 @@ public class Translatable {
     public static Component VOXY = Component.translatable("me.colorlight.compatibility.voxy");
     public static Component VOXY_LIGHT = Component.translatable("me.colorlight.compatibility.voxy_light");
     public static Component VOXY_LIGHT_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_light.tooltip");
+    public static Component VOXY_LIGHT_MEMORY = Component.translatable("me.colorlight.compatibility.voxy_light_memory");
+    public static Component VOXY_LIGHT_MEMORY_Tooltip = Component.translatable("me.colorlight.compatibility.voxy_light_memory.tooltip");
+    public static Component VOXY_LIGHT_MEMORY_Value(int mb) {
+        return Component.translatable("me.colorlight.compatibility.voxy_light_memory.value", mb);
+    }
 
     public static Component DISTANTHORIZONS = Component.translatable("me.colorlight.compatibility.distanthorizons");
     public static Component DH_LIGHT = Component.translatable("me.colorlight.compatibility.dh_light");
@@ -132,4 +137,38 @@ public class Translatable {
     public static Component APPLY = Component.translatable("me.colorlight.block.apply");
     public static Component BLOCK_PROPAGATION = Component.translatable("me.colorlight.block.propagation");
     public static Component BLOCK_PROPAGATION_DEFAULT = Component.translatable("me.colorlight.block.propagation.default");
+
+    // ---- Debug page ----
+    public static Component DEBUG = Component.translatable("me.colorlight.debug");
+    public static Component DEBUG_WHITE = Component.translatable("me.colorlight.debug.white");
+    public static Component DEBUG_ENGINE = Component.translatable("me.colorlight.debug.engine");
+    public static Component DEBUG_OFF = Component.translatable("me.colorlight.debug.off");
+    public static Component DEBUG_WHITE_OVERLAY = Component.translatable("me.colorlight.debug.white_overlay");
+    public static Component DEBUG_WHITE_OVERLAY_Tooltip = Component.translatable("me.colorlight.debug.white_overlay.tooltip");
+    public static Component DEBUG_WHITE_SPREAD = Component.translatable("me.colorlight.debug.white_spread");
+    public static Component DEBUG_WHITE_SPREAD_Tooltip = Component.translatable("me.colorlight.debug.white_spread.tooltip");
+    public static Component DEBUG_WHITE_COVER = Component.translatable("me.colorlight.debug.white_cover");
+    public static Component DEBUG_WHITE_COVER_Tooltip = Component.translatable("me.colorlight.debug.white_cover.tooltip");
+    public static Component DEBUG_WHITE_EVICTS = Component.translatable("me.colorlight.debug.white_evicts");
+    public static Component DEBUG_WHITE_EVICTS_Tooltip = Component.translatable("me.colorlight.debug.white_evicts.tooltip");
+    public static Component DEBUG_FLOOD_THREADS = Component.translatable("me.colorlight.debug.flood_threads");
+    public static Component DEBUG_FLOOD_THREADS_Tooltip = Component.translatable("me.colorlight.debug.flood_threads.tooltip");
+    public static Component DEBUG_SCAN_THREADS = Component.translatable("me.colorlight.debug.scan_threads");
+    public static Component DEBUG_SCAN_THREADS_Tooltip = Component.translatable("me.colorlight.debug.scan_threads.tooltip");
+    public static Component DEBUG_FLOOD_BAND = Component.translatable("me.colorlight.debug.flood_band");
+    public static Component DEBUG_FLOOD_BAND_Tooltip = Component.translatable("me.colorlight.debug.flood_band.tooltip");
+    public static Component DEBUG_FLOOD_GROUP = Component.translatable("me.colorlight.debug.flood_group");
+    public static Component DEBUG_FLOOD_GROUP_Tooltip = Component.translatable("me.colorlight.debug.flood_group.tooltip");
+    public static Component DEBUG_FLOOD_MAX_SEEDS = Component.translatable("me.colorlight.debug.flood_max_seeds");
+    public static Component DEBUG_FLOOD_MAX_SEEDS_Tooltip = Component.translatable("me.colorlight.debug.flood_max_seeds.tooltip");
+    public static Component DEBUG_FLOOD_PARALLEL_MIN = Component.translatable("me.colorlight.debug.flood_parallel_min");
+    public static Component DEBUG_FLOOD_PARALLEL_MIN_Tooltip = Component.translatable("me.colorlight.debug.flood_parallel_min.tooltip");
+    public static Component DEBUG_FLUSH = Component.translatable("me.colorlight.debug.flush");
+    public static Component DEBUG_FLUSH_Tooltip = Component.translatable("me.colorlight.debug.flush.tooltip");
+    public static Component DEBUG_Auto(int value) {
+        return Component.translatable("me.colorlight.debug.auto", value);
+    }
+    public static Component DEBUG_Plain(int value) {
+        return Component.literal(Integer.toString(value));
+    }
 }

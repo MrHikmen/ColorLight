@@ -54,6 +54,29 @@ final class DeferredLightField implements LightField {
     }
 
     @Override
+    public int opacityUncached(int x, int y, int z) {
+        scratchPos.set(x, y, z);
+        int opacity = level.getBlockState(scratchPos).getLightDampening();
+        return Math.max(0, Math.min(MAX_OPACITY, opacity));
+    }
+
+    @Override
+    public void raiseBatch(int id, long[] batchKeys, int[] batchLevels, int from, int count) {
+        if (count <= 0)
+            return;
+        if (size + count > keys.length) {
+            int capacity = Math.max(size + count, keys.length * 2);
+            keys = java.util.Arrays.copyOf(keys, capacity);
+            ids = java.util.Arrays.copyOf(ids, capacity);
+            levels = java.util.Arrays.copyOf(levels, capacity);
+        }
+        System.arraycopy(batchKeys, from, keys, size, count);
+        System.arraycopy(batchLevels, from, levels, size, count);
+        java.util.Arrays.fill(ids, size, size + count, id);
+        size += count;
+    }
+
+    @Override
     public void raise(int x, int y, int z, int id, int level) {
         if (size == keys.length) {
             int capacity = size * 2;
@@ -69,9 +92,14 @@ final class DeferredLightField implements LightField {
 
     /** Applies the recorded raises to {@code target}, in the order they were made. */
     void replayInto(WorldLightField target) {
-        for (int i = 0; i < size; i++) {
-            long key = keys[i];
-            target.raise(PosKey.x(key), PosKey.y(key), PosKey.z(key), ids[i], levels[i]);
+        int i = 0;
+        while (i < size) {
+            int id = ids[i];
+            int j = i + 1;
+            while (j < size && ids[j] == id)
+                j++;
+            target.raiseBatch(id, keys, levels, i, j - i); // a run of one colour is one batch
+            i = j;
         }
     }
 }

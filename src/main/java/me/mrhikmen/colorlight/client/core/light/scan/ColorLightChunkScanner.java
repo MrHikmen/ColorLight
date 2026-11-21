@@ -2,6 +2,7 @@ package me.mrhikmen.colorlight.client.core.light.scan;
 
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.config.BlockSettings;
+import me.mrhikmen.colorlight.client.core.light.LightTuning;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngine;
 import me.mrhikmen.colorlight.client.core.light.engine.ColorLightEngineHolder;
@@ -35,8 +36,12 @@ public final class ColorLightChunkScanner {
      * Background workers must not fight the game thread and Sodium's mesh workers for CPU while chunks
      * stream in: few threads, slightly lower priority.
      */
-    private static final NearestFirstPool SCAN_EXECUTOR = new NearestFirstPool(
-            Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() / 4)));
+    private static final NearestFirstPool SCAN_EXECUTOR = new NearestFirstPool(LightTuning.resolveScanThreads());
+
+    /** Brings the number of scanner threads to the setting ({@link LightTuning#scanThreads}); called when settings are applied. */
+    public static void applyThreadSetting() {
+        SCAN_EXECUTOR.setThreads(LightTuning.resolveScanThreads());
+    }
 
     private static final ExecutorService APPLY_EXECUTOR = Executors.newSingleThreadExecutor(
             runnable -> backgroundThread(runnable, "ColorLight Source Apply"));
@@ -78,8 +83,7 @@ public final class ColorLightChunkScanner {
 
     // ---- sources of several chunks flooded together (apply thread only) ----------------------------------------
 
-    /** Enough waiting sources to flood right away instead of waiting for more chunks. */
-    private static final int FLUSH_SOURCES = 512;
+    /** Enough waiting sources to flood right away instead of waiting for more chunks ({@link LightTuning#sourceFlushSize}). */
 
     private record PendingChunk(ClientLevel level, ChunkPos chunkPos, ColorLightEngine engine, SourceBatch found) {
     }
@@ -93,13 +97,13 @@ public final class ColorLightChunkScanner {
      * Chunks stream in one by one, each with a handful of sources. Flooding every chunk on its own would never give the
      * flood threads enough to share, and would read the world again for every chunk. So the apply thread collects what the
      * scanners found while it was busy and floods all of it together, once it reaches the end of its queue (or has
-     * {@link #FLUSH_SOURCES} sources waiting). Every other task flushes first, so the order against unloads and block
+     * {@link LightTuning#sourceFlushSize} sources waiting). Every other task flushes first, so the order against unloads and block
      * edits stays what it was.
      */
     private static void queueSources(PendingChunk chunk) {
         PENDING_SOURCES.add(chunk);
         pendingSourceCount += chunk.found().size();
-        if (pendingSourceCount >= FLUSH_SOURCES) {
+        if (pendingSourceCount >= LightTuning.sourceFlushSize) {
             flushPendingSources();
         } else if (!flushScheduled) {
             flushScheduled = true;
@@ -322,9 +326,27 @@ public final class ColorLightChunkScanner {
         private final ReentrantLock lock = new ReentrantLock();
         private final Condition available = lock.newCondition();
 
+        /** Threads running or starting, and how many there should be. Both guarded by {@link #lock}. */
+        private int live;
+        private int target;
+
         NearestFirstPool(int threads) {
-            for (int i = 0; i < threads; i++)
-                backgroundThread(this::work, "ColorLight Chunk Scanner").start();
+            setThreads(threads);
+        }
+
+        /** More threads start at once; fewer leave as they finish what they are doing (idle ones are woken to leave). */
+        void setThreads(int threads) {
+            lock.lock();
+            try {
+                target = Math.max(1, threads);
+                while (live < target) {
+                    live++;
+                    backgroundThread(this::work, "ColorLight Chunk Scanner").start();
+                }
+                available.signalAll();
+            } finally {
+                lock.unlock();
+            }
         }
 
         void execute(int chunkX, int chunkZ, Runnable run) {
@@ -342,8 +364,17 @@ public final class ColorLightChunkScanner {
                 Task task;
                 lock.lock();
                 try {
-                    while (waiting.isEmpty())
+                    while (true) {
+                        if (live > target) {
+                            live--; // one thread too many: this one leaves
+                            if (!waiting.isEmpty())
+                                available.signal(); // pass on a wake-up it may have swallowed
+                            return;
+                        }
+                        if (!waiting.isEmpty())
+                            break;
                         available.awaitUninterruptibly();
+                    }
                     task = takeNearest();
                 } finally {
                     lock.unlock();

@@ -3,10 +3,12 @@ package me.mrhikmen.colorlight.client.core.light.engine;
 import me.mrhikmen.colorlight.client.ColorLightClient;
 import me.mrhikmen.colorlight.client.core.resourcepack.data.JsonPropagationMethod;
 import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
+import me.mrhikmen.colorlight.client.core.light.LightTuning;
 import me.mrhikmen.colorlight.client.core.light.cell.LightCell;
 import me.mrhikmen.colorlight.client.core.light.cell.LightPalette;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.propagation.LightPropagator;
+import me.mrhikmen.colorlight.client.core.light.propagation.TablePropagator;
 import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.render.gpu.ColorLightGpu;
 import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
@@ -75,21 +77,42 @@ public class ColorLightEngine {
      */
     static final long FLAG_CUSTOM = 1L << 34;
 
-    /** Most seeds (of one colour, in one chunk column) flooded in one go, see {@link #buildTasks}. {@code -Dcolorlight.flood.maxseeds=N}. */
-    private static final int MAX_TASK_SEEDS = Integer.getInteger("colorlight.flood.maxseeds", 8192);
+    // The knobs of the flood (threads, group size, task size, band height) are in LightTuning: the "Debug" settings page
+    // changes them while the game runs, and each is read where it is used.
 
-    /** A batch with fewer seeds than this is flooded on one thread: handing it over would cost more than it saves. */
-    private static final int PARALLEL_MIN_SEEDS = Integer.getInteger("colorlight.flood.parallelseeds", 128);
+    /** Most seeds (of one colour, in one chunk column) flooded in one go, see {@link #buildTasks}. */
+    private static int maxTaskSeeds() {
+        return LightTuning.floodMaxSeeds;
+    }
+
+    private static final java.util.concurrent.ThreadFactory FLOOD_THREAD_FACTORY = new java.util.concurrent.ThreadFactory() {
+        private final java.util.concurrent.atomic.AtomicInteger number = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "ColorLight Flood Helper " + number.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
+    };
+
+    private static ExecutorService floodPool;
+    private static int floodPoolHelpers;
 
     /**
-     * The second flood thread (the apply thread is the first). Runs only the floods of the batch it is given, while the
-     * apply thread floods the other half, both under the engine lock. Daemon, so it never keeps the game alive.
+     * The helpers that flood one batch together with the apply thread (so {@code helpers} = threads - 1). They run only the
+     * floods of the batch they are given, all under the engine lock. Daemon, so they never keep the game alive. The pool is
+     * replaced when the thread count setting changes; the old one finishes what it has and goes away.
      */
-    private static final ExecutorService FLOOD_HELPER = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "ColorLight Flood Helper");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private static synchronized ExecutorService floodPool(int helpers) {
+        if (floodPool == null || floodPoolHelpers != helpers) {
+            if (floodPool != null)
+                floodPool.shutdown();
+            floodPool = Executors.newFixedThreadPool(helpers, FLOOD_THREAD_FACTORY);
+            floodPoolHelpers = helpers;
+        }
+        return floodPool;
+    }
 
     /** A batch with more sources than this gets its quick light first, the exact light a moment later. */
     private static final int FAST_LIGHT_MIN_SOURCES = Integer.getInteger("colorlight.fast.minsources", 2000);
@@ -97,16 +120,11 @@ public class ColorLightEngine {
     /** Quick light of batches whose exact light is still to come. Read by the render side, so copy-on-write. */
     private final CopyOnWriteArrayList<FastBatch> fastBatches = new CopyOnWriteArrayList<>();
 
-    /** Propagators of the helper thread (they hold scratch memory). Used by that thread only. */
-    private final Map<Identifier, LightPropagator> helperPropagators = new HashMap<>();
-
-    /** {@code -Dcolorlight.batch.group=N} forces the group size (for measuring). */
-    private static final int GROUP_OVERRIDE = Integer.getInteger("colorlight.batch.group", 0);
+    /** Propagators of each helper thread (they hold scratch memory, so every thread has its own). */
+    private final ThreadLocal<Map<Identifier, LightPropagator>> helperPropagators = ThreadLocal.withInitial(HashMap::new);
 
     private int batchGroupSize() {
-        if (GROUP_OVERRIDE > 0)
-            return GROUP_OVERRIDE;
-        return 1024;
+        return LightTuning.floodGroup;
     }
 
     private static final long[] NO_KEYS = new long[0];
@@ -202,6 +220,32 @@ public class ColorLightEngine {
     private volatile long timeFactorStamp;
     private volatile float timeFactor;
 
+    /**
+     * A seqlock for readers that must not wait for the engine lock (the render thread copying sections). It is odd while
+     * the operation that holds {@link #lock} takes light away (a block change, a removal, a moving light being replaced:
+     * the light of a section is briefly wrong or missing there), and even otherwise - in particular during the floods of
+     * chunk loading, which only ever add light, so a copy taken in the middle of one is just an earlier, valid state.
+     * A reader that sees the same even value before and after its copy got a consistent one; see {@link #readSection}.
+     */
+    private volatile int tearEpoch;
+    /** Whether the current lock holder has made {@link #tearEpoch} odd. Guarded by {@link #lock}. */
+    private boolean tearing;
+
+    /** Under {@link #lock}: from here to {@link #unlock()} readers must not trust a copy. Safe to call more than once. */
+    private void beginTearLocked() {
+        if (!tearing) {
+            tearing = true;
+            tearEpoch = tearEpoch + 1; // odd
+            java.lang.invoke.VarHandle.fullFence(); // the writes that follow must not become visible before this
+        }
+    }
+
+    /** {@link ReentrantLock#lock()} for an operation that takes light away. */
+    private void lockMutating() {
+        lock.lock();
+        beginTearLocked();
+    }
+
     /** Releases {@link #lock}, first publishing the sections this operation touched to {@link #externalDirty}. */
     private void unlock() {
         try {
@@ -216,6 +260,11 @@ public class ColorLightEngine {
                 }
             }
         } finally {
+            if (tearing && lock.getHoldCount() == 1) {
+                java.lang.invoke.VarHandle.fullFence(); // every write of the operation is visible before the epoch is even again
+                tearing = false;
+                tearEpoch = tearEpoch + 1; // even
+            }
             lock.unlock();
         }
     }
@@ -392,7 +441,7 @@ public class ColorLightEngine {
         float scale = ColorLightUtil.clamp01(strength / 15f);
         int packed = ColorLightUtil.pack(Math.round(r * scale), Math.round(g * scale), Math.round(b * scale));
 
-        lock.lock();
+        lockMutating();
         try {
             addSourceLocked(pos.getX(), pos.getY(), pos.getZ(), packed, resolved);
         } finally {
@@ -451,7 +500,7 @@ public class ColorLightEngine {
      * light. Does nothing if the batch was dropped meanwhile (world change, unloaded chunks).
      */
     private void completeFast(FastBatch batch) {
-        lock.lock();
+        lockMutating();
         try {
             if (!fastBatches.remove(batch))
                 return;
@@ -573,7 +622,7 @@ public class ColorLightEngine {
     }
 
     public void removeSource(BlockPos pos) {
-        lock.lock();
+        lockMutating();
         try {
             removeSourceLocked(pos.getX(), pos.getY(), pos.getZ());
         } finally {
@@ -608,7 +657,7 @@ public class ColorLightEngine {
     public void onBlockChanged(BlockPos pos) {
         int x = pos.getX(), y = pos.getY(), z = pos.getZ();
 
-        lock.lock();
+        lockMutating();
         try {
             dynamic.markStaleAround(x, y, z);
 
@@ -699,7 +748,7 @@ public class ColorLightEngine {
 
     /** Drops all light. Every previously lit section is marked dirty first so the renderer refreshes it. */
     public void clearAll() {
-        lock.lock();
+        lockMutating();
         try {
             data.forEachLitSection(this::markSectionAndNeighborsDirty);
             dynamic.storage().forEachLitSection(this::markSectionAndNeighborsDirty);
@@ -745,7 +794,7 @@ public class ColorLightEngine {
                 batch.storage.removeColumn(PosKey.x(key), PosKey.z(key));
         }
 
-        lock.lock();
+        lockMutating();
         try {
             long[][] holder = {new long[16]};
             int[] count = {0};
@@ -909,8 +958,9 @@ public class ColorLightEngine {
         List<FloodTask> tasks = new java.util.ArrayList<>();
         int seeds = buildTasks(tasks);
 
-        if (tasks.size() >= 2 && seeds >= PARALLEL_MIN_SEEDS) {
-            floodTasksInParallelLocked(tasks);
+        int floodThreads = LightTuning.resolveFloodThreads();
+        if (floodThreads > 1 && tasks.size() >= 2 && seeds >= LightTuning.floodParallelMinSeeds) {
+            floodTasksInParallelLocked(tasks, floodThreads);
         } else {
             for (FloodTask task : tasks)
                 floodTaskLocked(task);
@@ -921,70 +971,66 @@ public class ColorLightEngine {
     }
 
     /**
-     * Two threads flood the tasks of one batch: this one and {@link #FLOOD_HELPER}. The tasks are split into two halves
-     * of similar work. A flood reads block opacity and writes only its own working values, so it can run without the
-     * storage; each one records its raises, and the records are replayed into the storage in task order, exactly the
-     * order the one-thread path writes them in. So the result does not depend on how the tasks were split.
-     * If the helper fails, its tasks are flooded here, after the replay of the ones before them.
+     * The tasks of one batch are flooded by this thread and the pool helpers, each taking the next task
+     * that nobody has started (so a big task does not hold up a whole half). A flood reads block opacity and writes
+     * only its own scratch memory, so it can run without the storage; each one records its raises, and the records
+     * are replayed into the storage in task order, exactly the order the one-thread path writes them in. So the result
+     * does not depend on how many threads ran or which one took which task.
+     * If a helper fails, the tasks it left are flooded here, after the replay of the ones before them.
      */
-    private void floodTasksInParallelLocked(List<FloodTask> tasks) {
+    private void floodTasksInParallelLocked(List<FloodTask> tasks, int threads) {
         int n = tasks.size();
-        boolean[] onHelper = new boolean[n];
-        long here = 0, there = 0;
-        for (int i = 0; i < n; i++) {
-            int size = tasks.get(i).size();
-            if (there < here) {
-                onHelper[i] = true;
-                there += size;
-            } else {
-                here += size;
-            }
-        }
+        java.util.concurrent.atomic.AtomicReferenceArray<DeferredLightField> logs = new java.util.concurrent.atomic.AtomicReferenceArray<>(n);
+        java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
 
-        DeferredLightField[] logs = new DeferredLightField[n];
-        Future<?> helper = FLOOD_HELPER.submit(() -> {
-            for (int i = 0; i < n; i++) {
-                if (!onHelper[i])
-                    continue;
-                FloodTask task = tasks.get(i);
-                DeferredLightField log = new DeferredLightField(level);
-                helperPropagators.computeIfAbsent(task.method() == null ? defaultMethodId : task.method(), this::newPropagator)
-                        .spread(task.id(), copyKeys(task), copyLevels(task), task.size(), log);
-                logs[i] = log; // only once the flood is complete
-            }
-        });
+        int helpers = Math.min(threads - 1, n - 1);
+        ExecutorService pool = floodPool(threads - 1);
+        List<Future<?>> futures = new java.util.ArrayList<>(helpers);
+        for (int h = 0; h < helpers; h++)
+            futures.add(pool.submit(() -> floodPending(tasks, next, logs, true)));
 
-        for (int i = 0; i < n; i++) {
-            if (onHelper[i])
-                continue;
-            FloodTask task = tasks.get(i);
-            DeferredLightField log = new DeferredLightField(level);
-            propagatorFor(task.method()).spread(task.id(), copyKeys(task), copyLevels(task), task.size(), log);
-            logs[i] = log;
-        }
+        floodPending(tasks, next, logs, false);
 
         boolean interrupted = false;
         boolean helperFailed = false;
-        while (true) {
-            try {
-                helper.get();
-                break;
-            } catch (InterruptedException e) {
-                interrupted = true; // keep waiting: the helper still reads the batch
-            } catch (ExecutionException e) {
-                ColorLightClient.LOGGER.error("[ColorLight] Flood helper failed, flooding its share here: {}", e.getCause().toString());
-                helperFailed = true;
-                break;
+        for (Future<?> helper : futures) {
+            while (true) {
+                try {
+                    helper.get();
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true; // keep waiting: the helper still reads the batch
+                } catch (ExecutionException e) {
+                    ColorLightClient.LOGGER.error("[ColorLight] Flood helper failed, flooding its share here: {}", e.getCause().toString());
+                    helperFailed = true;
+                    break;
+                }
             }
         }
         if (interrupted)
             Thread.currentThread().interrupt();
 
         for (int i = 0; i < n; i++) {
-            if (logs[i] != null)
-                logs[i].replayInto(staticField);
+            DeferredLightField log = logs.get(i);
+            if (log != null)
+                log.replayInto(staticField);
             else if (helperFailed)
                 floodTaskLocked(tasks.get(i));
+        }
+    }
+
+    /** Floods tasks, each recorded into its own log, until none is left; {@code helper} = on a pool thread, with that thread's propagators. */
+    private void floodPending(List<FloodTask> tasks, java.util.concurrent.atomic.AtomicInteger next,
+                              java.util.concurrent.atomic.AtomicReferenceArray<DeferredLightField> logs, boolean helper) {
+        int n = tasks.size();
+        for (int i = next.getAndIncrement(); i < n; i = next.getAndIncrement()) {
+            FloodTask task = tasks.get(i);
+            DeferredLightField log = new DeferredLightField(level);
+            LightPropagator propagator = helper
+                    ? helperPropagators.get().computeIfAbsent(task.method() == null ? defaultMethodId : task.method(), this::newPropagator)
+                    : propagatorFor(task.method());
+            propagator.spread(task.id(), copyKeys(task), copyLevels(task), task.size(), log);
+            logs.set(i, log); // only once the flood is complete
         }
     }
 
@@ -1026,7 +1072,7 @@ public class ColorLightEngine {
             int[] levels = list.levels;
 
             if (n < 2 || n >= (1 << 20)) {
-                FloodTask.addSlices(out, method, id, keys, levels, 0, n, MAX_TASK_SEEDS);
+                FloodTask.addSlices(out, method, id, keys, levels, 0, n, maxTaskSeeds());
                 continue;
             }
 
@@ -1049,12 +1095,73 @@ public class ColorLightEngine {
             int start = 0;
             for (int i = 1; i <= n; i++) {
                 if (i == n || (order[i] >>> 20) != (order[start] >>> 20)) {
-                    FloodTask.addSlices(out, method, id, sortedKeys, sortedLevels, start, i, MAX_TASK_SEEDS);
+                    addColumnTasks(out, method, id, sortedKeys, sortedLevels, start, i);
                     start = i;
                 }
             }
         }
         return total;
+    }
+
+    /** Height of the bands a tall chunk column is cut into; 0 = no cutting. */
+    private int bandHeight() {
+        int maxBand = LightTuning.floodBand;
+        if (maxBand <= 0)
+            return 0;
+        // largest band whose scratch box (16 + 2 reach)^2 x (band + 2 reach) stays well inside the dense kernel's limit
+        long reach = maxRangeBlocks + 1;
+        long side = 16 + 2 * reach;
+        long fit = (TablePropagator.DENSE_MAX_CELLS * 3L / 4) / (side * side) - 2 * reach;
+        return (int) Math.max(16, Math.min(maxBand, fit));
+    }
+
+    /**
+     * Adds the floods for the seeds {@code [from, to)} of one colour in one chunk column. A column whose seeds span
+     * more than a band in height is cut into bands: lamps far apart vertically hardly share any light, and one
+     * flood over the whole height needs a huge scratch box (at long range it no longer fits the dense kernel at all
+     * and falls back to the slow hashed path). The light is the per-cell maximum over the seeds, so cutting changes nothing
+     * in the result. Reorders the seeds {@code [from, to)} in place.
+     */
+    private void addColumnTasks(List<FloodTask> out, Identifier method, int id, long[] keys, int[] levels, int from, int to) {
+        int band = bandHeight();
+        int len = to - from;
+        if (band <= 0 || len < 2) {
+            FloodTask.addSlices(out, method, id, keys, levels, from, to, maxTaskSeeds());
+            return;
+        }
+        int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+        for (int i = from; i < to; i++) {
+            int y = PosKey.y(keys[i]);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+        if (maxY - minY < band) {
+            FloodTask.addSlices(out, method, id, keys, levels, from, to, maxTaskSeeds());
+            return;
+        }
+
+        long[] order = new long[len]; // (band << 20) | index within the run: len < 1 << 20 (see buildTasks)
+        for (int i = 0; i < len; i++)
+            order[i] = ((long) (Math.floorDiv(PosKey.y(keys[from + i]), band) + 4096) << 20) | i;
+        java.util.Arrays.sort(order);
+
+        long[] bandKeys = new long[len];
+        int[] bandLevels = new int[len];
+        for (int i = 0; i < len; i++) {
+            int src = from + (int) (order[i] & 0xFFFFFL);
+            bandKeys[i] = keys[src];
+            bandLevels[i] = levels[src];
+        }
+        System.arraycopy(bandKeys, 0, keys, from, len);
+        System.arraycopy(bandLevels, 0, levels, from, len);
+
+        int start = 0;
+        for (int i = 1; i <= len; i++) {
+            if (i == len || (order[i] >>> 20) != (order[start] >>> 20)) {
+                FloodTask.addSlices(out, method, id, keys, levels, from + start, from + i, maxTaskSeeds());
+                start = i;
+            }
+        }
     }
 
     /**
@@ -1085,6 +1192,7 @@ public class ColorLightEngine {
     }
 
     private void darkenCells(long startKey, long oldCell) {
+        beginTearLocked(); // light is taken away from here on
         clearCustomQueuesLocked();
         darkenKeys.clear();
         darkenIds.clear();
@@ -1335,34 +1443,19 @@ public class ColorLightEngine {
     private static final ThreadLocal<long[]> SECTION_SCRATCH = ThreadLocal.withInitial(() -> new long[16 * 16 * 16]);
 
     /**
-     * Fills {@code out} (4096 ints, index {@code (y << 8) | (z << 4) | x}) with the cells of one section as the GPU
-     * reads them: static and moving light merged, each cell packed by {@link LightCell#pack}.
-     * <p>
-     * Under {@link #lock}: a change (a block that was placed or broken, a source) darkens the light first and floods it
-     * back under the same lock, so a copy taken in between would see a section with no light for a moment, and the
-     * renderer would drop it. Taking the lock means the copy sees the change whole or not at all.
+     * Copies a section for the renderer, packed for the GPU, without waiting for a flood.
+     *
+     * <p>A change (a block that was placed or broken, a source) darkens the light first and floods it back under the
+     * lock, so a copy taken in between would see a section with no light for a moment, and the renderer would drop it.
+     * Those operations make {@link #tearEpoch} odd, and a copy that overlapped one is thrown away and redone under the
+     * lock, so it sees the change whole or not at all. A flood that only adds light (a chunk loading) does not, so
+     * its light shows up as it is computed instead of when the whole load is over - the render thread cannot get
+     * the lock then, the apply thread takes it again for the next group as soon as it lets go.
      *
      * @return false if the section holds no light at all
      */
     public boolean copySectionPacked(int sx, int sy, int sz, int[] out) {
-        lock.lock();
-        try {
-            long[] cells = SECTION_SCRATCH.get();
-            boolean lit = data.copySection(sx, sy, sz, cells);
-            if (dynamic.isActive())
-                lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
-            for (FastBatch batch : fastBatches)
-                lit |= mergeFast(batch, sx, sy, sz, cells);
-            if (!lit) {
-                java.util.Arrays.fill(out, 0, cells.length, 0);
-                return false;
-            }
-            for (int i = 0; i < cells.length; i++)
-                out[i] = LightCell.pack(cells[i], palette);
-            return true;
-        } finally {
-            lock.unlock(); // read-only: nothing to publish
-        }
+        return readSection(READ_PACKED, sx, sy, sz, out);
     }
 
     /**
@@ -1370,40 +1463,64 @@ public class ColorLightEngine {
      * plain colours.
      */
     public boolean copySectionColors(int sx, int sy, int sz, int[] out) {
-        lock.lock(); // see copySectionPacked
-        try {
-            long[] cells = SECTION_SCRATCH.get();
-            boolean lit = data.copySection(sx, sy, sz, cells);
-            if (dynamic.isActive())
-                lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
-            for (FastBatch batch : fastBatches)
-                lit |= mergeFast(batch, sx, sy, sz, cells);
-            if (!lit) {
-                java.util.Arrays.fill(out, 0, cells.length, 0);
-                return false;
+        return readSection(READ_COLORS, sx, sy, sz, out);
+    }
+
+    /** Like {@link #copySectionColors} but only the static light (no moving lights). */
+    public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
+        return readSection(READ_STATIC, sx, sy, sz, out);
+    }
+
+    private static final int READ_PACKED = 0, READ_COLORS = 1, READ_STATIC = 2;
+
+    private boolean readSection(int kind, int sx, int sy, int sz, int[] out) {
+        for (int attempt = 0; attempt < 8; attempt++) {
+            int epoch = tearEpoch;
+            // A change is taking light away right now. It ends on its own and says so by making the epoch even, so wait
+            // for that, not for the lock: while chunks load the apply thread takes the lock again the moment it lets go
+            // and a thread waiting for it can starve for the whole load.
+            while ((epoch & 1) != 0) {
+                java.util.concurrent.locks.LockSupport.parkNanos(20_000L);
+                epoch = tearEpoch;
             }
-            for (int i = 0; i < cells.length; i++)
-                out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
-            return true;
+            boolean lit = copySectionNow(kind, sx, sy, sz, out);
+            java.lang.invoke.VarHandle.acquireFence(); // the reads above finish before the epoch is read again
+            if (tearEpoch == epoch)
+                return lit;
+        }
+        // changes keep landing in the middle of every copy: take the lock after all, so the copy is whole
+        lock.lock();
+        try {
+            return copySectionNow(kind, sx, sy, sz, out);
         } finally {
             lock.unlock(); // read-only: nothing to publish
         }
     }
 
-    /** Like {@link #copySectionColors} but only the static light (no moving lights). */
-    public boolean copyStaticSection(int sx, int sy, int sz, int[] out) {
-        lock.lock(); // see copySectionPacked
-        try {
-            long[] cells = SECTION_SCRATCH.get();
-            boolean lit = data.copySection(sx, sy, sz, cells);
-            for (FastBatch batch : fastBatches)
-                lit |= mergeFast(batch, sx, sy, sz, cells);
+    private boolean copySectionNow(int kind, int sx, int sy, int sz, int[] out) {
+        long[] cells = SECTION_SCRATCH.get();
+        boolean lit = data.copySection(sx, sy, sz, cells);
+        if (kind != READ_STATIC && dynamic.isActive())
+            lit |= dynamic.storage().mergeInto(sx, sy, sz, cells);
+        for (FastBatch batch : fastBatches)
+            lit |= mergeFast(batch, sx, sy, sz, cells);
+        if (kind == READ_STATIC) {
             for (int i = 0; i < cells.length; i++)
                 out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
             return lit;
-        } finally {
-            lock.unlock(); // read-only: nothing to publish
         }
+        if (!lit) {
+            java.util.Arrays.fill(out, 0, cells.length, 0);
+            return false;
+        }
+        if (kind == READ_PACKED) {
+            for (int i = 0; i < cells.length; i++)
+                out[i] = LightCell.pack(cells[i], palette);
+        } else {
+            for (int i = 0; i < cells.length; i++)
+                out[i] = cells[i] == 0 ? 0 : LightCell.toRgb(cells[i], palette);
+        }
+        return true;
     }
 
     /** Merges one quick batch into a section copy for the renderer, counting the reads for the log. */
@@ -1488,7 +1605,7 @@ public class ColorLightEngine {
             DynamicFootprint footprint = beam == null
                     ? flood.compute(x - 0.5, y, z - 0.5, r, g, b, strength)
                     : flood.computeBeam(x, y, z, r, g, b, strength, beam);
-            lock.lock();
+            lockMutating();
             try {
                 dynamic.replace(id, footprint);
             } finally {
@@ -1497,7 +1614,7 @@ public class ColorLightEngine {
         }
 
         public void remove(int id) {
-            lock.lock();
+            lockMutating();
             try {
                 dynamic.remove(id);
             } finally {

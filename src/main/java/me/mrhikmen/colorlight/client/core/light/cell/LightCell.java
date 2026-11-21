@@ -1,5 +1,7 @@
 package me.mrhikmen.colorlight.client.core.light.cell;
 
+import me.mrhikmen.colorlight.client.core.light.LightTuning;
+
 /**
  * What one cell of the light field holds: up to TWO lights, each a brightness (1..255) and the id of its colour in the
  * {@link LightPalette}, plus a few flags of the engine. Nothing here allocates; a cell is a plain {@code long}:
@@ -18,6 +20,9 @@ package me.mrhikmen.colorlight.client.core.light.cell;
  * <b>Order independence.</b> {@link #insert} gives the same cell for any order of insertions: it ends up holding the
  * two strongest colours (ties go to the lower id), each at its highest brightness. That is what lets floods be
  * split between threads and merged by simply inserting.
+ * <p>
+ * <b>White gives way to colour</b> ({@link LightTuning#whiteOverlay}): a cell with a white and a coloured light shows the colour laid over
+ * the white, never darker than the brighter of the two. Display only: the cell keeps both lights as they are.
  * <p>
  * <b>For the GPU</b> a cell is packed into one 32-bit word ({@link #pack}), see there.
  */
@@ -40,6 +45,45 @@ public final class LightCell {
     public static final int PACKED_OPAQUE_BIT = 1 << 30;
 
     private LightCell() {
+    }
+
+    /** Whether light 1 is worse than light 2 for keeping a slot: dimmer first, then higher id (white first if {@link LightTuning#whiteEvicts}). */
+    private static boolean worse(int level1, int id1, int level2, int id2) {
+        if (LightTuning.whiteEvicts) {
+            boolean white1 = LightPalette.isWhiteId(id1);
+            if (white1 != LightPalette.isWhiteId(id2))
+                return white1;
+        }
+        return level1 < level2 || (level1 == level2 && id1 > id2);
+    }
+
+    /**
+     * The colour a cell shows when it holds a white light and a coloured one: the coloured light laid over the white (see
+     * {@link LightTuning#whiteOverlay}); -1 when this does not apply (fewer than two lights, both white or both coloured, or the rule
+     * is off). Only how the cell is shown: what it stores is not touched.
+     */
+    private static int whiteLoses(long cell, LightPalette palette) {
+        if (!LightTuning.whiteOverlay)
+            return -1;
+        int la = levelA(cell), lb = levelB(cell);
+        if (la == 0 || lb == 0)
+            return -1;
+        int ia = idA(cell), ib = idB(cell);
+        boolean whiteA = LightPalette.isWhiteId(ia);
+        if (whiteA == LightPalette.isWhiteId(ib))
+            return -1;
+        int white = whiteA ? la : lb;
+        int colour = whiteA ? lb : la;
+        int hue = palette.rgbOf(whiteA ? ib : ia);
+
+        int top = Math.max(white, colour);
+        int cover = colour >= white ? 256 : Math.min(256, colour * 25600 / (white * LightTuning.whiteCoverPercent)); // 0..256
+        int over = maxRgb(hue, top, 0, 0);          // the colour at the brighter of the two lights
+        int under = (white * 255 + 127) / 255;       // white: the same level in every channel
+        int r = ((under * (256 - cover)) + (over & 0xFF) * cover + 128) >> 8;
+        int g = ((under * (256 - cover)) + ((over >> 8) & 0xFF) * cover + 128) >> 8;
+        int b = ((under * (256 - cover)) + ((over >> 16) & 0xFF) * cover + 128) >> 8;
+        return r | (g << 8) | (b << 16);
     }
 
     public static boolean isLit(long cell) {
@@ -125,12 +169,12 @@ public final class LightCell {
         if (lb == 0)
             return setB(cell, id, level);
 
-        // both slots hold other colours: the weaker one makes room if this light is stronger
+        // both slots hold other colours: the worse one makes room if this light is better (see worse: white gives way to colour)
         int ia = idA(cell), ib = idB(cell);
-        boolean aWeaker = la < lb || (la == lb && ia > ib);
+        boolean aWeaker = worse(la, ia, lb, ib);
         int weakerLevel = aWeaker ? la : lb;
         int weakerId = aWeaker ? ia : ib;
-        if (level > weakerLevel || (level == weakerLevel && id < weakerId))
+        if (worse(weakerLevel, weakerId, level, id))
             return (aWeaker ? setA(cell, id, level) : setB(cell, id, level)) | OVERFLOW; // the weaker light is left out
         return cell | OVERFLOW; // this light is left out
     }
@@ -156,6 +200,9 @@ public final class LightCell {
      * ({@code 0x00BBGGRR}). The GPU shader does the same sum (see {@code colorlight_data.glsl}).
      */
     public static int toRgb(long cell, LightPalette palette) {
+        int shown = whiteLoses(cell, palette);
+        if (shown >= 0)
+            return shown;
         return maxRgb(palette.rgbOf(idA(cell)), levelA(cell), palette.rgbOf(idB(cell)), levelB(cell));
     }
 
@@ -197,6 +244,9 @@ public final class LightCell {
         int ia = idA(cell), ib = idB(cell);
         if (la == 0 && lb == 0)
             return 0;
+        int shown = whiteLoses(cell, palette);
+        if (shown >= 0)
+            return shown; // a one-light word: the finished colour, the shader needs nothing more
         if (la == 0 || (lb != 0 && (lb > la || (lb == la && ib < ia)))) {
             int tl = la, ti = ia;
             la = lb;

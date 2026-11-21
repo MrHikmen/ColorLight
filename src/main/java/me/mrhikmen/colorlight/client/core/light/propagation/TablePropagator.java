@@ -1,5 +1,6 @@
 package me.mrhikmen.colorlight.client.core.light.propagation;
 
+import me.mrhikmen.colorlight.client.core.light.util.IntQueue;
 import me.mrhikmen.colorlight.client.core.light.util.LongQueue;
 import me.mrhikmen.colorlight.client.core.light.util.PassMap;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
@@ -41,11 +42,26 @@ public final class TablePropagator implements LightPropagator {
      * Dense scratch for {@link #spread}: one int per cell of the reachable box. Layout (low to high bits):
      * value 11 bits | opacity 4 bits | opacity known 1 bit | generation 16 bits. One memory access per neighbour.
      */
-    private static final int DENSE_MAX_CELLS = 1 << 20;
+    public static final int DENSE_MAX_CELLS = 1 << 20;
     private static final int VAL_MASK = 0x7FF, OPAC_SHIFT = 11, OPAC_KNOWN = 1 << 15, GEN_SHIFT = 16, GEN_MAX = 0xFFFF;
     private int[] dense = new int[0];
     private int dGen = 0;
     private final LongQueue queue = new LongQueue(1 << 10);
+
+    /** {@code decayFlat[n * 16 + opacity]}: the {@link #decay} table in one array (one load instead of two). */
+    private final int[] decayFlat;
+    /** Cheapest hop to neighbour n into any block the flood can pass: a hop that cannot beat 0 even at this cost is skipped unread. */
+    private final int[] minDecay;
+    /** {@code levelOf[v]}: {@link #toLevel} of every working value the dense path can hold (0..VAL_MASK). */
+    private final int[] levelOf = new int[VAL_MASK + 1];
+    /** Dense path: index offset of neighbour n inside the scratch box (depends on the box, set per flood). */
+    private final int[] stepIdx;
+    /** Dense path: cells waiting at each brightness, as indexes into {@link #dense}. */
+    private IntQueue[] intBuckets = new IntQueue[0];
+    /** Dense path: the cells the flood expanded (index, final brightness), written to the field in one batch at the end. */
+    private int[] outIdx = new int[1 << 12];
+    private int[] outLevel = new int[1 << 12];
+    private long[] outKeys = new long[1 << 12];
 
     /**
      * @param preserveHue no longer used: the colour is never part of the flood, so it always stays as it is
@@ -66,6 +82,22 @@ public final class TablePropagator implements LightPropagator {
             for (int o = 0; o < Math.min(this.maxOpacity, row.length); o++)
                 mc = Math.min(mc, row[o]);
         this.minCost = Math.max(1, mc);
+
+        this.decayFlat = new int[dx.length * 16];
+        this.minDecay = new int[dx.length];
+        this.stepIdx = new int[dx.length];
+        for (int n = 0; n < dx.length; n++) {
+            int cheapest = Integer.MAX_VALUE;
+            for (int o = 0; o < 16; o++) {
+                int c = o < decay[n].length ? decay[n][o] : Integer.MAX_VALUE / 4;
+                decayFlat[n * 16 + o] = c;
+                if (o < this.maxOpacity)
+                    cheapest = Math.min(cheapest, c);
+            }
+            minDecay[n] = Math.max(1, cheapest);
+        }
+        for (int v = 0; v <= VAL_MASK; v++)
+            levelOf[v] = toLevel(v);
     }
 
     /** Offset of neighbour n of a hop. */
@@ -160,9 +192,12 @@ public final class TablePropagator implements LightPropagator {
             spreadHashed(id, seedKeys, seedLevels, seedCount, field);
             return;
         }
-        final int x0 = (int) (minX - reach), y0 = (int) (minY - reach), z0 = (int) (minZ - reach);
-        final int nx0 = (int) sx, ny0 = (int) sy, nz0 = (int) sz;
-        final int vol = nx0 * ny0 * nz0;
+        // One cell of padding on every side: a hop that is not skipped by the cost bound below always lands inside
+        // the reachable box, the padding only makes a wrong bound harmless instead of an out-of-bounds read.
+        final int x0 = (int) (minX - reach) - 1, y0 = (int) (minY - reach) - 1, z0 = (int) (minZ - reach) - 1;
+        final int nx0 = (int) sx + 2, ny0 = (int) sy + 2, nz0 = (int) sz + 2;
+        final int plane = ny0 * nz0;
+        final int vol = nx0 * plane;
         if (dense.length < vol) {
             dense = new int[vol];
             dGen = 0;
@@ -177,7 +212,15 @@ public final class TablePropagator implements LightPropagator {
         final int[] cells = dense;
         final int genTag = gen << GEN_SHIFT;
         final int OPAC_BITS = 0xF << OPAC_SHIFT;
+        final int count = dx.length;
+        final int[] step = stepIdx;
+        for (int n = 0; n < count; n++)
+            step[n] = (dx[n] * ny0 + dy[n]) * nz0 + dz[n];
+        final int[] minCostOf = minDecay;
+        final int[] flat = decayFlat;
+        final int[] lvl = levelOf;
 
+        int top = 0;
         for (int i = 0; i < seedCount; i++) {
             long start = (long) seedLevels[i] * scale;
             if (start <= 0)
@@ -187,35 +230,43 @@ public final class TablePropagator implements LightPropagator {
             int idx = ((PosKey.x(key) - x0) * ny0 + (PosKey.y(key) - y0)) * nz0 + (PosKey.z(key) - z0);
             int c = cells[idx];
             if ((c >>> GEN_SHIFT) == gen) {
-                if (s > (c & VAL_MASK))
-                    cells[idx] = (c & ~VAL_MASK) | s;      // same pass: keep the opacity already cached
+                if (s <= (c & VAL_MASK))
+                    continue;                               // an equal or stronger seed is already queued here
+                cells[idx] = (c & ~VAL_MASK) | s;      // same pass: keep the opacity already cached
             } else {
                 cells[idx] = genTag | s;                    // first touch this pass
             }
-            bucket(s).add(key);
+            intBucket(s).add(idx);
+            if (s > top)
+                top = s;
         }
 
-        final int count = dx.length;
-        for (int b = (int) maxStart; b > 0; b--) {
-            LongQueue q = buckets[b];
+        int outN = 0;
+        for (int b = top; b > 0; b--) {
+            IntQueue q = b < intBuckets.length ? intBuckets[b] : null;
             if (q == null)
                 continue;
             while (!q.isEmpty()) {
-                long key = q.poll();
-                int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
-                int idx = ((x - x0) * ny0 + (y - y0)) * nz0 + (z - z0);
+                int idx = q.poll();
                 int c = cells[idx];
-                int cur = (c >>> GEN_SHIFT) == gen ? (c & VAL_MASK) : 0;
+                int cur = c & VAL_MASK;
                 if (cur != b)
                     continue; // improved after it was queued: expanded from its higher bucket
-                field.raise(x, y, z, id, toLevel(cur));
+
+                if (outN == outIdx.length) {
+                    outIdx = java.util.Arrays.copyOf(outIdx, outN * 2);
+                    outLevel = java.util.Arrays.copyOf(outLevel, outN * 2);
+                }
+                outIdx[outN] = idx;
+                outLevel[outN++] = lvl[cur];
+
+                // coordinates of the cell inside the box, only needed when a neighbour's opacity has to be read
+                int ax = -1, ay = 0, az = 0;
 
                 for (int n = 0; n < count; n++) {
-                    int nx = x + dx[n], ny = y + dy[n], nz = z + dz[n];
-                    int ax = nx - x0, ay = ny - y0, az = nz - z0;
-                    if (ax < 0 || ay < 0 || az < 0 || ax >= nx0 || ay >= ny0 || az >= nz0)
-                        continue; // unreachable by the bound above: its value would not be positive
-                    int nIdx = (ax * ny0 + ay) * nz0 + az;
+                    if (cur - minCostOf[n] <= 0)
+                        continue; // even the cheapest hop leaves nothing: no need to look at the neighbour at all
+                    int nIdx = idx + step[n];
                     int nc = cells[nIdx];
 
                     int opacity;
@@ -225,29 +276,55 @@ public final class TablePropagator implements LightPropagator {
                         if ((nc & OPAC_KNOWN) != 0) {
                             opacity = (nc & OPAC_BITS) >>> OPAC_SHIFT;
                         } else {
-                            opacity = field.opacityAt(nx, ny, nz) & 0xF;
+                            if (ax < 0) { ax = idx / plane; int r = idx - ax * plane; ay = r / nz0; az = r - ay * nz0; }
+                            opacity = field.opacityUncached(x0 + ax + dx[n], y0 + ay + dy[n], z0 + az + dz[n]) & 0xF;
                             cells[nIdx] = (nc & ~OPAC_BITS) | (opacity << OPAC_SHIFT) | OPAC_KNOWN;
                         }
                     } else {
                         previous = 0;
-                        opacity = field.opacityAt(nx, ny, nz) & 0xF;
+                        if (ax < 0) { ax = idx / plane; int r = idx - ax * plane; ay = r / nz0; az = r - ay * nz0; }
+                        opacity = field.opacityUncached(x0 + ax + dx[n], y0 + ay + dy[n], z0 + az + dz[n]) & 0xF;
                         cells[nIdx] = genTag | (opacity << OPAC_SHIFT) | OPAC_KNOWN;
                     }
                     if (opacity >= maxOpacity)
                         continue;
 
-                    int next = cur - decay[n][opacity];
-                    if (next <= 0)
-                        continue;
+                    int next = cur - flat[(n << 4) | opacity];
                     if (next <= previous)
-                        continue;
+                        continue; // also covers next <= 0, since previous >= 0
 
                     cells[nIdx] = genTag | (opacity << OPAC_SHIFT) | OPAC_KNOWN | next;
-                    bucket(next).add(PosKey.pack(nx, ny, nz));
+                    intBucket(next).add(nIdx);
                 }
             }
         }
+
+        if (outN > 0) {
+            if (outKeys.length < outN)
+                outKeys = new long[Math.max(outN, outKeys.length * 2)];
+            final long[] keys = outKeys;
+            final int[] oi = outIdx;
+            for (int i = 0; i < outN; i++) {
+                int idx = oi[i];
+                int ax = idx / plane;
+                int r = idx - ax * plane;
+                int ay = r / nz0;
+                keys[i] = PosKey.pack(x0 + ax, y0 + ay, z0 + (r - ay * nz0));
+            }
+            field.raiseBatch(id, keys, outLevel, 0, outN);
+        }
         field.endPass();
+    }
+
+    private IntQueue intBucket(int b) {
+        if (b >= intBuckets.length)
+            intBuckets = java.util.Arrays.copyOf(intBuckets, Math.max(b + 1, intBuckets.length * 2));
+        IntQueue q = intBuckets[b];
+        if (q == null) {
+            q = new IntQueue(16);
+            intBuckets[b] = q;
+        }
+        return q;
     }
 
     /** The original hashed path, used only when the reachable box would be too big for dense scratch. */

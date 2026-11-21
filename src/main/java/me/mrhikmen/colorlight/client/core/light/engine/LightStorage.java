@@ -144,6 +144,69 @@ public final class LightStorage {
     }
 
     /**
+     * Raises many cells with one light each: for every entry {@link LightCell#insert} is applied to the stored cell, and
+     * {@code listener} is called for each cell that changed. Same result as a {@link #get} / {@link #put} pair per
+     * entry, but consecutive entries in one section find it once instead of walking column and section again.
+     * Writers only (engine lock), like {@link #put}.
+     */
+    void raiseAll(int id, long[] keys, int[] levels, int from, int count, DynamicLightLayer.CellListener listener) {
+        if (id <= 0)
+            return;
+        int curSx = 0, curSy = 0, curSz = 0;
+        long[] cells = null;
+        Section section = null;
+        for (int i = from, end = from + count; i < end; i++) {
+            int level = levels[i];
+            if (level <= 0)
+                continue;
+            long key = keys[i];
+            int x = PosKey.x(key), y = PosKey.y(key), z = PosKey.z(key);
+            int sx = x >> 4, sy = y >> 4, sz = z >> 4;
+            if (section == null || sx != curSx || sy != curSy || sz != curSz) {
+                section = sectionForWrite(sx, sy, sz);
+                if (section == null)
+                    continue; // outside the world's height range, like put()
+                cells = section.cells;
+                curSx = sx; curSy = sy; curSz = sz;
+            }
+            int li = localIndex(x, y, z);
+            long old = cells[li];
+            long next = LightCell.insert(old, id, level);
+            if (next == old)
+                continue;
+            cells[li] = next;
+            if (!LightCell.isLit(old) && LightCell.isLit(next))
+                section.nonEmpty++;
+            if (listener != null)
+                listener.cellChanged(x, y, z);
+        }
+    }
+
+    /** The section, created (with its column) if it does not exist yet; null above/below the supported height range. */
+    private Section sectionForWrite(int sx, int sy, int sz) {
+        int yIdx = sy + SECTION_Y_OFFSET;
+        if ((yIdx & ~(SECTION_Y_COUNT - 1)) != 0)
+            return null;
+        Column col = columnOrNull(sx, sz);
+        if (col == null) {
+            col = new Column(sx, sz);
+            int ci = columnIndex(sx, sz);
+            if (columns.get(ci) == null) {
+                columns.set(ci, col);
+            } else { // the slot belongs to another place: keep both instead of evicting it
+                overflow.put(overflowKey(sx, sz), col);
+                hasOverflow = true;
+            }
+        }
+        Section s = col.sections.get(yIdx);
+        if (s == null) {
+            s = new Section();
+            col.sections.set(yIdx, s);
+        }
+        return s;
+    }
+
+    /**
      * Copies a section's cells (flags stripped) into {@code out}, indexed {@code (y << 8) | (z << 4) | x}.
      *
      * @return true if the section holds any light; {@code out} is zero-filled otherwise

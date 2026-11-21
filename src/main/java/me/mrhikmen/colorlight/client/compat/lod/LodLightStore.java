@@ -49,7 +49,7 @@ public final class LodLightStore {
     public static final int DRIFT_COLS = 8;
 
     private static final int FILE_MAGIC = 0x434C4C44; // 'CLLD'
-    private static final int FILE_FORMAT = 1;
+    private static final int FILE_FORMAT = 2; // 2: every light block is its own source (1 kept one per 4-block cell), so old files are read again
     private static final int MAX_INTS_PER_COLUMN = 512 * 4;
     private static final int[] NO_SOURCES = new int[0];
 
@@ -57,6 +57,12 @@ public final class LodLightStore {
     public final ConcurrentHashMap<Long, int[]> columns = new ConcurrentHashMap<>();
     public final AtomicLong version = new AtomicLong();
     public final AtomicBoolean unsaved = new AtomicBoolean();
+    /**
+     * Keys of columns whose list of sources changed (see {@link #columnChanged}); drained by the light volume builder.
+     * Only filled while {@link #trackChanges} is set, so it cannot grow when nobody reads it.
+     */
+    public final java.util.concurrent.ConcurrentLinkedQueue<Long> changedColumns = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    public volatile boolean trackChanges;
     private volatile boolean loaded;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
@@ -66,6 +72,12 @@ public final class LodLightStore {
         return t;
     });
     private final List<Channel> channels = new ArrayList<>();
+
+    /** A scanner calls this when it stored a column whose sources differ from the ones before. */
+    public void columnChanged(long key) {
+        if (trackChanges)
+            changedColumns.add(key);
+    }
 
     public static long colKey(int cx, int cz) {
         return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
@@ -254,10 +266,14 @@ public final class LodLightStore {
             if (!fillState.compareAndSet(FILL_IDLE, FILL_REQUESTED))
                 return;
             long v = version.get();
+            LodDiag.fillRequests.incrementAndGet();
             try {
                 filler.execute(() -> {
                     try {
+                        long t0 = System.nanoTime();
                         build(v, camBlockX >> 5, camBlockZ >> 5);
+                        LodDiag.buildNanos.addAndGet(System.nanoTime() - t0);
+                        LodDiag.fillBuilds.incrementAndGet();
                         fillState.set(FILL_READY);
                     } catch (Throwable t) {
                         fillState.set(FILL_IDLE);

@@ -22,6 +22,8 @@ public final class ColorLightApply {
         if (saveConfig)
             config.save();
 
+        config.applyTuning();
+        me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner.applyThreadSetting();
         ColorLightEngineHolder.configure(config.lightRangeBlocks, config.PROPAGATION_MODE, config.DYNAMIC_PROPAGATION);
         ColorLightBlockRegistry.load(config);
 

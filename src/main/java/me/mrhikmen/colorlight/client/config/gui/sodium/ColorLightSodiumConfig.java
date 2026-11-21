@@ -9,6 +9,7 @@ import me.mrhikmen.colorlight.client.config.ColorLightConfig;
 import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.config.gui.screen.ColorLightBlockConfigScreen;
 import me.mrhikmen.colorlight.client.config.gui.screen.PropagationPickerScreen;
+import me.mrhikmen.colorlight.client.core.light.LightTuning;
 import me.mrhikmen.colorlight.client.core.light.propagation.PropagationMethodRegistry;
 import me.mrhikmen.colorlight.client.ColorLightApply;
 
@@ -47,6 +48,7 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
         if (ldl || voxy || distantHorizons || create) {
             modOptions.addPage(this.CompatibilityPage(builder, ldl, voxy, distantHorizons, create, illuminated));
         }
+        modOptions.addPage(this.DebugPage(builder));
     }
     private OptionPageBuilder GeneralPage(ConfigBuilder builder) {
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.GENERAL)
@@ -202,6 +204,113 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                         )
                 );
         return page;
+    }
+    private OptionPageBuilder DebugPage(ConfigBuilder builder) {
+        Identifier overlayId = Identifier.parse("colorlight:white_overlay");
+        int cpu = LightTuning.cpuThreads();
+        return builder.createOptionPage().setName(Translatable.DEBUG)
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Translatable.DEBUG_WHITE)
+                        .addOption(builder.createBooleanOption(overlayId)
+                                .setName(Translatable.DEBUG_WHITE_OVERLAY)
+                                .setTooltip(Translatable.DEBUG_WHITE_OVERLAY_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.WHITE_OVERLAY = value, () -> config.WHITE_OVERLAY)
+                                .setDefaultValue(true)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:white_spread"))
+                                .setName(Translatable.DEBUG_WHITE_SPREAD)
+                                .setTooltip(Translatable.DEBUG_WHITE_SPREAD_Tooltip)
+                                .setRange(0, 60, 1)
+                                .setValueFormatter(value -> Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.WHITE_SPREAD = value, () -> config.WHITE_SPREAD)
+                                .setDefaultValue(20)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:white_cover_percent"))
+                                .setName(Translatable.DEBUG_WHITE_COVER)
+                                .setTooltip(Translatable.DEBUG_WHITE_COVER_Tooltip)
+                                .setEnabledProvider(state -> state.readBooleanOption(overlayId), overlayId)
+                                .setRange(10, 100, 5)
+                                .setValueFormatter(value -> Translatable.WEIGHT_Value(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.WHITE_COVER_PERCENT = value, () -> config.WHITE_COVER_PERCENT)
+                                .setDefaultValue(50)
+                        )
+                        .addOption(builder.createBooleanOption(Identifier.parse("colorlight:white_evicts"))
+                                .setName(Translatable.DEBUG_WHITE_EVICTS)
+                                .setTooltip(Translatable.DEBUG_WHITE_EVICTS_Tooltip)
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.WHITE_EVICTS = value, () -> config.WHITE_EVICTS)
+                                .setDefaultValue(false)
+                        )
+                )
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Translatable.DEBUG_ENGINE)
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:flood_threads"))
+                                .setName(Translatable.DEBUG_FLOOD_THREADS)
+                                .setTooltip(Translatable.DEBUG_FLOOD_THREADS_Tooltip)
+                                .setRange(0, Math.max(1, cpu), 1)
+                                .setValueFormatter(value -> value == 0 ? Translatable.DEBUG_Auto(LightTuning.autoFloodThreads()) : Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.FLOOD_THREADS = value, () -> Math.min(config.FLOOD_THREADS, Math.max(1, cpu)))
+                                .setDefaultValue(0)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:scan_threads"))
+                                .setName(Translatable.DEBUG_SCAN_THREADS)
+                                .setTooltip(Translatable.DEBUG_SCAN_THREADS_Tooltip)
+                                .setRange(0, Math.max(1, cpu), 1)
+                                .setValueFormatter(value -> value == 0 ? Translatable.DEBUG_Auto(LightTuning.autoScanThreads()) : Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.SCAN_THREADS = value, () -> Math.min(config.SCAN_THREADS, Math.max(1, cpu)))
+                                .setDefaultValue(0)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:flood_band_height"))
+                                .setName(Translatable.DEBUG_FLOOD_BAND)
+                                .setTooltip(Translatable.DEBUG_FLOOD_BAND_Tooltip)
+                                .setRange(0, 256, 16)
+                                .setValueFormatter(value -> value == 0 ? Translatable.DEBUG_OFF : Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.FLOOD_BAND_HEIGHT = value, () -> config.FLOOD_BAND_HEIGHT)
+                                .setDefaultValue(64)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:flood_group_sources"))
+                                .setName(Translatable.DEBUG_FLOOD_GROUP)
+                                .setTooltip(Translatable.DEBUG_FLOOD_GROUP_Tooltip)
+                                .setRange(64, 8192, 64)
+                                .setValueFormatter(value -> Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.FLOOD_GROUP_SOURCES = value, () -> config.FLOOD_GROUP_SOURCES)
+                                .setDefaultValue(1024)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:flood_max_seeds"))
+                                .setName(Translatable.DEBUG_FLOOD_MAX_SEEDS)
+                                .setTooltip(Translatable.DEBUG_FLOOD_MAX_SEEDS_Tooltip)
+                                .setRange(256, 32768, 256)
+                                .setValueFormatter(value -> Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.FLOOD_MAX_SEEDS = value, () -> config.FLOOD_MAX_SEEDS)
+                                .setDefaultValue(8192)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:flood_parallel_min_seeds"))
+                                .setName(Translatable.DEBUG_FLOOD_PARALLEL_MIN)
+                                .setTooltip(Translatable.DEBUG_FLOOD_PARALLEL_MIN_Tooltip)
+                                .setRange(16, 4096, 16)
+                                .setValueFormatter(value -> Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.FLOOD_PARALLEL_MIN_SEEDS = value, () -> config.FLOOD_PARALLEL_MIN_SEEDS)
+                                .setDefaultValue(128)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:source_flush_size"))
+                                .setName(Translatable.DEBUG_FLUSH)
+                                .setTooltip(Translatable.DEBUG_FLUSH_Tooltip)
+                                .setRange(16, 4096, 16)
+                                .setValueFormatter(value -> Translatable.DEBUG_Plain(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.SOURCE_FLUSH_SIZE = value, () -> config.SOURCE_FLUSH_SIZE)
+                                .setDefaultValue(512)
+                        )
+                );
     }
     private OptionPageBuilder BlockPage(ConfigBuilder builder) {
         OptionPageBuilder page = builder.createOptionPage().setName(Translatable.BLOCK);
@@ -360,6 +469,15 @@ public class ColorLightSodiumConfig implements ConfigEntryPoint {
                                 .setStorageHandler(this::save)
                                 .setBinding(value -> config.VOXY_LIGHT = value, () -> config.VOXY_LIGHT)
                                 .setDefaultValue(config.VOXY_LIGHT)
+                        )
+                        .addOption(builder.createIntegerOption(Identifier.parse("colorlight:voxy_light_memory"))
+                                .setName(Translatable.VOXY_LIGHT_MEMORY)
+                                .setTooltip(Translatable.VOXY_LIGHT_MEMORY_Tooltip)
+                                .setRange(32, 512, 16)
+                                .setValueFormatter(value -> Translatable.VOXY_LIGHT_MEMORY_Value(value))
+                                .setStorageHandler(this::save)
+                                .setBinding(value -> config.VOXY_LIGHT_MEMORY_MB = value, () -> config.VOXY_LIGHT_MEMORY_MB)
+                                .setDefaultValue(config.VOXY_LIGHT_MEMORY_MB)
                         )
             );
         }

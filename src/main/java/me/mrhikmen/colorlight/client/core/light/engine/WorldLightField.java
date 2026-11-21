@@ -66,6 +66,20 @@ final class WorldLightField implements LightField {
     }
 
     @Override
+    public int opacityUncached(int x, int y, int z) {
+        scratchPos.set(x, y, z);
+        int opacity = level.getBlockState(scratchPos).getLightDampening();
+        return Math.max(0, Math.min(MAX_OPACITY, opacity));
+    }
+
+    @Override
+    public void raiseBatch(int id, long[] keys, int[] levels, int from, int count) {
+        if (storage == null)
+            return;
+        storage.raiseAll(id, keys, levels, from, count, onStored);
+    }
+
+    @Override
     public void raise(int x, int y, int z, int id, int level) {
         if (storage == null)
             return;

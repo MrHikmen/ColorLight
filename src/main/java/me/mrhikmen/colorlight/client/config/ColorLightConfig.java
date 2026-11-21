@@ -69,7 +69,36 @@ public class ColorLightConfig {
     }
 
     public boolean VOXY_LIGHT = true;
+    public int VOXY_LIGHT_MEMORY_MB = 96;
     public boolean DH_LIGHT = true;
+
+    public boolean WHITE_OVERLAY = true;
+    public int WHITE_SPREAD = 20;
+    public int WHITE_COVER_PERCENT = 50;
+    public boolean WHITE_EVICTS = false;
+
+    public int FLOOD_THREADS = 0;
+    public int SCAN_THREADS = 0;
+    public int FLOOD_BAND_HEIGHT = 64;
+    public int FLOOD_GROUP_SOURCES = 1024;
+    public int FLOOD_MAX_SEEDS = 8192;
+    public int FLOOD_PARALLEL_MIN_SEEDS = 128;
+    public int SOURCE_FLUSH_SIZE = 512;
+
+    /** Copies the Debug page values into {@link me.mrhikmen.colorlight.client.core.light.LightTuning}. */
+    public void applyTuning() {
+        me.mrhikmen.colorlight.client.core.light.LightTuning.whiteOverlay = WHITE_OVERLAY;
+        me.mrhikmen.colorlight.client.core.light.LightTuning.whiteSpread = me.mrhikmen.colorlight.client.core.light.LightTuning.clamp(WHITE_SPREAD, 0, 60);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.whiteCoverPercent = me.mrhikmen.colorlight.client.core.light.LightTuning.clamp(WHITE_COVER_PERCENT, 10, 100);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.whiteEvicts = WHITE_EVICTS;
+        me.mrhikmen.colorlight.client.core.light.LightTuning.floodThreads = Math.max(0, FLOOD_THREADS);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.scanThreads = Math.max(0, SCAN_THREADS);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.floodBand = Math.max(0, FLOOD_BAND_HEIGHT);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.floodGroup = me.mrhikmen.colorlight.client.core.light.LightTuning.clamp(FLOOD_GROUP_SOURCES, 16, 65536);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.floodMaxSeeds = me.mrhikmen.colorlight.client.core.light.LightTuning.clamp(FLOOD_MAX_SEEDS, 64, 65536);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.floodParallelMinSeeds = me.mrhikmen.colorlight.client.core.light.LightTuning.clamp(FLOOD_PARALLEL_MIN_SEEDS, 1, 65536);
+        me.mrhikmen.colorlight.client.core.light.LightTuning.sourceFlushSize = me.mrhikmen.colorlight.client.core.light.LightTuning.clamp(SOURCE_FLUSH_SIZE, 16, 65536);
+    }
 
     /** JSON keys of the settings the player changed by hand; resource packs leave these alone. */
     public List<String> userOverrides = new ArrayList<>();
@@ -123,7 +152,20 @@ public class ColorLightConfig {
                 this.SABLE_LIGHT_RANGE_BLOCKS = loaded.SABLE_LIGHT_RANGE_BLOCKS > 0 ? Math.min(32, loaded.SABLE_LIGHT_RANGE_BLOCKS) : this.SABLE_LIGHT_RANGE_BLOCKS;
 
                 this.VOXY_LIGHT = loaded.VOXY_LIGHT;
+                this.VOXY_LIGHT_MEMORY_MB = root.has("VOXY_LIGHT_MEMORY_MB") ? Math.max(32, Math.min(512, loaded.VOXY_LIGHT_MEMORY_MB)) : this.VOXY_LIGHT_MEMORY_MB;
                 this.DH_LIGHT = loaded.DH_LIGHT;
+
+                this.WHITE_OVERLAY = root.has("WHITE_OVERLAY") ? loaded.WHITE_OVERLAY : this.WHITE_OVERLAY;
+                this.WHITE_SPREAD = root.has("WHITE_SPREAD") ? Math.max(0, Math.min(60, loaded.WHITE_SPREAD)) : this.WHITE_SPREAD;
+                this.WHITE_COVER_PERCENT = root.has("WHITE_COVER_PERCENT") ? Math.max(10, Math.min(100, loaded.WHITE_COVER_PERCENT)) : this.WHITE_COVER_PERCENT;
+                this.WHITE_EVICTS = root.has("WHITE_EVICTS") ? loaded.WHITE_EVICTS : this.WHITE_EVICTS;
+                this.FLOOD_THREADS = root.has("FLOOD_THREADS") ? Math.max(0, loaded.FLOOD_THREADS) : this.FLOOD_THREADS;
+                this.SCAN_THREADS = root.has("SCAN_THREADS") ? Math.max(0, loaded.SCAN_THREADS) : this.SCAN_THREADS;
+                this.FLOOD_BAND_HEIGHT = root.has("FLOOD_BAND_HEIGHT") ? Math.max(0, loaded.FLOOD_BAND_HEIGHT) : this.FLOOD_BAND_HEIGHT;
+                this.FLOOD_GROUP_SOURCES = root.has("FLOOD_GROUP_SOURCES") ? Math.max(16, loaded.FLOOD_GROUP_SOURCES) : this.FLOOD_GROUP_SOURCES;
+                this.FLOOD_MAX_SEEDS = root.has("FLOOD_MAX_SEEDS") ? Math.max(64, loaded.FLOOD_MAX_SEEDS) : this.FLOOD_MAX_SEEDS;
+                this.FLOOD_PARALLEL_MIN_SEEDS = root.has("FLOOD_PARALLEL_MIN_SEEDS") ? Math.max(1, loaded.FLOOD_PARALLEL_MIN_SEEDS) : this.FLOOD_PARALLEL_MIN_SEEDS;
+                this.SOURCE_FLUSH_SIZE = root.has("SOURCE_FLUSH_SIZE") ? Math.max(16, loaded.SOURCE_FLUSH_SIZE) : this.SOURCE_FLUSH_SIZE;
 
                 this.userOverrides = loaded.userOverrides != null ? new ArrayList<>(loaded.userOverrides) : new ArrayList<>();
             } catch (IOException e) {
@@ -133,6 +175,7 @@ public class ColorLightConfig {
 
         rememberFileValues();
         applyPackDefaults();
+        applyTuning();
     }
 
     private void mergeBlocks(LinkedList<BlockSettings> fromFile) {

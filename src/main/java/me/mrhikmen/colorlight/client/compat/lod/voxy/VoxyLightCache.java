@@ -5,6 +5,7 @@ import me.mrhikmen.colorlight.client.config.BlockSettings;
 import me.mrhikmen.colorlight.client.core.light.color.ColorLightUtil;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.util.PosKey;
+import me.mrhikmen.colorlight.client.compat.lod.LodDiag;
 
 import me.mrhikmen.colorlight.client.compat.lod.LodLightStore;
 
@@ -55,15 +56,17 @@ public final class VoxyLightCache {
     /** Cells (16x16 blocks) per side of the toroidal "cell -> sources" table (keep in sync with VoxyLightBridge and the shader). */
     public static final int GRID_CELLS = 512;
     /** Most sources kept per 16x16-block cell in the uploaded table (strongest first). */
-    private static final int PER_CELL_CAP = 96;
+    private static final int PER_CELL_CAP = Math.max(1, Math.min(32, Integer.getInteger("colorlight.lod.cellCap", 32)));
     /** Most sources uploaded at once (nearest columns first). Keep in sync with VoxyLightBridge. */
     public static final int MAX_SOURCES = 131072;
-    /** Radius, in 32-block columns, that is scanned and uploaded (2880 blocks). */
-    public static final int WINDOW_COLS = 90;
+    /** Radius, in 32-block columns, that is scanned and uploaded (1536 blocks). */
+    public static final int WINDOW_COLS = 48;
     /** The camera may move this many columns before the table is rebuilt (the shader keeps this margin). */
     public static final int DRIFT_COLS = 8;
+    /** Radius, in 32-block columns, in which light sources are looked for (volume mode; the legacy table only uses WINDOW_COLS). */
+    public static final int SCAN_COLS = Math.max(8, Math.min(512, Integer.getInteger("colorlight.lod.scanCols", 192)));
 
-    private static final int MAX_PER_COLUMN = 512;
+    private static final int MAX_PER_COLUMN = 1024;
     private static final int SCAN_TOP_Y = 400;
     private static final int SCAN_BOTTOM_Y = -128;
     private static final int MIN_BRIGHTNESS = 8; // out of 255
@@ -75,12 +78,12 @@ public final class VoxyLightCache {
     private static final int[] NO_SOURCES = new int[0];
 
 
-    /** Nearest-first list of column offsets inside {@link #WINDOW_COLS}. */
+    /** Nearest-first list of column offsets inside {@link #SCAN_COLS}. */
     private static final int[] SWEEP_DX;
     private static final int[] SWEEP_DZ;
 
     static {
-        int r = WINDOW_COLS;
+        int r = SCAN_COLS;
         List<long[]> all = new ArrayList<>();
         for (int dz = -r; dz <= r; dz++)
             for (int dx = -r; dx <= r; dx++)
@@ -106,6 +109,7 @@ public final class VoxyLightCache {
     public VoxyLightCache(LodLightStore store) {
         this.store = store;
         this.channel = store.newChannel(WINDOW_COLS, PER_CELL_CAP);
+        ColorLightClient.LOGGER.info("[ColorLight] Far light settings: maxLod={} cellCap={}", LodSplit.MAX_LOD, PER_CELL_CAP);
         this.columns = store.columns;
         this.version = store.version;
         this.unsaved = store.unsaved;
@@ -234,7 +238,7 @@ public final class VoxyLightCache {
                 int pcx = player.getBlockX() >> 5, pcz = player.getBlockZ() >> 5;
                 for (Map.Entry<Long, int[]> e : columns.entrySet()) {
                     long k = e.getKey();
-                    if (e.getValue().length > 0 && Math.abs((int) (k >> 32) - pcx) <= WINDOW_COLS && Math.abs((int) k - pcz) <= WINDOW_COLS)
+                    if (e.getValue().length > 0 && Math.abs((int) (k >> 32) - pcx) <= SCAN_COLS && Math.abs((int) k - pcz) <= SCAN_COLS)
                         remeshBacklog.add(k);
                 }
             }
@@ -385,7 +389,10 @@ public final class VoxyLightCache {
         int[] fresh = scanColumn(engine, cx, cz);
         int[] old = columns.put(colKey(cx, cz), fresh);
         boolean all = forceAll;
+        LodDiag.columnScans.incrementAndGet();
         if (old == null || !Arrays.equals(old, fresh)) {
+            LodDiag.versionChanges.incrementAndGet();
+            store.columnChanged(colKey(cx, cz));
             version.incrementAndGet();
             unsaved.set(true);
             remesh(engine, old, fresh, all);
@@ -408,7 +415,7 @@ public final class VoxyLightCache {
 
     /** Reads one level-0 section column (all heights) and lists its coloured light blocks. */
     private int[] scanColumn(WorldEngine engine, int sx, int sz) {
-        Map<Long, int[]> found = null; // dedupe key (4-block cell) -> {x, y, z, rgb, brightness}
+        List<int[]> found = null; // every light block: {x, y, z, rgb, brightness}
 
         int syTop = Math.floorDiv(SCAN_TOP_Y, 32);
         int syBottom = Math.floorDiv(SCAN_BOTTOM_Y, 32);
@@ -435,12 +442,9 @@ public final class VoxyLightCache {
                                 continue;
                             int x = sx * 32 + lx, y = sy * 32 + ly, z = sz * 32 + lz;
                             int brightness = Math.max(ColorLightUtil.r(rgb), Math.max(ColorLightUtil.g(rgb), ColorLightUtil.b(rgb)));
-                            long key = (((long) (x >> 2)) & 0x3FFFFFL) << 42 | (((long) (z >> 2)) & 0x3FFFFFL) << 20 | (((long) ((y >> 2) + 4096)) & 0xFFFFFL);
                             if (found == null)
-                                found = new HashMap<>();
-                            int[] prev = found.get(key);
-                            if (prev == null || prev[4] < brightness)
-                                found.put(key, new int[]{x, y, z, rgb, brightness});
+                                found = new ArrayList<>();
+                            found.add(new int[]{x, y, z, rgb, brightness});
                         }
                     }
                 }
@@ -451,7 +455,19 @@ public final class VoxyLightCache {
         if (found == null || found.isEmpty())
             return NO_SOURCES;
 
-        List<int[]> list = new ArrayList<>(found.values());
+        List<int[]> list = found;
+        // every block is its own source; only a column with more lights than the cap (a lava sea) is thinned out, by
+        // keeping the strongest light of every 2, 4, 8 .. block cell until it fits
+        for (int shift = 1; list.size() > MAX_PER_COLUMN && shift <= 5; shift++) {
+            Map<Long, int[]> cells = new HashMap<>();
+            for (int[] s : list) {
+                long key = (((long) (s[0] >> shift)) & 0x3FFFFFL) << 42 | (((long) (s[2] >> shift)) & 0x3FFFFFL) << 20 | (((long) ((s[1] >> shift) + 4096)) & 0xFFFFFL);
+                int[] prev = cells.get(key);
+                if (prev == null || prev[4] < s[4])
+                    cells.put(key, s);
+            }
+            list = new ArrayList<>(cells.values());
+        }
         if (list.size() > MAX_PER_COLUMN) {
             list.sort((a, b) -> Integer.compare(b[4], a[4]));
             list = list.subList(0, MAX_PER_COLUMN);

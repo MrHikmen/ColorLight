@@ -11,8 +11,8 @@ vec3 cl_lightAt(vec3 pos) {
     ivec2 cell = ivec2(qb.x >> 4, qb.z >> 4);
     ivec2 camCell = ivec2(clLod[0] >> 4, clLod[1] >> 4);
     ivec2 away = abs(cell - camCell);
-    if (away.x > 160 || away.y > 160) {
-        return vec3(0.0); // outside the part of the table that is valid (180 cells, minus the 16 cell margin)
+    if (away.x > 80 || away.y > 80) {
+        return vec3(0.0); // outside the part of the table that is valid (96 cells = 48 columns, minus the 16 cell margin)
     }
 
     float reach = float(clamp(clLod[5], 1, 16)); // the 3x3 cells of 16 blocks around a block cover 16 blocks
@@ -34,7 +34,7 @@ vec3 cl_lightAt(vec3 pos) {
             ivec2 c = cell + ivec2(dx, dz);
             int entry = 16 + ((c.x & 511) | ((c.y & 511) << 9)) * 2;
             int first = clLod[entry];
-            int count = min(clLod[entry + 1], 96);
+            int count = min(clLod[entry + 1], 32);
             for (int i = 0; i < count; i++) {
                 int s = 16 + 524288 + (first + i) * 4;
                 int rgb = clLod[s + 3];
