@@ -1458,6 +1458,59 @@ public class ColorLightEngine {
         return readSection(READ_PACKED, sx, sy, sz, out);
     }
 
+    /** Result of {@link #tryCopySectionPacked}: the section holds no light. */
+    public static final int COPY_EMPTY = 0;
+    /** Result of {@link #tryCopySectionPacked}: the section holds light and {@code out} has it. */
+    public static final int COPY_LIT = 1;
+    /** Result of {@link #tryCopySectionPacked}: a change is taking light away right now; nothing was copied, try again later. */
+    public static final int COPY_BUSY = -1;
+
+    /**
+     * Whether an operation is taking light away right now (a block change, a removal, a moving light being replaced), so
+     * a section copy would be thrown away. A cheap volatile read; the answer can be stale by the time it is used, so it
+     * only decides whether to bother trying, {@link #tryCopySectionPacked} has the last word.
+     */
+    public boolean isTearing() {
+        return (tearEpoch & 1) != 0;
+    }
+
+    /**
+     * {@link #copySectionPacked} for the render thread: never waits for the apply thread. If a change that takes light away
+     * is running (or starts during the copy) it gives up with {@link #COPY_BUSY} and the caller keeps the section pending
+     * for its next tick, instead of parking the render thread until the change is over (what made the game freeze while
+     * the apply thread was busy removing light).
+     *
+     * @param lockWaitNanos 0 = never wait. &gt; 0 = as a last resort wait at most this long for the engine lock and copy under it
+     *                      (consistent, but costs up to that much frame time); used by the caller only when a section has
+     *                      been busy for a long time, so it cannot starve
+     * @return {@link #COPY_EMPTY}, {@link #COPY_LIT} or {@link #COPY_BUSY}
+     */
+    public int tryCopySectionPacked(int sx, int sy, int sz, int[] out, long lockWaitNanos) {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            int epoch = tearEpoch;
+            if ((epoch & 1) != 0)
+                break; // light is being taken away: this copy would be thrown away
+            boolean lit = copySectionNow(READ_PACKED, sx, sy, sz, out);
+            java.lang.invoke.VarHandle.acquireFence(); // the reads above finish before the epoch is read again
+            if (tearEpoch == epoch)
+                return lit ? COPY_LIT : COPY_EMPTY;
+        }
+        if (lockWaitNanos <= 0)
+            return COPY_BUSY;
+        try {
+            if (!lock.tryLock(lockWaitNanos, java.util.concurrent.TimeUnit.NANOSECONDS))
+                return COPY_BUSY;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return COPY_BUSY;
+        }
+        try {
+            return copySectionNow(READ_PACKED, sx, sy, sz, out) ? COPY_LIT : COPY_EMPTY;
+        } finally {
+            lock.unlock(); // read-only: nothing to publish
+        }
+    }
+
     /**
      * Like {@link #copySectionPacked} but with the colours the cells show ({@code 0x00BBGGRR}), for code that wants
      * plain colours.

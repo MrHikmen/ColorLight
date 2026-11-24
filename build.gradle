@@ -13,8 +13,8 @@ base {
 
 repositories {
     maven {
-        name = "CaffeineMC"
-        url = "https://maven.caffeinemc.net/releases/"
+        name = "caffeinemcRepository"
+        url = "https://maven.caffeinemc.net/repository"
     }
 
     maven {
@@ -49,7 +49,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
-    implementation "net.caffeinemc:sodium-fabric:${project.sodium_version}"
+    implementation "maven.modrinth:AANobbMI:bAZQdGpg"
 
     //Compat:
     //LDL

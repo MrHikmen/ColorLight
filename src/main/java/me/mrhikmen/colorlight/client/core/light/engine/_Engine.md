@@ -43,6 +43,34 @@ so the surroundings are emptied and every source that can reach them floods agai
 `/colorlight cell` prints the two slots (id, hue, level), the `OVERFLOW` flag, `[source]`, the 32-bit word the GPU gets
 and the palette size for the cell in front of the face you look at and for the block itself.
 
+### Debug page
+
+All the knobs above are also settings on the **Debug** page of ColorLight's Sodium settings (`LightTuning` holds the live values,
+`ColorLightConfig.applyTuning()` copies them from `config/colorlight.json` on load and on every apply). Groups: *White light*
+(colour over white, what counts as white, cover strength, drop white first) and *Light engine* (propagation threads, source search
+threads, band height, sources per task, max seeds, parallel threshold, source flush size). 0 threads = Auto (a quarter of the CPU).
+The `-Dcolorlight.*` properties only set the defaults. Scanner threads are resized live; the rest is read on the next flood.
+
+### White gives way to colour
+White hues (weakest channel within `-Dcolorlight.white.spread`=20 of 255) get palette ids from 224 up, colours from 1..223, so `LightCell` knows from the id alone
+whether a light is white. A cell with one white and one coloured light shows the colour laid over the white: it covers it more the stronger it is next to
+it (fully at 1/`-Dcolorlight.white.cover`=2 of the white's brightness) and the brightness never falls below the brighter of the two, so a colour fades
+into white without a dark edge. Display only (`LightCell.toRgb`/`pack`, the GPU word is a plain colour): stored levels, flood and removal are untouched.
+`-Dcolorlight.white.loses=false` turns it off; `-Dcolorlight.white.evicts=true` also makes white the first light a full cell leaves out.
+
+### Readers and the lock
+The render thread copies sections (`copySectionPacked`) without taking the engine lock: a seqlock (`tearEpoch`) is odd while a change takes light away
+(block edit, removal, moving light) and the copy waits for it; floods only add light, so a copy in the middle of one is valid. Taking the lock for every
+copy starved the render thread for a whole chunk load (the apply thread re-takes the lock between groups), so light only appeared when the load was over.
+
+**Render thread (`tryCopySectionPacked`):** it never waits for that seqlock. If `tearEpoch` is odd (or changes during the copy) the copy returns `COPY_BUSY`, `GpuLightVolume` leaves the section in `pending` and stops the tick (`isTearing()` is checked first, before any sorting). Only after 40 busy ticks in a row (2 s) it waits for the engine lock for at most 1 ms per tick, so light cannot stay un-uploaded forever.
+
+### Flood speed (properties)
+- `-Dcolorlight.flood.threads=N` - flood threads in total, apply thread included. Default: a quarter of the CPU's threads (at least 1).
+- `-Dcolorlight.flood.band=N` - a chunk column taller than this (default 64, also capped so the scratch box fits the dense kernel) is flooded in
+  height bands; 0 = off. The light is identical, only the work changes.
+- The dense kernel writes a whole flood into the storage in one batch (`LightField.raiseBatch` -> `LightStorage.raiseAll`).
+
 ## Русский
 
 ### Идея
@@ -87,34 +115,18 @@ and the palette size for the cell in front of the face you look at and for the b
 `/colorlight cell` показывает два слота (id, оттенок, уровень), флаг `OVERFLOW`, `[source]`, 32-битное слово для GPU и
 размер палитры для ячейки перед гранью, на которую вы смотрите, и для самого блока.
 
-### Flood speed (properties)
-- `-Dcolorlight.flood.threads=N` - flood threads in total, apply thread included. Default: a quarter of the CPU's threads (at least 1).
-- `-Dcolorlight.flood.band=N` - a chunk column taller than this (default 64, also capped so the scratch box fits the dense kernel) is flooded in
-  height bands; 0 = off. The light is identical, only the work changes.
-- The dense kernel writes a whole flood into the storage in one batch (`LightField.raiseBatch` -> `LightStorage.raiseAll`).
-
 ### Скорость заливки (параметры)
 - `-Dcolorlight.flood.threads=N` - всего потоков заливки, включая поток применения. По умолчанию четверть потоков процессора (минимум 1).
 - `-Dcolorlight.flood.band=N` - колонка чанка выше этого значения (по умолчанию 64, и не больше, чем помещается в плотное ядро) заливается
   по высотным полосам; 0 - выключено. Свет тот же, меняется только объём работы.
 - Плотное ядро записывает всю заливку в хранилище за один проход (`LightField.raiseBatch` -> `LightStorage.raiseAll`).
 
-### Readers and the lock
-The render thread copies sections (`copySectionPacked`) without taking the engine lock: a seqlock (`tearEpoch`) is odd while a change takes light away
-(block edit, removal, moving light) and the copy waits for it; floods only add light, so a copy in the middle of one is valid. Taking the lock for every
-copy starved the render thread for a whole chunk load (the apply thread re-takes the lock between groups), so light only appeared when the load was over.
-
 ### Читатели и блокировка
 Поток рендера копирует секции (`copySectionPacked`) без блокировки движка: seqlock (`tearEpoch`) нечётный, пока изменение отнимает свет (правка блока,
 удаление, движущийся свет), и копия ждёт его конца; заливки только добавляют свет, поэтому копия посреди заливки корректна. Блокировка на каждую копию
 морила поток рендера голодом на всю загрузку чанков (поток применения берёт блокировку снова между группами), и свет появлялся только в конце.
 
-### White gives way to colour
-White hues (weakest channel within `-Dcolorlight.white.spread`=20 of 255) get palette ids from 224 up, colours from 1..223, so `LightCell` knows from the id alone
-whether a light is white. A cell with one white and one coloured light shows the colour laid over the white: it covers it more the stronger it is next to
-it (fully at 1/`-Dcolorlight.white.cover`=2 of the white's brightness) and the brightness never falls below the brighter of the two, so a colour fades
-into white without a dark edge. Display only (`LightCell.toRgb`/`pack`, the GPU word is a plain colour): stored levels, flood and removal are untouched.
-`-Dcolorlight.white.loses=false` turns it off; `-Dcolorlight.white.evicts=true` also makes white the first light a full cell leaves out.
+**Поток рендера (`tryCopySectionPacked`):** он не ждёт seqlock. Если `tearEpoch` нечётный (или меняется во время копии), копия возвращает `COPY_BUSY`, `GpuLightVolume` оставляет секцию в `pending` и прекращает тик (сначала проверяется `isTearing()`, до любой сортировки). Только после 40 занятых тиков подряд (2 с) он ждёт блокировку движка не дольше 1 мс за тик, чтобы свет не оставался невыгруженным вечно.
 
 ### Белый уступает цветному
 Белые оттенки (слабейший канал не дальше `-Dcolorlight.white.spread`=20 от 255) получают id палитры от 224, цвета - 1..223, поэтому `LightCell` понимает по одному
@@ -123,13 +135,7 @@ id, белый ли свет. Ячейка с одним белым и одни�
 каймы. Только отображение (`LightCell.toRgb`/`pack`, слово для GPU - обычный цвет): сохранённые уровни, заливка и удаление не затронуты.
 `-Dcolorlight.white.loses=false` выключает; `-Dcolorlight.white.evicts=true` дополнительно делает белый первым, что вытесняется из полной ячейки.
 
-## Debug page / Страница «Debug»
-
-All the knobs above are also settings on the **Debug** page of ColorLight's Sodium settings (`LightTuning` holds the live values,
-`ColorLightConfig.applyTuning()` copies them from `config/colorlight.json` on load and on every apply). Groups: *White light*
-(colour over white, what counts as white, cover strength, drop white first) and *Light engine* (propagation threads, source search
-threads, band height, sources per task, max seeds, parallel threshold, source flush size). 0 threads = Auto (a quarter of the CPU).
-The `-Dcolorlight.*` properties only set the defaults. Scanner threads are resized live; the rest is read on the next flood.
+### Страница «Debug»
 
 Все настройки выше есть и на странице **Debug** в настройках ColorLight (Sodium). Живые значения лежат в `LightTuning`,
 `ColorLightConfig.applyTuning()` копирует их из `config/colorlight.json` при загрузке и при каждом применении. Группы: «Белый свет»
