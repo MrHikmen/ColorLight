@@ -3,6 +3,8 @@ package me.mrhikmen.colorlight.client.config;
 import net.minecraft.network.chat.Component;
 
 public class Translatable {
+    public static Component RP = Component.translatable("me.colorlight.rp.description");
+
     public static Component CLEAN_ALL = Component.translatable("me.colorlight.command.clean_all");
     public static Component ENGINE_OFF = Component.translatable("me.colorlight.command.engine_off");
     public static Component LOOK_AT_BLOCK = Component.translatable("me.colorlight.command.look_at_block");
@@ -15,6 +17,8 @@ public class Translatable {
 
     public static Component ENABLE = Component.translatable("me.colorlight.general.enable");
     public static Component ENABLE_Tooltip = Component.translatable("me.colorlight.general.enable.tooltip");
+    public static Component TEXTURES = Component.translatable("me.colorlight.general.alt_textures");
+    public static Component TEXTURES_Tooltip = Component.translatable("me.colorlight.general.alt_textures.tooltip");
     public static Component LIGHT_RANGE = Component.translatable("me.colorlight.general.light_range");
     public static Component LIGHT_RANGE_Tooltip = Component.translatable("me.colorlight.general.light_range.tooltip");
     public static Component SMOOTH_LIGHTING = Component.translatable("me.colorlight.general.smooth_lighting");

@@ -3,6 +3,7 @@ package me.mrhikmen.colorlight.client;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightEntityLightTicker;
 import me.mrhikmen.colorlight.client.compat.lambdynlights.ColorLightLambDynLightsCompat;
 import me.mrhikmen.colorlight.client.config.ColorLightConfig;
+import me.mrhikmen.colorlight.client.config.Translatable;
 import me.mrhikmen.colorlight.client.core.light.registry.ColorLightBlockRegistry;
 import me.mrhikmen.colorlight.client.core.light.scan.ColorLightChunkScanner;
 import me.mrhikmen.colorlight.client.core.light.runtime.ColorLightDaylightRefresher;
@@ -17,6 +18,8 @@ import me.mrhikmen.colorlight.client.compat.lod.voxy.LodLight;
 import me.mrhikmen.colorlight.client.compat.lod.dh.DhLodLight;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.fabricmc.fabric.api.resource.v1.pack.PackActivationType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -25,6 +28,7 @@ import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,5 +96,8 @@ public class ColorLightClient implements ClientModInitializer {
         ColorLightClient.LOGGER.info("[ColorLight] Mod initialized");
 
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ReloadListener());
+
+        FabricLoader.getInstance().getModContainer("colorlight").ifPresent(container ->
+                ResourceLoader.registerBuiltinPack(Identifier.fromNamespaceAndPath("colorlight", "configured_lighting"), container, Translatable.RP, PackActivationType.NORMAL));
     }
 }

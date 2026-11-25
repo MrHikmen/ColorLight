@@ -1,6 +1,8 @@
 {
   "modmenu.descriptionTranslation.colorlight": "ColorLight — мод, который заменяет стандартное освещение блоков цветным освещением, соответствующим цветам их текстур.",
 
+  "me.colorlight.rp.description": "Настроенное освещение блоков",
+
   "me.colorlight.command.clean_all": "Все источники света очищены",
   "me.colorlight.command.engine_off": "Движок ещё не инициализирован",
   "me.colorlight.command.look_at_block": "Посмотрите на блок",
@@ -13,6 +15,8 @@
 
   "me.colorlight.general.enable": "Включить мод",
   "me.colorlight.general.enable.tooltip": "Включает или отключает автоматическое цветное освещение блоков.",
+  "me.colorlight.general.alt_textures": "Настроенное освещение блоков",
+  "me.colorlight.general.alt_textures.tooltip": "Включает или выключает ресурс-пак «Configured block lighting». То же самое, что включить его в Options → Resource Packs.",
   "me.colorlight.general.light_range": "Дальность света",
   "me.colorlight.general.light_range.tooltip": "Максимальная дальность распространения цветного света.",
   "me.colorlight.general.smooth_lighting": "Сглаживание цветного света",

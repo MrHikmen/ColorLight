@@ -1,4 +1,6 @@
 {
+  "me.colorlight.rp.description": "Configured block lighting",
+
   "me.colorlight.command.clean_all": "All light sources cleared",
   "me.colorlight.command.engine_off": "The engine has not been initialized yet",
   "me.colorlight.command.look_at_block": "Look at a block",
@@ -11,6 +13,8 @@
 
   "me.colorlight.general.enable": "Enable mod",
   "me.colorlight.general.enable.tooltip": "Enable or disable automatic colored block lighting.",
+  "me.colorlight.general.alt_textures": "Configured block lighting",
+  "me.colorlight.general.alt_textures.tooltip": "Turns the Configured block lighting resource pack on or off. Same as enabling it in Options → Resource Packs.",
   "me.colorlight.general.light_range": "Light range",
   "me.colorlight.general.light_range.tooltip": "Maximum distance that colored light can spread.",
   "me.colorlight.general.smooth_lighting": "Smooth colored lighting",

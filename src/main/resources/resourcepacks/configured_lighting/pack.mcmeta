@@ -1,0 +1,9 @@
+{
+  "pack": {
+    "min_format": 97.1,
+    "max_format": 999,
+    "description": {
+      "translate": "me.colorlight.rp.description"
+    }
+  }
+}
