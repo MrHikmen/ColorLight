@@ -345,13 +345,17 @@ public final class ColorLightGpu {
     private static final Identifier VANILLA_PARTICLE_SHADER = Identifier.fromNamespaceAndPath("minecraft", "core/particle");
     // The block pipelines (falling blocks, piston heads: moving blocks) are not Sodium's, so they had no light at all.
     private static final Identifier VANILLA_BLOCK_SHADER = Identifier.fromNamespaceAndPath("minecraft", "core/block");
+    // Create (Ponder) draws contraptions, moving blocks and block entities with its own shader when Flywheel is off
+    // (always on a Vulkan device: Flywheel is OpenGL-only), so that one needs a lit copy as well.
+    private static final Identifier CREATE_ENTITY_BLOCK_SHADER = Identifier.fromNamespaceAndPath("ponder", "entity_block");
 
     /** Vanilla shader id -> ColorLight's copy (same name, in our namespace). */
     private static final Map<Identifier, Identifier> ENTITY_SHADERS = Map.of(
             VANILLA_ENTITY_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_entity"),
             VANILLA_ITEM_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_item"),
             VANILLA_PARTICLE_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_particle"),
-            VANILLA_BLOCK_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_block"));
+            VANILLA_BLOCK_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_block"),
+            CREATE_ENTITY_BLOCK_SHADER, Identifier.fromNamespaceAndPath("colorlight", "core/cl_entity_block"));
 
     private static final int USAGE_LIGHT = GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER | GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_WRITE;
     /** The disabled pages and pool are never read (the header says "off"); they only have to be a valid texel buffer. */

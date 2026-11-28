@@ -32,7 +32,14 @@ import org.lwjgl.opengl.GL45C;
  * The Flywheel of Create-Fly ({@code com.zurrtum.create.client.flywheel}) and the official one
  * ({@code dev.engine_room.flywheel}) are both targeted by the three mixins; nothing happens without either.
  * Flywheel draws with plain OpenGL, so it reads the volume through the OpenGL names behind the volume's buffers
- * ({@link ColorLightGpu#flywheelBuffers}); on a Vulkan device there are none and Flywheel keeps its own light.
+ * ({@link ColorLightGpu#flywheelBuffers}).
+ * <p>
+ * <b>Vulkan.</b> Flywheel (both builds) is OpenGL-only: its instancing and indirect backends need raw GL (compute culling,
+ * glMultiDrawElementsIndirect, GL buffers) and report "unsupported" when the device is not OpenGL, so Flywheel switches
+ * itself off and Create draws its blocks, entities and contraptions with the vanilla renderers. Those go through the
+ * core/entity, core/item, core/particle and core/block pipelines and through Create's own ponder:entity_block shader
+ * (contraptions, moving blocks and block entities). All of them get ColorLight's shader copies and the light volume as
+ * renderpearl buffers ({@link ColorLightGpu#bindEntityLight}), so nothing in this class is needed on Vulkan.
  */
 public final class ColorLightFlywheelCompat {
 

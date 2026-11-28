@@ -11,7 +11,7 @@
 layout(location = 0) in vec4 v_Color; // The interpolated vertex color
 layout(location = 1) in vec2 v_TexCoord; // The interpolated block texture coordinates
 layout(location = 2) in vec2 v_FragDistance; // The fragment's distance from the camera (cylindrical and spherical)
-layout(location = 3) in float fadeFactor;
+layout(location = 3) in float v_fadeFactor;
 
 // COLORLIGHT: per-pixel coloured block light
 #ifndef OIT_ALPHA_ONLY
@@ -33,16 +33,16 @@ layout(location = 0) out vec4 fragColor; // The output fragment for the color fr
 
 vec4 calculateFinalColor(vec4 color) {
     #ifdef OIT_ACCUMULATE
-        color = sampleColorForAccumulation(color);
-        vec4 fogColor = vec4(u_FogColor.rgb * color.a, u_FogColor.a);
+    color = sampleColorForAccumulation(color);
+    vec4 fogColor = vec4(u_FogColor.rgb * color.a, u_FogColor.a);
     #else
-        vec4 fogColor = u_FogColor;
+    vec4 fogColor = u_FogColor;
     #endif
 
     #ifdef OIT_ALPHA_ONLY
     float factor = 1.0;
     #else
-    float factor = fadeFactor;
+    float factor = v_fadeFactor;
     #endif
 
     return _linearFog(color, v_FragDistance, fogColor, u_EnvironmentFog, u_RenderFog, factor);
@@ -132,17 +132,17 @@ vec4 cl_resolveVertexColor() {
 
 void main() {
     vec4 color = u_UseRGSS ? sampleRGSS(u_BlockTex, v_TexCoord, u_TexelSize) : sampleNearest(u_BlockTex, v_TexCoord, u_TexelSize);
-#ifdef OIT_ALPHA_ONLY
+    #ifdef OIT_ALPHA_ONLY
     color *= v_Color; // Apply per-vertex color modulator
-#else
+    #else
     color *= cl_resolveVertexColor(); // COLORLIGHT: per-pixel light instead of the per-vertex one
-#endif
+    #endif
 
-#ifdef ALPHA_CUTOUT
+    #ifdef ALPHA_CUTOUT
     if (color.a < ALPHA_CUTOUT) {
         discard;
     }
-#endif
+    #endif
 
     #ifdef OIT_ALPHA_ONLY
     executeAlphaOnlyPhase(gl_FragCoord.z, color.a);

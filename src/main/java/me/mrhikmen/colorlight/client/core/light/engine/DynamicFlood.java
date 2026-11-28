@@ -87,28 +87,26 @@ final class DynamicFlood {
         long cx = Math.floorDiv(ex + POSITION_SUBDIVISIONS / 2, POSITION_SUBDIVISIONS);
         long cy = Math.floorDiv(ey + POSITION_SUBDIVISIONS / 2, POSITION_SUBDIVISIONS);
         long cz = Math.floorDiv(ez + POSITION_SUBDIVISIONS / 2, POSITION_SUBDIVISIONS);
-        int fx = (int) (ex - cx * POSITION_SUBDIVISIONS);
-        int fy = (int) (ey - cy * POSITION_SUBDIVISIONS);
-        int fz = (int) (ez - cz * POSITION_SUBDIVISIONS);
 
         // 3x3x3 neighbourhood of corners centred on the light instead of the old 2x2x2 (just the lower and upper
         // corner on each axis, floor-anchored): seeding one more corner on every side gives the near-field falloff
         // an extra directly-computed, exact-distance layer before the coarser hop-based propagator takes
         // over further out, which is what actually removes the popping/stepping otherwise visible while a light
         // crosses a sub-block boundary.
+        // Always all 27 corners, whatever the light's position inside its block. The corners used to be skipped on an
+        // axis when the light was "on" the corner (fx == 0, fy == 0, fz == 0), but those values are the offset in
+        // 1/8 of a block, so "0" meant anywhere within +-1/16 of the corner, not exactly on it. Inside that window the
+        // neighbouring corners were left to the propagator, which can only reach them through the centre seed and
+        // so comes out about 0.15 blocks too far (triangle inequality): the light dipped, and at the edge of its
+        // reach its colour vanished, in a strip round the middle of every block (x.5 / z.5). Every corner now gets its
+        // own exact-distance seed, so the result is continuous in the light's position.
         for (int dx = -1; dx <= 1; dx++) {
-            if (dx != 0 && fx == 0)
-                continue;
             long cornerX = cx + dx;
 
             for (int dy = -1; dy <= 1; dy++) {
-                if (dy != 0 && fy == 0)
-                    continue;
                 long cornerY = cy + dy;
 
                 for (int dz = -1; dz <= 1; dz++) {
-                    if (dz != 0 && fz == 0)
-                        continue;
                     long cornerZ = cz + dz;
 
                     double ddx = x - cornerX;
@@ -118,6 +116,11 @@ final class DynamicFlood {
 
                     long start = clampWorking(Math.round((brightness - decay) * scale));
                     if (start <= 0)
+                        continue;
+
+                    // a corner inside a solid block is not seeded (the light would leak through a thin wall into the
+                    // air behind it); the corner nearest to the light always is
+                    if ((dx | dy | dz) != 0 && emptyField.opacityAt((int) cornerX, (int) cornerY, (int) cornerZ) >= BEAM_BLOCKING_OPACITY)
                         continue;
 
                     long key = PosKey.pack((int) cornerX, (int) cornerY, (int) cornerZ);

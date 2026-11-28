@@ -298,9 +298,7 @@ public final class ColorLightEntityLightTicker {
      *  to some smaller, ColorLight-specific number would just quietly cut off the top of the range a resource pack
      *  is explicitly asking for. */
     private static int effectiveStrength(BlockSettings settings, ItemStack stack) {
-        return stack.isEmpty()
-                ? settings.light
-                : LdlItemLuminanceOverrides.resolve(stack, settings.light);
+        return stack.isEmpty() ? settings.light : LdlItemLuminanceOverrides.resolve(stack, settings.light);
     }
 
     // ---- item / block -> light settings (registry lookup, no config scans) ----
@@ -437,7 +435,7 @@ public final class ColorLightEntityLightTicker {
                     request.r(), request.g(), request.b(), request.strength(), request.beam());
         } else {
             worker.update(request.id(), request.x(), request.y(), request.z(),
-                    request.r(), request.g(), request.b(), request.strength()/2);
+                    request.r(), request.g(), request.b(), request.strength());
         }
     }
 
