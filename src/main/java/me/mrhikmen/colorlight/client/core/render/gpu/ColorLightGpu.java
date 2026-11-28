@@ -16,6 +16,8 @@ import me.mrhikmen.colorlight.client.compat.lod.voxy.VoxyLightBridge;
 import me.mrhikmen.colorlight.client.compat.lod.dh.DhLightBridge;
 
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.SemanticVersion;
+import net.fabricmc.loader.api.Version;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -50,6 +52,9 @@ public final class ColorLightGpu {
 
     public static final Identifier SODIUM_TERRAIN_SHADER = Identifier.fromNamespaceAndPath("sodium", "blocks/block_layer_opaque");
     public static final Identifier COLORLIGHT_TERRAIN_SHADER = Identifier.fromNamespaceAndPath("colorlight", "blocks/colored_terrain");
+    public static final Identifier COLORLIGHT_TERRAIN_SHADER_092 = Identifier.fromNamespaceAndPath("colorlight", "blocks/colored_terrain_092");
+
+    private static volatile int sodiumVers = -1;
 
     private static final String DEFAULT_RENDERER = "net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer";
     private static final String SHADER_RENDERER = "net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer";
@@ -589,6 +594,34 @@ public final class ColorLightGpu {
             volume = null;
         }
         closeDisabledBuffers();
+    }
+
+    /** True, если установленный Sodium <= 0.9.2 (там другие имена varying и нет u_CameraOffset). */
+    public static boolean legacySodiumShaders() {
+        int v = sodiumVers;
+        if (v < 0) {
+            boolean legacy = false;
+            try {
+                var mod = FabricLoader.getInstance().getModContainer("sodium");
+                if (mod.isPresent()) {
+                    Version ver = mod.get().getMetadata().getVersion();
+                    if (ver instanceof SemanticVersion sv) {
+                        legacy = sv.compareTo(SemanticVersion.parse("0.9.2")) <= 0;
+                    }
+                    ColorLightClient.LOGGER.info("[ColorLight] Sodium {} -> terrain shader: {}", ver.getFriendlyString(), legacy ? "0.9.2 variant" : "current variant");
+                }
+            } catch (Exception e) {
+                ColorLightClient.LOGGER.warn("[ColorLight] Could not read Sodium version, using the current shader: {}", e.toString());
+            }
+            v = legacy ? 1 : 0;
+            sodiumVers = v;
+        }
+        return v == 1;
+    }
+
+    /** The terrain shader to point Sodium's pipelines at. */
+    public static Identifier terrainShader() {
+        return legacySodiumShaders() ? COLORLIGHT_TERRAIN_SHADER_092 : COLORLIGHT_TERRAIN_SHADER;
     }
 
     private ColorLightGpu() {

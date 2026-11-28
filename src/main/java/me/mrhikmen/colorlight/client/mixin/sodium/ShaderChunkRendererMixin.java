@@ -60,7 +60,7 @@ public abstract class ShaderChunkRendererMixin implements SodiumHookMarkers.Shad
     private Identifier colorlight$vertexShader(Identifier original) {
         if (ColorLightGpu.gpuMode() && ColorLightGpu.SODIUM_TERRAIN_SHADER.equals(original)) {
             ColorLightGpu.vertexRedirected = true;
-            return ColorLightGpu.COLORLIGHT_TERRAIN_SHADER;
+            return ColorLightGpu.terrainShader();
         }
         return original;
     }
@@ -74,7 +74,7 @@ public abstract class ShaderChunkRendererMixin implements SodiumHookMarkers.Shad
     private Identifier colorlight$fragmentShader(Identifier original) {
         if (ColorLightGpu.gpuMode() && ColorLightGpu.SODIUM_TERRAIN_SHADER.equals(original)) {
             ColorLightGpu.fragmentRedirected = true;
-            return ColorLightGpu.COLORLIGHT_TERRAIN_SHADER;
+            return ColorLightGpu.terrainShader();
         }
         return original;
     }
